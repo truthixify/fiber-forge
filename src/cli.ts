@@ -36,8 +36,10 @@ function printJson(data: unknown): void {
   console.log(JSON.stringify(data, null, 2));
 }
 
-function fail(message: string): void {
-  process.stderr.write(`\n  ${ui.error("✗")}  ${message}\n\n`);
+function fail(message: string, suggestion?: string): void {
+  const hint =
+    suggestion ?? (/not found/.test(message) ? "forge ls" : undefined);
+  console.error("\n" + ui.errorBox(message, hint) + "\n");
   process.exitCode = 1;
 }
 
@@ -87,27 +89,27 @@ function upHandler(
 function printUpCard(layout: NetworkLayout, topology: Topology): void {
   const nameWidth = Math.max(...layout.nodes.map((n) => n.name.length));
   const body: string[] = [
-    `${ui.muted("network")}   ${ui.text(layout.network)}`,
-    `${ui.muted("ckb rpc")}   ${ui.accent("http://127.0.0.1:" + layout.ckbHostPort)}`,
+    `${ui.muted(ui.caps("network"))}   ${ui.text(layout.network)}`,
+    `${ui.muted(ui.caps("ckb rpc"))}   ${ui.flux("http://127.0.0.1:" + layout.ckbHostPort)}`,
     "",
-    ui.muted("nodes"),
+    ui.muted(ui.caps("nodes")),
   ];
   for (const node of layout.nodes) {
     body.push(
-      `${ui.success("●")} ${ui.text(node.name.padEnd(nameWidth))}   ${ui.accent("http://127.0.0.1:" + node.rpcHostPort)}`,
+      `${ui.success("●")} ${ui.text(node.name.padEnd(nameWidth))}   ${ui.flux("http://127.0.0.1:" + node.rpcHostPort)}`,
     );
   }
-  body.push("", ui.muted("channels"));
+  body.push("", ui.muted(ui.caps("channels")));
   for (const channel of topology.channels) {
     body.push(
-      `${ui.text(channel.from)} ${ui.muted("→")} ${ui.text(channel.to)}   ${ui.success("●")} ${ui.text("ChannelReady")}   ${ui.muted(channel.capacityCkb + " CKB")}`,
+      `${ui.text(channel.from)} ${ui.muted("→")} ${ui.text(channel.to)}   ${ui.success("●")} ${ui.text("ChannelReady")}   ${ui.gold(channel.capacityCkb + " CKB")}`,
     );
   }
   console.log("\n" + ui.box(layout.net, "ready", ui.success, body));
   const someNode = layout.nodes[0]?.name ?? "a";
   const otherNode = layout.nodes[layout.nodes.length - 1]?.name ?? "b";
   console.log(
-    ui.hint("next", [
+    ui.hint("NEXT", [
       `forge status ${layout.net}`,
       `forge pay ${layout.net} ${someNode} ${otherNode} 42`,
       `forge gui ${layout.net}`,
@@ -120,7 +122,7 @@ function printStatus(view: NetworkView): void {
   const nameWidth = Math.max(...view.nodes.map((n) => n.name.length));
   for (const node of view.nodes) {
     console.log(
-      `  ${ui.nodeGlyph(node.status)} ${ui.text(node.name.padEnd(nameWidth))}   ${ui.muted(node.status.padEnd(7))}   ${ui.accent("http://127.0.0.1:" + node.rpcHostPort)}   ${ui.muted(ui.shortHash(node.pubkey))}`,
+      `  ${ui.nodeGlyph(node.status)} ${ui.text(node.name.padEnd(nameWidth))}   ${ui.muted(node.status.padEnd(7))}   ${ui.flux("http://127.0.0.1:" + node.rpcHostPort)}   ${ui.muted(ui.shortHash(node.pubkey))}`,
     );
   }
   console.log(ui.heading2("channels"));
@@ -128,7 +130,7 @@ function printStatus(view: NetworkView): void {
     const detail =
       channel.state === "unknown"
         ? ui.error("unreachable")
-        : `${ui.text(channel.state)}   ${ui.muted(channel.capacityCkb + " CKB")}`;
+        : `${ui.text(channel.state)}   ${ui.gold(channel.capacityCkb + " CKB")}`;
     console.log(
       `  ${ui.channelGlyph(channel.state)} ${ui.text(channel.from)} ${ui.muted("→")} ${ui.text(channel.to)}   ${detail}`,
     );
@@ -186,7 +188,7 @@ export function buildCli(): Command {
           printUpCard(layout, topology);
         } catch (error) {
           progress.failActive((error as Error).message);
-          fail(`up failed  ·  forge down ${topology.name} to clean up`);
+          fail((error as Error).message, `forge down ${topology.name}`);
         }
       },
     );
@@ -216,7 +218,7 @@ export function buildCli(): Command {
       try {
         view = await orchestrator().inspect(net);
       } catch {
-        fail(`network "${net}" not found  ·  forge ls to list networks`);
+        fail(`network "${net}" not found`, "forge ls");
         return;
       }
       if (options.json) {
@@ -350,7 +352,7 @@ export function buildCli(): Command {
           return;
         }
         console.log(
-          `\n  ${ui.muted("invoice")}   ${ui.text(node)}   ${ui.accent(amountCkb + " CKB")}`,
+          `\n  ${ui.muted(ui.caps("invoice"))}   ${ui.text(node)}   ${ui.gold(amountCkb + " CKB")}`,
         );
         console.log(`  ${ui.text(invoice)}\n`);
       },
@@ -464,7 +466,7 @@ export function buildCli(): Command {
       const { serveGui } = await import("./daemon");
       await serveGui(orchestrator(), net, options.port);
       console.log(
-        `\n  ${ui.accent("fiber-forge")}  ${ui.text(net)}  ${ui.muted("→")}  ${ui.accent(`http://127.0.0.1:${options.port}`)}\n`,
+        `\n  ${ui.accent("fiber-forge")}  ${ui.text(net)}  ${ui.muted("→")}  ${ui.flux(`http://127.0.0.1:${options.port}`)}\n`,
       );
     });
 
@@ -484,5 +486,9 @@ function upResult(layout: NetworkLayout): unknown {
 }
 
 export async function main(argv: string[] = process.argv): Promise<void> {
-  await buildCli().parseAsync(argv);
+  try {
+    await buildCli().parseAsync(argv);
+  } catch (error) {
+    fail((error as Error).message);
+  }
 }

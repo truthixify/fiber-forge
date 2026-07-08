@@ -30,15 +30,23 @@ function paint(
   return (s) => `\x1b[38;2;${r};${g};${b}m${s}\x1b[39m`;
 }
 
-export const accent = paint("#4AD6C4", pc.cyan);
-export const accentDim = paint("#2C8578", pc.cyan);
-export const success = paint("#5FD98A", pc.green);
-export const pending = paint("#E3B341", pc.yellow);
-export const error = paint("#F2737A", pc.red);
-export const heading = paint("#EAEDF2", pc.white);
-export const text = paint("#C3C9D3", (s) => s);
-export const muted = paint("#8A93A3", pc.gray);
-export const dim = paint("#5A6273", (s) => pc.dim(pc.gray(s)));
+// A forge palette: warm ember for energy/focal, cool flux for ready/structure, gold for CKB.
+export const ember = paint("#FF6A3D", pc.red);
+export const accent = ember;
+export const flux = paint("#2DE0C7", pc.cyan);
+export const success = flux;
+export const gold = paint("#F5C451", pc.yellow);
+export const pending = paint("#F0A93C", pc.yellow);
+export const error = paint("#FF5765", pc.red);
+export const heading = paint("#F3EFE7", pc.white);
+export const text = paint("#C6CFDB", (s) => s);
+export const muted = paint("#808B9C", pc.gray);
+export const dim = paint("#4C5768", (s) => pc.dim(pc.gray(s)));
+
+/** Uppercase a label for the mono-caps instrument feel. */
+export function caps(s: string): string {
+  return s.toUpperCase();
+}
 
 export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 export const WIDTH = Math.min(process.stdout.columns || 80, 78);
@@ -64,9 +72,9 @@ export function channelGlyph(state: string): string {
   return pending("◍");
 }
 
-/** A bright heading followed by a hairline rule. */
+/** A bright mono-caps heading followed by a hairline rule. */
 export function heading2(title: string): string {
-  return `\n  ${heading(title)}\n  ${dim("─".repeat(WIDTH - 2))}`;
+  return `\n  ${heading(caps(title))}\n  ${dim("─".repeat(WIDTH - 2))}`;
 }
 
 /** Aligned `key value` rows; keys muted, right-padded to a common width. */
@@ -77,27 +85,40 @@ export function keyValue(rows: [string, string][], indent = "  "): string {
     .join("\n");
 }
 
-/** A rounded summary card with an inline title and a right-aligned tag in the top border. */
+/** A squared readout card with an inline mono-caps title and a right-aligned tag in the top rule. */
 export function box(
   title: string,
   tag: string,
   tagPaint: (s: string) => string,
   lines: string[],
+  titlePaint: (s: string) => string = heading,
 ): string {
   const inner = WIDTH - 2;
-  const head = ` ${heading(title)} `;
-  const tagged = tag ? ` ${tagPaint(tag)} ` : "";
-  const headPlain = ` ${title} `;
-  const tagPlain = tag ? ` ${tag} ` : "";
+  const titleCaps = caps(title);
+  const tagCaps = caps(tag);
+  const head = title ? ` ${titlePaint(titleCaps)} ` : " ";
+  const tagged = tag ? ` ${tagPaint(tagCaps)} ` : "";
+  const headPlain = title ? ` ${titleCaps} ` : " ";
+  const tagPlain = tag ? ` ${tagCaps} ` : "";
   const fillLen = inner - 1 - headPlain.length - tagPlain.length - 1;
-  const top = `  ${dim("╭─")}${head}${dim("─".repeat(Math.max(1, fillLen)))}${tagged}${dim("─╮")}`;
-  const bottom = `  ${dim("╰" + "─".repeat(inner) + "╯")}`;
+  const top = `  ${dim("┌─")}${head}${dim("─".repeat(Math.max(1, fillLen)))}${tagged}${dim("─┐")}`;
+  const bottom = `  ${dim("└" + "─".repeat(inner) + "┘")}`;
   const body = lines.map((line) => {
     const visibleLen = stripAnsi(line).length;
     const pad = Math.max(0, inner - 1 - visibleLen);
     return `  ${dim("│")} ${line}${" ".repeat(pad)}${dim("│")}`;
   });
   return [top, ...body, bottom].join("\n");
+}
+
+/** A squared alarm readout for a CLI error: an ERROR title, the message, and an optional next step. */
+export function errorBox(message: string, suggestion?: string): string {
+  const lines = [error(message)];
+  if (suggestion) {
+    lines.push(dim("─".repeat(Math.max(1, WIDTH - 6))));
+    lines.push(`${muted("try")}   ${text(suggestion)}`);
+  }
+  return box("error", "", error, lines, error);
 }
 
 /** Space-aligned table with a muted header row and a dim rule. */

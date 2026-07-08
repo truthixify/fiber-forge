@@ -539,9 +539,13 @@ export class Orchestrator {
   }
 
   private async readState(net: string): Promise<NetworkState> {
-    return JSON.parse(
-      await readFile(join(this.stateDir, net, "layout.json"), "utf8"),
-    ) as NetworkState;
+    try {
+      return JSON.parse(
+        await readFile(join(this.stateDir, net, "layout.json"), "utf8"),
+      ) as NetworkState;
+    } catch {
+      throw new Error(`network "${net}" not found`);
+    }
   }
 
   private requireNode(
