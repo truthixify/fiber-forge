@@ -1,0 +1,106 @@
+import { describe, expect, it } from "vitest";
+import {
+  type Channel,
+  type RpcTransport,
+  FnnRpc,
+  ckbToShannonHex,
+  channelStateName,
+  isChannelReady,
+} from "./rpc";
+
+class FakeTransport implements RpcTransport {
+  readonly calls: { method: string; params: unknown[] }[] = [];
+  constructor(
+    private readonly responder: (method: string, params: unknown[]) => unknown,
+  ) {}
+  async call(method: string, params: unknown[]): Promise<unknown> {
+    this.calls.push({ method, params });
+    return this.responder(method, params);
+  }
+}
+
+describe("FnnRpc", () => {
+  it("reads node_info", async () => {
+    const rpc = new FnnRpc(
+      new FakeTransport(() => ({
+        pubkey: "0xab",
+        addresses: [],
+        chain_hash: "0xcd",
+        node_name: null,
+      })),
+    );
+    expect((await rpc.nodeInfo()).pubkey).toBe("0xab");
+  });
+
+  it("connects a peer by address", async () => {
+    const t = new FakeTransport(() => null);
+    await new FnnRpc(t).connectPeer("/ip4/172.30.0.12/tcp/8228/p2p/Qm");
+    expect(t.calls[0]).toEqual({
+      method: "connect_peer",
+      params: [{ address: "/ip4/172.30.0.12/tcp/8228/p2p/Qm" }],
+    });
+  });
+
+  it("opens a channel with pubkey + funding amount", async () => {
+    const t = new FakeTransport(() => ({ temporary_channel_id: "0xtmp" }));
+    const res = await new FnnRpc(t).openChannel({
+      pubkey: "0xpeer",
+      fundingAmount: ckbToShannonHex(500),
+    });
+    expect(t.calls[0].params).toEqual([
+      { peer_pubkey: "0xpeer", funding_amount: "0xba43b7400", public: true },
+    ]);
+    expect(res.temporary_channel_id).toBe("0xtmp");
+  });
+
+  it("lists channels", async () => {
+    const t = new FakeTransport(() => ({
+      channels: [{ channel_id: "0x1", state: "ChannelReady" }],
+    }));
+    const channels = await new FnnRpc(t).listChannels("0xpeer");
+    expect(channels).toHaveLength(1);
+    expect(t.calls[0].params).toEqual([{ pubkey: "0xpeer" }]);
+  });
+
+  it("surfaces JSON-RPC errors", async () => {
+    const rpc = new FnnRpc(
+      new FakeTransport(() => {
+        throw new Error("node_info: boom");
+      }),
+    );
+    await expect(rpc.nodeInfo()).rejects.toThrow("boom");
+  });
+});
+
+describe("channel state helpers", () => {
+  it("reads the state name from string and object encodings", () => {
+    expect(
+      channelStateName({ channel_id: "1", state: "ChannelReady" } as Channel),
+    ).toBe("ChannelReady");
+    expect(
+      channelStateName({
+        channel_id: "1",
+        state: { state_name: "NegotiatingFunding" },
+      } as Channel),
+    ).toBe("NegotiatingFunding");
+  });
+
+  it("detects readiness", () => {
+    expect(
+      isChannelReady({ channel_id: "1", state: "ChannelReady" } as Channel),
+    ).toBe(true);
+    expect(
+      isChannelReady({
+        channel_id: "1",
+        state: "NegotiatingFunding",
+      } as Channel),
+    ).toBe(false);
+  });
+});
+
+describe("ckbToShannonHex", () => {
+  it("converts whole CKB to shannons hex", () => {
+    expect(ckbToShannonHex(500)).toBe("0xba43b7400");
+    expect(ckbToShannonHex(1)).toBe("0x5f5e100");
+  });
+});

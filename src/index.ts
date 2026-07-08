@@ -3,3 +3,4 @@ export const version = "0.1.0";
 
 export * from "./topology";
 export * from "./keys";
+export * from "./rpc";
