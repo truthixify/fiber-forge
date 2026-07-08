@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>fiber-forge · __NET__</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0f14;
+        --panel: #141a22;
+        --line: #232c38;
+        --text: #e7edf3;
+        --muted: #8a97a6;
+        --ready: #4ade80;
+        --pending: #fbbf24;
+        --down: #6b7280;
+        --accent: #38bdf8;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; }
+      header { padding: 14px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 14px; }
+      header h1 { margin: 0; font-size: 18px; letter-spacing: -0.02em; }
+      header .net { color: var(--accent); font-weight: 600; }
+      header .counts { color: var(--muted); font-size: 13px; }
+      main { display: grid; grid-template-columns: 1fr 340px; gap: 0; height: calc(100vh - 53px); }
+      #graph { width: 100%; height: 100%; }
+      aside { border-left: 1px solid var(--line); overflow-y: auto; padding: 16px; }
+      aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 18px 0 8px; }
+      aside h2:first-child { margin-top: 0; }
+      .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+      .card .name { font-weight: 600; }
+      .card .sub { color: var(--muted); font-size: 12px; font-family: ui-monospace, Menlo, monospace; word-break: break-all; }
+      .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+      .running { background: var(--ready); }
+      .exited, .absent { background: var(--down); }
+      .chan .state { font-size: 12px; }
+      .chan .ChannelReady { color: var(--ready); }
+      .chan .pending { color: var(--pending); }
+      .chan .unknown { color: var(--down); }
+      circle.node { fill: var(--panel); stroke: var(--accent); stroke-width: 2; }
+      text.label { fill: var(--text); font-size: 13px; text-anchor: middle; }
+      text.pk { fill: var(--muted); font-size: 10px; text-anchor: middle; font-family: ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>fiber-forge <span class="net">__NET__</span></h1>
+      <span class="counts" id="counts">connecting…</span>
+    </header>
+    <main>
+      <svg id="graph" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet"></svg>
+      <aside>
+        <h2>Nodes</h2>
+        <div id="nodes"></div>
+        <h2>Channels</h2>
+        <div id="channels"></div>
+      </aside>
+    </main>
+    <script>
+      const svg = document.getElementById("graph");
+      const NS = "http://www.w3.org/2000/svg";
+      const cx = 400, cy = 300, r = 210;
+
+      function positions(nodes) {
+        const map = {};
+        nodes.forEach((n, i) => {
+          const a = (2 * Math.PI * i) / nodes.length - Math.PI / 2;
+          map[n.name] = { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+        });
+        return map;
+      }
+
+      function stateClass(s) {
+        if (s === "ChannelReady") return "ChannelReady";
+        if (s === "unknown") return "unknown";
+        return "pending";
+      }
+
+      function el(tag, attrs, text) {
+        const e = document.createElementNS(NS, tag);
+        for (const k in attrs) e.setAttribute(k, attrs[k]);
+        if (text != null) e.textContent = text;
+        return e;
+      }
+
+      function render(view) {
+        document.getElementById("counts").textContent =
+          view.nodes.length + " nodes · " + view.channels.length + " channels";
+        const pos = positions(view.nodes);
+        svg.replaceChildren();
+        for (const ch of view.channels) {
+          const a = pos[ch.from], b = pos[ch.to];
+          if (!a || !b) continue;
+          const color = ch.state === "ChannelReady" ? "#4ade80" : ch.state === "unknown" ? "#6b7280" : "#fbbf24";
+          svg.appendChild(el("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: color, "stroke-width": 3 }));
+        }
+        for (const n of view.nodes) {
+          const p = pos[n.name];
+          svg.appendChild(el("circle", { class: "node", cx: p.x, cy: p.y, r: 30 }));
+          svg.appendChild(el("text", { class: "label", x: p.x, y: p.y - 40 }, n.name));
+          svg.appendChild(el("text", { class: "pk", x: p.x, y: p.y + 4 }, (n.pubkey || "").slice(2, 8)));
+        }
+        document.getElementById("nodes").innerHTML = view.nodes
+          .map(
+            (n) =>
+              `<div class="card"><div class="name"><span class="dot ${n.status}"></span>${n.name}` +
+              ` <span class="sub">:${n.rpcHostPort}</span></div><div class="sub">${n.pubkey || ""}</div></div>`,
+          )
+          .join("");
+        document.getElementById("channels").innerHTML = view.channels
+          .map(
+            (c) =>
+              `<div class="card chan"><div class="name">${c.from} → ${c.to}</div>` +
+              `<div class="sub">${c.capacityCkb} CKB · <span class="state ${stateClass(c.state)}">${c.state}</span></div></div>`,
+          )
+          .join("");
+      }
+
+      async function tick() {
+        try {
+          render(await (await fetch("/api/state")).json());
+        } catch (e) {
+          document.getElementById("counts").textContent = "disconnected";
+        }
+      }
+      tick();
+      setInterval(tick, 2000);
+    </script>
+  </body>
+</html>

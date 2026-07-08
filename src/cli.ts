@@ -96,6 +96,18 @@ export function buildCli(): Command {
       console.log(JSON.stringify(await orchestrator().status(net), null, 2));
     });
 
+  program
+    .command("gui")
+    .argument("<net>", "network name")
+    .option("--port <n>", "http port", (v) => Number.parseInt(v, 10), 5178)
+    .action(async (net: string, options: { port: number }) => {
+      const { serveGui } = await import("./daemon");
+      await serveGui(orchestrator(), net, options.port);
+      console.error(
+        `fiber-forge GUI for '${net}' at http://127.0.0.1:${options.port}`,
+      );
+    });
+
   return program;
 }
 

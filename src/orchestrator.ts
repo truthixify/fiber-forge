@@ -27,6 +27,7 @@ import {
   FnnRpc,
   HttpTransport,
   type NodeInfo,
+  channelStateName,
   ckbToShannonHex,
   dialAddress,
   isChannelReady,
@@ -102,6 +103,34 @@ export interface NodeStatus {
   rpcHostPort: number;
   status: string;
   pubkey?: string;
+}
+
+/** The persisted layout of a running network (`~/.fiber-forge/<net>/layout.json`). */
+export interface NetworkState {
+  net: string;
+  network: string;
+  ckbHostPort: number;
+  nodes: {
+    name: string;
+    container: string;
+    ip: string;
+    rpcHostPort: number;
+    pubkey: string;
+  }[];
+  channels: { from: string; to: string; capacityCkb: number }[];
+}
+
+/** A live view of a network for the GUI: node status + each channel's current state. */
+export interface NetworkView {
+  net: string;
+  nodes: {
+    name: string;
+    container: string;
+    rpcHostPort: number;
+    pubkey: string;
+    status: string;
+  }[];
+  channels: { from: string; to: string; capacityCkb: number; state: string }[];
 }
 
 export class Orchestrator {
@@ -191,8 +220,74 @@ export class Orchestrator {
       );
     }
 
+    const state: NetworkState = {
+      net: layout.net,
+      network: layout.network,
+      ckbHostPort: layout.ckbHostPort,
+      nodes: layout.nodes.map((n) => ({
+        name: n.name,
+        container: n.container,
+        ip: n.ip,
+        rpcHostPort: n.rpcHostPort,
+        pubkey: infoByName.get(n.name)!.pubkey,
+      })),
+      channels: topology.channels.map((c) => ({
+        from: c.from,
+        to: c.to,
+        capacityCkb: c.capacityCkb,
+      })),
+    };
+    await writeFile(
+      join(netDir, "layout.json"),
+      JSON.stringify(state, null, 2),
+    );
+
     log(`network ${layout.net} ready`);
     return layout;
+  }
+
+  /** A live graph view of a running network for the GUI, from the persisted layout + RPC. */
+  async inspect(net: string): Promise<NetworkView> {
+    const state = JSON.parse(
+      await readFile(join(this.stateDir, net, "layout.json"), "utf8"),
+    ) as NetworkState;
+
+    const nodes = [];
+    for (const node of state.nodes) {
+      nodes.push({
+        name: node.name,
+        container: node.container,
+        rpcHostPort: node.rpcHostPort,
+        pubkey: node.pubkey,
+        status: await this.engine.status(node.container),
+      });
+    }
+
+    const channels = [];
+    for (const channel of state.channels) {
+      const fromNode = state.nodes.find((n) => n.name === channel.from)!;
+      const toNode = state.nodes.find((n) => n.name === channel.to)!;
+      let channelState = "unknown";
+      try {
+        const rpc = new FnnRpc(
+          new HttpTransport(`http://127.0.0.1:${fromNode.rpcHostPort}`),
+        );
+        const live = (await rpc.listChannels(toNode.pubkey))[0];
+        if (live) {
+          channelState = channelStateName(live);
+        }
+      } catch {
+        // node unreachable
+      }
+      channels.push({
+        from: channel.from,
+        to: channel.to,
+        capacityCkb: channel.capacityCkb,
+        state: channelState,
+      });
+    }
+
+    return { net, nodes, channels };
   }
 
   /** Remove all containers of a network, the network, and optionally its state + data volume. */
