@@ -6,6 +6,7 @@ import { type NetworkView } from "../src/orchestrator";
 
 const view: NetworkView = {
   net: "duo",
+  block: 47,
   nodes: [
     {
       name: "alice",
@@ -13,6 +14,7 @@ const view: NetworkView = {
       rpcHostPort: 8300,
       pubkey: "0xabcd",
       status: "running",
+      onchainCkb: 9800,
     },
   ],
   channels: [
@@ -23,6 +25,7 @@ const view: NetworkView = {
       state: "ChannelReady",
       localCkb: 600,
       remoteCkb: 400,
+      channelId: "0xchan",
     },
   ],
 };

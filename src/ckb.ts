@@ -66,6 +66,11 @@ export class DevChain {
     }
   }
 
+  /** The current tip block number. */
+  async tipBlock(): Promise<number> {
+    return Number(await rawRpc(this.rpcUrl, "get_tip_block_number", []));
+  }
+
   /** The secp256k1 CKB address for a raw private key (the node's on-chain wallet). */
   async addressOfPrivateKey(privateKeyHex: string): Promise<string> {
     return new ccc.SignerCkbPrivateKey(

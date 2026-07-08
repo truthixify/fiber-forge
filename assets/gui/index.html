@@ -111,9 +111,9 @@
   <sc-if value="{{ isFloor }}" hint-placeholder-val="{{ false }}">
   <div>
     <div style="position:absolute;top:20px;left:20px;display:flex;align-items:stretch;gap:1px;background:var(--border);border:1px solid var(--border);">
-      <div style="background:var(--panel);padding:10px 16px;display:flex;flex-direction:column;gap:5px;">
+      <div onClick="{{ forgeCycle }}" title="switch network (n)" style="background:var(--panel);padding:10px 16px;display:flex;flex-direction:column;gap:5px;cursor:pointer;">
         <div style="display:flex;align-items:center;gap:9px;">
-          <span class="mc">RIG</span>
+          <span class="mc">RIG ⇄</span>
           <span style="font-weight:700;font-size:15px;color:var(--bone);letter-spacing:-.01em;">{{ netName }}</span>
         </div>
         <div style="display:flex;align-items:center;gap:7px;">
@@ -157,8 +157,6 @@
 
     <div style="position:absolute;bottom:20px;left:222px;display:flex;gap:1px;background:var(--border);border:1px solid var(--border);height:fit-content;">
       <div style="background:var(--panel);padding:8px 14px;"><span class="mc" style="color:var(--ember);">RADIAL</span></div>
-      <div style="background:var(--panel);padding:8px 12px;"><span class="mc">FORCE</span></div>
-      <div style="background:var(--panel);padding:8px 12px;"><span class="mc">DAGRE</span></div>
       <button onClick="{{ zoomOut }}" style="background:var(--panel);border:none;color:var(--text);padding:8px 13px;cursor:pointer;font-size:14px;line-height:1;">−</button>
       <div style="background:var(--panel);padding:8px 6px;min-width:48px;text-align:center;"><span class="num" style="font-size:11px;color:var(--text);">{{ zoomPct }}%</span></div>
       <button onClick="{{ zoomIn }}" style="background:var(--panel);border:none;color:var(--text);padding:8px 13px;cursor:pointer;font-size:14px;line-height:1;">+</button>
@@ -298,7 +296,7 @@
           <span class="mc">OPENED</span><span class="num" style="font-size:12px;color:var(--text);">12s ago</span>
         </div>
         <button onClick="{{ openPay }}" style="width:100%;background:var(--ember);color:#1a0b06;border:none;padding:13px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;margin-bottom:1px;">SEND PAYMENT ACROSS →</button>
-        <button style="width:100%;background:transparent;color:var(--alarm);border:1px solid var(--alarm);padding:13px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">⚠ CLOSE CHANNEL</button>
+        <button onClick="{{ confirmCloseChannel }}" style="width:100%;background:transparent;color:var(--alarm);border:1px solid var(--alarm);padding:13px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">⚠ CLOSE CHANNEL</button>
       </div>
     </div>
   </sc-if>
@@ -478,11 +476,8 @@ class Component extends DCLogic {
 
   state = {
     screen: 'floor', mode: 'select', sel: null,
-    payMin: 4, lastCmd: 'forge up trio',
-    events: [
-      { t: '12:04:41', c: 'var(--flux)', msg: 'CHANNEL galileo⇄lorentz → READY' },
-      { t: '12:04:38', c: 'var(--gold)', msg: 'FUNDED galileo 10,000 CKB' },
-    ],
+    payMin: 0, block: 0, lastCmd: 'forge up',
+    events: [],
     paying: false, relayId: null, showResult: false, payAmt: 250,
     wizardStep: 1, preset: 'trio', nodeCount: 3, funding: 10000,
     bootStep: 99,
@@ -664,13 +659,30 @@ class Component extends DCLogic {
   setCapRange = (e) => this.setState({ capacity: parseInt(e.target.value, 10) });
   confirmCap = () => {
     if (!this.state.capTo) { this.setState({ capOpen: false }); return; }
-    const id = 'x' + (this._cc = (this._cc || 0) + 1), cap = this.state.capacity;
+    const cap = this.state.capacity;
     const fn = this.node(this.state.capFrom), tn = this.node(this.state.capTo);
-    if (window.__FORGE__) this._forgeApi('/api/channel/open', { net: this._forgeNet(), from: fn.name, to: tn.name, capacity: cap });
+    if (window.__FORGE__) {
+      this._forgeApi('/api/channel/open', { net: this._forgeNet(), from: fn.name, to: tn.name, capacity: cap });
+      this.setState(st => ({ capOpen: false, sel: null, lastCmd: 'forge channel open ' + this._forgeNet() + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' OPENING' }, ...st.events].slice(0, 8) }));
+      return;
+    }
+    const id = 'x' + (this._cc = (this._cc || 0) + 1);
     const ch = { id, from: this.state.capFrom, to: this.state.capTo, cap, hash: this.mkHash(90 + this._cc) };
     this.setState(st => ({ capOpen: false, sel: null, channels: [...st.channels, ch], chState: { ...st.chState, [id]: 'pending' }, balances: { ...st.balances, [id]: Math.round(cap / 2) }, lastCmd: 'forge channel open ' + st.name.replace('forge-', '') + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' NEGOTIATING' }, ...st.events].slice(0, 2) }));
     clearTimeout(this._ig);
     this._ig = setTimeout(() => { this.setState(st => ({ chState: { ...st.chState, [id]: 'ready' }, igniteId: id, events: [{ t: this.now(), c: 'var(--flux)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' → READY' }, ...st.events].slice(0, 2) })); setTimeout(() => this.setState({ igniteId: null }), 700); }, 1700);
+  };
+
+  confirmCloseChannel = () => {
+    const s = this.state.sel; if (!s || s.type !== 'channel') return;
+    const ch = this.state.channels.find(c => c.id === s.id); if (!ch) return;
+    const fn = this.node(ch.from);
+    if (window.__FORGE__ && ch.channelId) {
+      this._forgeApi('/api/channel/close', { net: this._forgeNet(), node: fn ? fn.name : '', channelId: ch.channelId });
+      this.setState(st => ({ sel: null, lastCmd: 'forge channel close ' + this._forgeNet() + ' ' + (fn ? fn.name : ''), events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + (fn ? fn.name : '') + ' closing' }, ...st.events].slice(0, 8) }));
+    } else {
+      this.setState({ sel: null });
+    }
   };
 
   componentWillUnmount() { cancelAnimationFrame(this._raf); clearInterval(this._boot); clearInterval(this._forgePoll); window.removeEventListener('resize', this._onResize); window.removeEventListener('wheel', this._onWheel); window.removeEventListener('keydown', this._onKey); }
@@ -692,7 +704,7 @@ class Component extends DCLogic {
       return Object.assign({}, g.nodes[i] || {}, { id: 'n' + i, name: nd.name, port: nd.rpcHostPort, pubkey: shortPk, fullPubkey: pk, dead: nd.status !== 'running' });
     });
     var channels = v.channels.map(function (c, j) {
-      return Object.assign({}, g.channels[j] || {}, { id: 'c' + j, from: idOf[c.from], to: idOf[c.to], cap: c.capacityCkb });
+      return Object.assign({}, g.channels[j] || {}, { id: 'c' + j, from: idOf[c.from], to: idOf[c.to], cap: c.capacityCkb, channelId: c.channelId });
     });
     var chState = {}, balances = {};
     v.channels.forEach(function (c, j) {
@@ -701,7 +713,7 @@ class Component extends DCLogic {
     });
     var onchain = {};
     v.nodes.forEach(function (nd, i) { onchain['n' + i] = nd.onchainCkb != null ? nd.onchainCkb : 10000; });
-    return { nodes: nodes, channels: channels, chState: chState, balances: balances, onchain: onchain, core: g.core, name: 'forge-' + v.net };
+    return { nodes: nodes, channels: channels, chState: chState, balances: balances, onchain: onchain, core: g.core, name: 'forge-' + v.net, block: v.block || 0 };
   }
   _forgeSelect(net) {
     var F = this;
@@ -789,9 +801,10 @@ class Component extends DCLogic {
   onPointerDown = (e) => { if (e.target.closest && (e.target.closest('[data-node]') || e.target.closest('[data-conduit]'))) return; this._pan = { x: e.clientX, y: e.clientY, vx: this._view.x, vy: this._view.y, moved: false }; try { this._floorEl.setPointerCapture(e.pointerId); } catch (_) {} this.applyView(); };
   onPointerMove = (e) => { if (!this._pan) return; const dx = e.clientX - this._pan.x, dy = e.clientY - this._pan.y; if (Math.abs(dx) + Math.abs(dy) > 3) this._pan.moved = true; this._view.x = this._pan.vx + dx; this._view.y = this._pan.vy + dy; this.applyView(); };
   onPointerUp = (e) => { const moved = this._pan && this._pan.moved; this._pan = null; try { this._floorEl.releasePointerCapture(e.pointerId); } catch (_) {} this.applyView(); if (!moved && this.state.sel) this.clearSel(); };
+  onPointerLeave = (e) => { this._pan = null; this.applyView(); };
   wrapFloor(kids) {
     const h = React.createElement, v = this._view || { x: 0, y: 0, k: 1 };
-    return h('div', { 'data-floor': '1', ref: el => this._floorEl = el, onPointerDown: this.onPointerDown, onPointerMove: this.onPointerMove, onPointerUp: this.onPointerUp, onPointerLeave: this.onPointerUp, style: { position: 'absolute', inset: 0, overflow: 'hidden', cursor: 'grab', touchAction: 'none' } },
+    return h('div', { 'data-floor': '1', ref: el => this._floorEl = el, onPointerDown: this.onPointerDown, onPointerMove: this.onPointerMove, onPointerUp: this.onPointerUp, onPointerLeave: this.onPointerLeave, style: { position: 'absolute', inset: 0, overflow: 'hidden', cursor: 'grab', touchAction: 'none' } },
       h('div', { ref: el => this._floorInner = el, style: { position: 'absolute', left: 0, top: 0, width: this.FW, height: this.FH, transformOrigin: '0 0', transform: 'translate(' + v.x + 'px,' + v.y + 'px) scale(' + v.k + ')' } }, kids));
   }
 
@@ -1067,12 +1080,12 @@ class Component extends DCLogic {
       floor: this.floor(), liquidityBar: this.liquidityBar(), miniMap: this.miniMap(),
       netName: S.name,
       isEmpty: S.screen === 'empty', isWizard: S.screen === 'wizard', isForging: S.screen === 'forging', isFloor,
-      scenes: [scene('EMPTY', 'empty', this.goEmpty), scene('WIZARD', 'wizard', this.goWizard), scene('FORGING', 'forging', this.goForging), scene('FLOOR', 'floor', this.goFloor)],
+      scenes: [],
       modes: modeDefs.map(([key, label, id]) => ({ key, label, set: () => this.setMode(id), bg: S.mode === id ? 'var(--ember)' : 'var(--panel)', fg: S.mode === id ? '#1a0b06' : 'var(--muted)' })),
-      vitals: [{ k: 'CAPACITY', val: this.fmt(totalCap), c: 'var(--flux)' }, { k: 'ON-CHAIN', val: this.fmt(totalOnchain), c: 'var(--gold)' }, { k: 'BLOCK', val: '#47', c: 'var(--text)' }, { k: 'PAY/MIN', val: String(S.payMin), c: 'var(--ember)' }],
+      vitals: [{ k: 'CAPACITY', val: this.fmt(totalCap), c: 'var(--flux)' }, { k: 'ON-CHAIN', val: this.fmt(totalOnchain), c: 'var(--gold)' }, { k: 'BLOCK', val: '#' + (S.block || 0), c: 'var(--text)' }],
       vNodes: String(N), vChannels: String(readyChans.length),
       events: S.events, lastCmd: S.lastCmd,
-      enterWizard: this.enterWizard, openPay: this.openPay, openFund: this.openFund, openCap: this.openCap, clearSel: this.clearSel, goFloor: this.goFloor,
+      enterWizard: this.enterWizard, openPay: this.openPay, openFund: this.openFund, openCap: this.openCap, clearSel: this.clearSel, goFloor: this.goFloor, confirmCloseChannel: this.confirmCloseChannel, forgeCycle: () => this._forgeCycle(),
       zoomPct: String(S.zoomPct), zoomIn: this.zoomIn, zoomOut: this.zoomOut, zoomFit: this.fitView,
       bootSteps, bootLabel, bootPctW: Math.round(bs / total * 100) + '%',
       isNode: isFloor && !!n, isChannel: isFloor && !!ch,

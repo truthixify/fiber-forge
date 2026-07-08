@@ -26,6 +26,7 @@ import { type ContainerEngine, type ContainerSpec } from "./engine";
 import { encryptKey, generatePrivateKey } from "./keys";
 import { findFreePort, findFreePortBlock } from "./ports";
 import {
+  type Channel,
   FnnRpc,
   HttpTransport,
   type NodeInfo,
@@ -116,15 +117,17 @@ export interface NetworkState {
   channels: { from: string; to: string; capacityCkb: number }[];
 }
 
-/** A live view of a network for the GUI: node status + each channel's current state. */
+/** A live view of a network for the GUI: block height, node status + balances, live channels. */
 export interface NetworkView {
   net: string;
+  block: number;
   nodes: {
     name: string;
     container: string;
     rpcHostPort: number;
     pubkey: string;
     status: string;
+    onchainCkb: number;
   }[];
   channels: {
     from: string;
@@ -133,6 +136,7 @@ export interface NetworkView {
     state: string;
     localCkb: number;
     remoteCkb: number;
+    channelId: string;
   }[];
 }
 
@@ -291,52 +295,67 @@ export class Orchestrator {
     return layout;
   }
 
-  /** A live graph view of a running network for the GUI, from the persisted layout + RPC. */
+  /** A fully-live graph view for the GUI — real block height, node balances, and open channels. */
   async inspect(net: string): Promise<NetworkView> {
     const state = await this.readState(net);
+    const chain = new DevChain(`http://127.0.0.1:${state.ckbHostPort}`);
+    let block = 0;
+    try {
+      block = await chain.tipBlock();
+    } catch {
+      // chain unreachable
+    }
 
     const nodes = [];
     for (const node of state.nodes) {
+      let onchainCkb = 0;
+      try {
+        onchainCkb = Number(
+          await chain.balanceOf(await chain.addressOfPubkey(node.pubkey)),
+        );
+      } catch {
+        // chain unreachable
+      }
       nodes.push({
         name: node.name,
         container: node.container,
         rpcHostPort: node.rpcHostPort,
         pubkey: node.pubkey,
         status: await this.engine.status(node.container),
+        onchainCkb,
       });
     }
 
+    const nameByPubkey = new Map(state.nodes.map((n) => [n.pubkey, n.name]));
     const channels = [];
-    for (const channel of state.channels) {
-      const fromNode = state.nodes.find((n) => n.name === channel.from)!;
-      const toNode = state.nodes.find((n) => n.name === channel.to)!;
-      let channelState = "unknown";
-      let localCkb = Math.round(channel.capacityCkb / 2);
-      let remoteCkb = channel.capacityCkb - localCkb;
+    const seen = new Set<string>();
+    for (const node of state.nodes) {
+      let live: Channel[];
       try {
-        const rpc = new FnnRpc(
-          new HttpTransport(`http://127.0.0.1:${fromNode.rpcHostPort}`),
-        );
-        const live = (await rpc.listChannels(toNode.pubkey))[0];
-        if (live) {
-          channelState = channelStateName(live);
-          localCkb = shannonHexToCkb(live.local_balance);
-          remoteCkb = shannonHexToCkb(live.remote_balance);
-        }
+        live = await this.rpcFor(node.rpcHostPort).listChannels();
       } catch {
-        // node unreachable
+        continue;
       }
-      channels.push({
-        from: channel.from,
-        to: channel.to,
-        capacityCkb: channel.capacityCkb,
-        state: channelState,
-        localCkb,
-        remoteCkb,
-      });
+      for (const channel of live) {
+        if (seen.has(channel.channel_id)) {
+          continue;
+        }
+        seen.add(channel.channel_id);
+        const localCkb = shannonHexToCkb(channel.local_balance);
+        const remoteCkb = shannonHexToCkb(channel.remote_balance);
+        channels.push({
+          from: node.name,
+          to: nameByPubkey.get(channel.pubkey ?? "") ?? "?",
+          capacityCkb: localCkb + remoteCkb,
+          state: channelStateName(channel),
+          localCkb,
+          remoteCkb,
+          channelId: channel.channel_id,
+        });
+      }
     }
 
-    return { net, nodes, channels };
+    return { net, block, nodes, channels };
   }
 
   /**
