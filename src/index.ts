@@ -9,3 +9,4 @@ export * from "./config";
 export * from "./ckb";
 export * from "./orchestrator";
 export * from "./presets";
+export * from "./names";

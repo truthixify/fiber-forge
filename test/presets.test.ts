@@ -1,10 +1,21 @@
 import { describe, expect, it } from "vitest";
+import { NAME_POOL } from "../src/names";
 import { line, preset, presetNames, ring, star } from "../src/presets";
 import {
   MAX_NODES,
   MIN_CHANNEL_CAPACITY_CKB,
   type Topology,
 } from "../src/topology";
+
+const pool = new Set<string>(NAME_POOL);
+
+function assertNames(topology: Topology): void {
+  const names = topology.nodes.map((n) => n.name);
+  expect(new Set(names).size).toBe(names.length);
+  for (const name of names) {
+    expect(pool.has(name) || /^node\d+$/.test(name)).toBe(true);
+  }
+}
 
 function assertSound(topology: Topology): void {
   expect(topology.nodes.length).toBeGreaterThanOrEqual(2);
@@ -23,9 +34,11 @@ describe("named presets", () => {
     expect(presetNames()).toEqual(["duo", "trio", "hub"]);
   });
 
-  it("every named preset is structurally sound", () => {
+  it("every named preset is sound and uses fun names", () => {
     for (const name of presetNames()) {
-      assertSound(preset(name)!);
+      const topology = preset(name)!;
+      assertSound(topology);
+      assertNames(topology);
     }
   });
 });
@@ -34,42 +47,37 @@ describe("parametric presets", () => {
   it("line:N is a chain of N nodes with N-1 channels", () => {
     const topology = line(5);
     expect(topology.name).toBe("line5");
-    expect(topology.nodes.map((n) => n.name)).toEqual([
-      "n1",
-      "n2",
-      "n3",
-      "n4",
-      "n5",
-    ]);
+    expect(topology.nodes).toHaveLength(5);
     expect(topology.channels).toHaveLength(4);
-    expect(topology.channels[0]).toEqual({
-      from: "n1",
-      to: "n2",
-      capacityCkb: 1000,
+    const names = topology.nodes.map((n) => n.name);
+    topology.channels.forEach((c, i) => {
+      expect(c.from).toBe(names[i]);
+      expect(c.to).toBe(names[i + 1]);
     });
+    assertNames(topology);
+    assertSound(topology);
   });
 
-  it("ring:N closes the loop", () => {
+  it("ring:N closes the loop back to the first node", () => {
     const topology = ring(4);
     expect(topology.channels).toHaveLength(4);
+    const names = topology.nodes.map((n) => n.name);
     expect(topology.channels.at(-1)).toEqual({
-      from: "n4",
-      to: "n1",
+      from: names[3],
+      to: names[0],
       capacityCkb: 1000,
     });
+    assertSound(topology);
   });
 
   it("star:N is a hub with N-1 spokes", () => {
     const topology = star(5);
-    expect(topology.nodes.map((n) => n.name)).toEqual([
-      "hub",
-      "s1",
-      "s2",
-      "s3",
-      "s4",
-    ]);
+    expect(topology.nodes).toHaveLength(5);
     expect(topology.channels).toHaveLength(4);
-    expect(topology.channels.every((c) => c.from === "hub")).toBe(true);
+    const hub = topology.nodes[0].name;
+    expect(topology.channels.every((c) => c.from === hub)).toBe(true);
+    assertNames(topology);
+    assertSound(topology);
   });
 
   it("resolves shape:N through preset()", () => {

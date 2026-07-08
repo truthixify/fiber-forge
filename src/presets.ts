@@ -5,6 +5,7 @@
  *    `star:N` (one hub + N-1 spokes). N is bounded by the topology's node limits.
  */
 
+import { pickNames } from "./names";
 import { MAX_NODES, MIN_NODES, type Topology } from "./topology";
 
 const FUNDING = { perNodeCkb: 100_000 };
@@ -28,10 +29,10 @@ function requireInRange(shape: string, n: number): void {
   }
 }
 
-/** A line of N nodes: n1—n2—…—nN (N-1 channels). */
+/** A line of N nodes with fun names: a—b—…— (N-1 channels). */
 export function line(n: number): Topology {
   requireInRange("line", n);
-  const names = Array.from({ length: n }, (_, i) => `n${i + 1}`);
+  const names = pickNames(n);
   return {
     name: `line${n}`,
     nodes: names.map((name) => ({ name })),
@@ -55,15 +56,15 @@ export function ring(n: number): Topology {
   };
 }
 
-/** A star of N nodes: one `hub` with a channel to each of N-1 spokes. */
+/** A star of N nodes: one hub with a channel to each of the N-1 spokes. */
 export function star(n: number): Topology {
   requireInRange("star", n);
-  const spokes = Array.from({ length: n - 1 }, (_, i) => `s${i + 1}`);
+  const [hub, ...spokes] = pickNames(n);
   return {
     name: `star${n}`,
-    nodes: [{ name: "hub" }, ...spokes.map((name) => ({ name }))],
+    nodes: [{ name: hub }, ...spokes.map((name) => ({ name }))],
     channels: spokes.map((name) => ({
-      from: "hub",
+      from: hub,
       to: name,
       capacityCkb: CAP,
     })),
