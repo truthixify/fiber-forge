@@ -184,14 +184,6 @@
   </div>
   </sc-if>
 
-  <!-- ============ SCENE SWITCHER (always) ============ -->
-  <div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;align-items:stretch;gap:1px;background:var(--border);border:1px solid var(--border);z-index:9;">
-    <div style="background:var(--inset);padding:8px 12px;display:flex;align-items:center;"><span class="mc" style="color:var(--faint);">◆ SCENE</span></div>
-    <sc-for list="{{ scenes }}" as="sc" hint-placeholder-count="4">
-      <button onClick="{{ sc.go }}" style="background:{{ sc.bg }};color:{{ sc.fg }};border:none;padding:8px 14px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;transition:all .14s;">{{ sc.label }}</button>
-    </sc-for>
-  </div>
-
   <!-- ============ NODE READOUT DRAWER ============ -->
   <sc-if value="{{ isNode }}" hint-placeholder-val="{{ false }}">
     <div style="position:absolute;top:0;right:0;bottom:0;width:380px;background:var(--panel);border-left:1px solid var(--border);animation:drawerIn .22s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;z-index:10;">
@@ -719,10 +711,14 @@ class Component extends DCLogic {
     var F = this;
     this._forgeNet_ = net;
     this._forgeFitted = false;
+    var first = true;
     var load = function () {
       fetch('/api/state?net=' + encodeURIComponent(net)).then(function (r) { return r.json(); }).then(function (v) {
         if (v && v.nodes && v.nodes.length && F._forgeNet_ === net) {
-          var st = F._forgeMap(v); st.screen = 'floor';
+          var st = F._forgeMap(v);
+          // Only jump to the floor on the first load; later polls just refresh data so they
+          // never yank the user out of the wizard, a modal, or a selection.
+          if (first) { st.screen = 'floor'; first = false; }
           F.setState(st, function () { if (!F._forgeFitted) { F._forgeFitted = true; if (F.fitView) F.fitView(); } });
         }
       }).catch(function () {});
@@ -994,7 +990,7 @@ class Component extends DCLogic {
       h('div', { key: 'ring', style: { position: 'absolute', inset: 0, borderRadius: '50%', background: 'conic-gradient(from 0deg,var(--gold),var(--ember),var(--ember-deep),var(--gold))', animation: 'spin 9s linear infinite' } }),
       h('div', { key: 'in', style: { position: 'absolute', inset: 6, borderRadius: '50%', background: 'var(--void)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: coreCold ? 'none' : 'kindle 2.4s ease-in-out infinite' } },
         h('span', { style: { fontSize: 24, filter: 'drop-shadow(0 0 6px var(--ember))' } }, '⚒'))));
-    kids.push(h('div', { key: 'clabel', style: { position: 'absolute', left: core.x - 90, top: core.y + 44, width: 180, textAlign: 'center', fontFamily: 'Geist Mono,monospace', fontSize: 10, letterSpacing: '.14em', color: 'var(--muted)' } }, 'CORE · BLOCK #47 · 6 TX'));
+    kids.push(h('div', { key: 'clabel', style: { position: 'absolute', left: core.x - 90, top: core.y + 44, width: 180, textAlign: 'center', fontFamily: 'Geist Mono,monospace', fontSize: 10, letterSpacing: '.14em', color: 'var(--muted)' } }, 'CORE · BLOCK #' + (this.state.block || 0)));
 
     this.state.nodes.forEach(n => kids.push(this.nodeCell(n)));
 
