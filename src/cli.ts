@@ -11,6 +11,7 @@ import { type NetworkLayout } from "./config";
 import { DockerEngine } from "./engine";
 import { type NetworkView, Orchestrator } from "./orchestrator";
 import { preset, presetHelp } from "./presets";
+import { parseScenario, runScenario } from "./scenario";
 import { type Topology, parseTopology } from "./topology";
 import * as ui from "./ui";
 
@@ -507,6 +508,33 @@ export function buildCli(): Command {
         );
       },
     );
+
+  program
+    .command("run")
+    .description(
+      "run a scenario script (pay/open/close/fund/wait) against a network",
+    )
+    .argument("<net>", "network name")
+    .argument("<file>", "path to a scenario YAML file")
+    .option("--json", "print machine-readable JSON")
+    .action(async (net: string, file: string, options: { json?: boolean }) => {
+      const scenario = parseScenario(await readFile(resolve(file), "utf8"));
+      const orch = orchestrator();
+      if (options.json) {
+        const steps = await runScenario(orch, net, scenario);
+        printJson({ net, steps });
+        return;
+      }
+      console.log(
+        `\n  ${ui.accent("fiber-forge")}  ${ui.dim("·")}  ${ui.muted("scenario " + file)}\n`,
+      );
+      await runScenario(orch, net, scenario, (r) => {
+        console.log(
+          `  ${ui.dim(String(r.index + 1).padStart(2))}  ${ui.text(ui.caps(r.action).padEnd(8))}  ${ui.muted(r.summary)}`,
+        );
+      });
+      console.log("");
+    });
 
   program
     .command("gui")
