@@ -8,18 +8,49 @@ Built for the **"Gone in 60ms" Fiber Network Infrastructure Hackathon** — Cate
 
 ## Status
 
-Scaffold: the specification in [`docs/spec.md`](docs/spec.md) is complete and implementation is
-underway. This repository is self-contained and CI is green from the first commit.
+**Working.** `forge up trio` boots a CKB dev chain and three Fiber nodes, funds them, connects
+them, and opens channels to `CHANNEL_READY` in well under a minute — verified live end to end
+(see the `e2e` test). The CLI (`up` / `down` / `status` / `gui`) and the web GUI are functional.
 
-## Quickstart
+## Usage
+
+Requires a running Docker daemon (the tool pulls `nervos/ckb` and `nervos/fiber` on first run).
+
+```sh
+npm install
+node bin/forge.mjs up trio          # 3 nodes, 2 channels → CHANNEL_READY
+node bin/forge.mjs gui trio         # serve the live graph at http://127.0.0.1:5178
+node bin/forge.mjs status trio      # container states
+node bin/forge.mjs down trio --purge
+
+# a custom network from a topology YAML:
+node bin/forge.mjs up ./my-topology.yml
+```
+
+Presets: `duo` (2 nodes / 1 channel), `trio` (3 / 2), `hub` (1×4 star). A topology file declares
+`nodes`, `channels` (`from`/`to`/`capacity_ckb`), and `funding.per_node_ckb`.
+
+## How it works
+
+`up` plans a deterministic layout (container names, static IPs on a private subnet, host ports),
+then: creates the docker network → boots the CKB dev chain (contracts baked into genesis) →
+starts each fnn node with a generated, fnn-encrypted CKB key → waits for RPC → funds every node
+from the genesis deployer via `@ckb-ccc/core` (with the devnet secp256k1 cell dep) → connects
+peers → opens each channel → drives blocks until `CHANNEL_READY`. The layout is persisted so the
+GUI daemon can render a network's live state. Module map: `topology` · `keys` · `rpc` · `engine`
+· `config` · `ckb` · `orchestrator` · `presets` · `cli` · `daemon`.
+
+## Quickstart (development)
 
 All tasks run through `make`:
 
 ```sh
 make setup   # install toolchain / dependencies
 make build
-make test
+make test     # unit tests (the live Docker E2E is gated behind FORGE_E2E=1)
 make ci      # fmt-check + lint + test + build (exactly what CI runs)
+
+FORGE_E2E=1 npx vitest run test/e2e.test.ts   # the live forge-up-to-CHANNEL_READY test
 ```
 
 Run `make ci` before every push.
