@@ -587,7 +587,23 @@ class Component extends DCLogic {
   decPay = () => this.setState(s => ({ payAmt: Math.max(50, s.payAmt - 50) }));
   cyclePayFrom = () => { this.setState(s => { const ids = s.nodes.map(n => n.id); const i = ids.indexOf(s.payFrom); for (let k = 1; k <= ids.length; k++) { const id = ids[(i + k) % ids.length]; if (id !== s.payTo) return { payFrom: id }; } return {}; }); };
   cyclePayTo = () => { this.setState(s => { const ids = s.nodes.map(n => n.id); const i = ids.indexOf(s.payTo); for (let k = 1; k <= ids.length; k++) { const id = ids[(i + k) % ids.length]; if (id !== s.payFrom) return { payTo: id }; } return {}; }); };
-  confirmPay = () => { const f = this.node(this.state.payFrom), t = this.node(this.state.payTo); this.setState({ payOpen: false, lastCmd: 'forge pay ' + this.state.name.replace('forge-', '') + ' ' + (f ? f.name : '') + ' ' + (t ? t.name : '') + ' ' + this.state.payAmt }); if (window.__FORGE__) this._forgeApi('/api/pay', { net: this._forgeNet(), from: f ? f.name : '', to: t ? t.name : '', amount: this.state.payAmt }); this.startPayment(); };
+  confirmPay = () => {
+    const f = this.node(this.state.payFrom), t = this.node(this.state.payTo);
+    const fn = f ? f.name : '', tn = t ? t.name : '', amt = this.state.payAmt;
+    this.setState({ payOpen: false, lastCmd: 'forge pay ' + (window.__FORGE__ ? this._forgeNet() : this.state.name.replace('forge-', '')) + ' ' + fn + ' ' + tn + ' ' + amt });
+    if (window.__FORGE__) {
+      const self = this;
+      fetch('/api/pay', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ net: this._forgeNet(), from: fn, to: tn, amount: amt }) })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          const ok = res && res.status === 'Success';
+          self.setState(function (st) { return { showResult: ok, events: [{ t: self.now(), c: ok ? 'var(--ember)' : 'var(--alarm)', msg: 'PAYMENT ' + fn + '→' + tn + (ok ? (' SUCCESS ' + amt + ' CKB') : (' FAILED' + (res && res.error ? ' · ' + String(res.error).replace(/^[^:]*:\s*/, '').slice(0, 46) : ''))) }, ...st.events].slice(0, 8) }; });
+          if (ok) { clearTimeout(self._resT); self._resT = setTimeout(function () { self.setState({ showResult: false }); }, 2400); }
+        })
+        .catch(function () { self.setState(function (st) { return { events: [{ t: self.now(), c: 'var(--alarm)', msg: 'PAYMENT ' + fn + '→' + tn + ' FAILED' }, ...st.events].slice(0, 8) }; }); });
+    }
+    this.startPayment();
+  };
 
   startPayment = () => {
     if (this.state.paying) return;
@@ -620,6 +636,9 @@ class Component extends DCLogic {
   finishPayment(amt, hops) {
     if (this._spark) this._spark.setAttribute('opacity', '0');
     if (this._sparkCore) this._sparkCore.setAttribute('opacity', '0');
+    // In live mode the real /api/pay result (in confirmPay) drives success/failure + the poller
+    // shows the true balances — so don't fake a balance shift or a success here.
+    if (window.__FORGE__) { this.setState({ paying: false, relayId: null }); return; }
     this.setState(st => {
       const b = { ...st.balances };
       hops.forEach(hp => { const ch = st.channels.find(c => c.id === hp.chId); const cur = b[hp.chId] != null ? b[hp.chId] : ch.cap / 2; b[hp.chId] = hp.reversed ? Math.min(ch.cap - 60, cur + amt) : Math.max(60, cur - amt); });
