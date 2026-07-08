@@ -15,6 +15,7 @@ import {
   CKB_RPC_PORT,
   FNN_P2P_PORT,
   FNN_RPC_PORT,
+  type LayoutOptions,
   type NetworkLayout,
   type NodeLayout,
   fnnConfigYaml,
@@ -43,6 +44,7 @@ const hex = (bytes: Uint8Array) => "0x" + Buffer.from(bytes).toString("hex");
 export interface UpOptions {
   fnnImage?: string;
   ckbImage?: string;
+  layout?: LayoutOptions;
   onProgress?: (message: string) => void;
 }
 
@@ -114,7 +116,7 @@ export class Orchestrator {
     topology: Topology,
     options: UpOptions = {},
   ): Promise<NetworkLayout> {
-    const layout = planLayout(topology);
+    const layout = planLayout(topology, options.layout);
     const log = options.onProgress ?? (() => {});
     const netDir = join(this.stateDir, layout.net);
 
@@ -172,10 +174,11 @@ export class Orchestrator {
       const toLayout = layout.nodes.find((n) => n.name === channel.to)!;
       log(`connect ${channel.from} -> ${channel.to}`);
       await from.connectPeer(dialAddress(toLayout.ip, to.peerId, FNN_P2P_PORT));
+      await this.waitPeerConnected(from, to.pubkey);
       log(
         `open channel ${channel.from} -> ${channel.to} (${channel.capacityCkb} CKB)`,
       );
-      await from.openChannel({
+      await this.openChannel(from, {
         pubkey: to.pubkey,
         fundingAmount: ckbToShannonHex(channel.capacityCkb),
       });
@@ -257,6 +260,47 @@ export class Orchestrator {
         throw new Error("node did not announce its RPC + peer address in time");
       }
       await sleep(1000);
+    }
+  }
+
+  /** Wait until `pubkey` appears in the node's peer list (the connection handshake finished). */
+  private async waitPeerConnected(
+    rpc: FnnRpc,
+    pubkey: string,
+    timeoutMs = 30_000,
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const peers = await rpc.listPeers();
+      if (peers.some((peer) => peer.pubkey === pubkey)) {
+        return;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`peer ${pubkey} did not connect in time`);
+      }
+      await sleep(1000);
+    }
+  }
+
+  /**
+   * Open a channel, retrying through the transient "waiting for peer to send Init message" error
+   * that occurs while the just-connected peer completes feature negotiation.
+   */
+  private async openChannel(
+    rpc: FnnRpc,
+    params: { pubkey: string; fundingAmount: string },
+    attempts = 15,
+  ): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await rpc.openChannel(params);
+        return;
+      } catch (error) {
+        if (attempt >= attempts) {
+          throw error;
+        }
+        await sleep(2000);
+      }
     }
   }
 
