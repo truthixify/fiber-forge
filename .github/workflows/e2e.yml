@@ -1,0 +1,28 @@
+name: e2e
+# Headless live smoke: brings real CKB + fnn containers up on the runner's Docker, drives a
+# multi-hop payment and a node-failure path, then tears everything down. Kept off the per-push
+# path (slow: pulls images + boots a devnet) — run it on demand or on a weekly schedule.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: pre-pull images
+        run: |
+          docker pull nervos/ckb:v0.201.0
+          docker pull nervos/fiber:0.9.0-rc7
+      - name: live e2e
+        env:
+          FORGE_E2E: "1"
+        run: npx vitest run test/e2e.test.ts

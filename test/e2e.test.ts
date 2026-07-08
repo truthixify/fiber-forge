@@ -37,3 +37,35 @@ describe.skipIf(!RUN)("live: forge up duo -> CHANNEL_READY", () => {
     }
   }, 300_000);
 });
+
+describe.skipIf(!RUN)("live: a killed node surfaces as an error", () => {
+  const assetsDir = join(import.meta.dirname, "..", "assets");
+  const duo: Topology = {
+    name: "e2e-err",
+    nodes: [{ name: "alice" }, { name: "bob" }],
+    channels: [{ from: "alice", to: "bob", capacityCkb: 1000 }],
+    funding: { perNodeCkb: 100000 },
+  };
+
+  it("reports the node unhealthy and fails a payment to it", async () => {
+    const engine = new DockerEngine();
+    const orchestrator = new Orchestrator(engine, assetsDir);
+    try {
+      const layout = await orchestrator.up(duo, {
+        layout: { ckbHostPort: 8215, rpcHostPortBase: 8320 },
+        onProgress: (message) => console.log("  " + message),
+      });
+      await engine.remove(layout.nodes[1].container);
+
+      const view = await orchestrator.inspect("e2e-err");
+      const bob = view.nodes.find((n) => n.name === "bob");
+      expect(bob?.status).not.toBe("running");
+
+      await expect(
+        orchestrator.pay("e2e-err", "alice", "bob", 100),
+      ).rejects.toThrow();
+    } finally {
+      await orchestrator.down("e2e-err", { purge: true });
+    }
+  }, 300_000);
+});
