@@ -200,8 +200,8 @@
         <div style="font-size:26px;font-weight:800;color:var(--bone);letter-spacing:-.02em;line-height:1;">{{ nName }}</div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
           <span class="num" style="font-size:12px;color:var(--muted);">{{ nPubkey }}</span>
-          <span class="mc" style="color:var(--signal);cursor:pointer;">COPY</span>
-          <span class="mc" style="color:var(--signal);cursor:pointer;">⧉ RPC</span>
+          <span onClick="{{ copyPubkey }}" class="mc" style="color:{{ copyPubkeyColor }};cursor:pointer;">{{ copyPubkeyLabel }}</span>
+          <span onClick="{{ copyRpc }}" class="mc" style="color:{{ copyRpcColor }};cursor:pointer;">{{ copyRpcLabel }}</span>
         </div>
       </div>
       <div style="display:flex;gap:1px;background:var(--hairline);border-bottom:1px solid var(--hairline);">
@@ -373,7 +373,7 @@
           <button onClick="{{ incInvoice }}" style="background:var(--panel-2);color:var(--bone);border:none;width:46px;cursor:pointer;font-size:18px;">+</button>
         </div>
         <sc-if value="{{ invoiceHasAddr }}" hint-placeholder-val="{{ false }}">
-          <span class="mc" style="display:block;margin-bottom:8px;">INVOICE · TAP TO COPY</span>
+          <span class="mc" style="display:block;margin-bottom:8px;color:{{ copyInvoiceColor }};">{{ copyInvoiceLabel }}</span>
           <div onClick="{{ copyInvoice }}" title="click to copy" style="background:var(--inset);border:1px solid var(--hairline);padding:12px 14px;margin-bottom:16px;cursor:pointer;word-break:break-all;font-family:'Geist Mono',monospace;font-size:11px;color:var(--flux);">{{ invoiceAddr }}</div>
         </sc-if>
         <button onClick="{{ genInvoice }}" style="width:100%;background:var(--gold);color:#1a1206;border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;">GENERATE INVOICE ◈</button>
@@ -537,7 +537,7 @@ class Component extends DCLogic {
     fundFlash: null, igniteId: null, zoomPct: 100,
     nodes: [], channels: [], chState: {}, balances: {}, onchain: {}, core: { x: 720, y: 440 },
     name: 'forge-trio', payFrom: null, payTo: null,
-    nodeTab: 'overview', invoiceOpen: false, invoiceAmt: 100, invoiceAddr: '', invoiceBusy: false, nodeLogs: '',
+    nodeTab: 'overview', invoiceOpen: false, invoiceAmt: 100, invoiceAddr: '', invoiceBusy: false, nodeLogs: '', copyFlash: null,
   };
 
   constructor(props) {
@@ -647,7 +647,15 @@ class Component extends DCLogic {
       .then(function (res) { self.setState({ invoiceBusy: false, invoiceAddr: res && res.invoice ? res.invoice : ('error: ' + ((res && res.error) || 'failed')) }); })
       .catch(function () { self.setState({ invoiceBusy: false, invoiceAddr: 'error creating invoice' }); });
   };
-  copyInvoice = () => { try { navigator.clipboard.writeText(this.state.invoiceAddr); } catch (e) {} };
+  _copy(text, key) {
+    try { if (navigator.clipboard) navigator.clipboard.writeText(text); } catch (e) {}
+    this.setState({ copyFlash: key });
+    clearTimeout(this._copyT);
+    this._copyT = setTimeout(() => this.setState({ copyFlash: null }), 1400);
+  }
+  copyPubkey = () => { const n = this.node(this.state.sel && this.state.sel.id); if (n) this._copy(n.fullPubkey || n.pubkey || '', 'pubkey'); };
+  copyRpc = () => { const n = this.node(this.state.sel && this.state.sel.id); if (n) this._copy('http://127.0.0.1:' + n.port, 'rpc'); };
+  copyInvoice = () => this._copy(this.state.invoiceAddr, 'invoice');
   setMode = (id) => this.setState({ mode: id });
   goEmpty = () => { clearInterval(this._boot); this.setState({ screen: 'empty', sel: null, payOpen: false, fundOpen: false, capOpen: false }); };
   goWizard = () => { clearInterval(this._boot); this.setState({ screen: 'wizard', wizardStep: 1, sel: null }); };
@@ -1228,6 +1236,10 @@ class Component extends DCLogic {
       bootSteps, bootLabel, bootPctW: Math.round(bs / total * 100) + '%',
       isNode: isFloor && !!n, isChannel: isFloor && !!ch,
       nName: n ? n.name : '', nPubkey: n ? n.pubkey : '', nPort: n ? String(n.port) : '', nP2p: n ? String(n.p2p) : '',
+      copyPubkey: this.copyPubkey, copyRpc: this.copyRpc,
+      copyPubkeyLabel: S.copyFlash === 'pubkey' ? '✓ COPIED' : 'COPY', copyPubkeyColor: S.copyFlash === 'pubkey' ? 'var(--flux)' : 'var(--signal)',
+      copyRpcLabel: S.copyFlash === 'rpc' ? '✓ COPIED' : '⧉ RPC', copyRpcColor: S.copyFlash === 'rpc' ? 'var(--flux)' : 'var(--signal)',
+      copyInvoiceLabel: S.copyFlash === 'invoice' ? '✓ COPIED TO CLIPBOARD' : 'INVOICE · TAP TO COPY', copyInvoiceColor: S.copyFlash === 'invoice' ? 'var(--flux)' : 'var(--muted)',
       nOnchain: n ? this.fmt(S.onchain[n.id]) : '', nInChannel: n ? this.fmt(nInch) : '', nChannels: n ? String(this.degree(n.id)) : '',
       tabOverview: S.nodeTab === 'overview', tabPeers: S.nodeTab === 'peers', tabChannels: S.nodeTab === 'channels', tabLogs: S.nodeTab === 'logs',
       tabOvGo: tOv.go, tabOvBd: tOv.bd, tabOvFg: tOv.fg, tabPeGo: tPe.go, tabPeBd: tPe.bd, tabPeFg: tPe.fg, tabChGo: tCh.go, tabChBd: tCh.bd, tabChFg: tCh.fg, tabLoGo: tLo.go, tabLoBd: tLo.bd, tabLoFg: tLo.fg,
