@@ -757,20 +757,24 @@ class Component extends DCLogic {
     var F = this;
     var body = { preset: this.state.preset, nodes: this.effN(), funding: this.state.funding };
     var t = this.build(this.state.preset, this.effN(), this.state.funding);
+    var total = t.nodes.length + 1 + t.channels.length;
+    // the real up() emits ~3 messages per node + ~3 per channel + a couple of framing ones
+    var estMsgs = t.nodes.length * 3 + t.channels.length * 3 + 3;
     this.setState(Object.assign({}, t, { screen: 'forging', bootStep: 0, sel: null, chState: Object.fromEntries(t.channels.map(function (c) { return [c.id, 'pending']; })) }));
     clearInterval(this._boot);
-    var total = t.nodes.length + 1 + t.channels.length;
-    this._boot = setInterval(function () { F.setState(function (st) { return { bootStep: Math.min(total, st.bootStep + 1) }; }); }, 600);
     fetch('/api/up', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json(); })
       .then(function (res) {
         if (!res.jobId) throw new Error(res.error || 'spawn failed');
-        var poll = setInterval(function () {
+        // drive the forge animation from the REAL build progress so it lasts the real ~40s
+        F._boot = setInterval(function () {
           fetch('/api/job?id=' + res.jobId).then(function (r) { return r.json(); }).then(function (job) {
-            if (job && job.status === 'done') { clearInterval(poll); clearInterval(F._boot); F._forgeSelect(res.net); }
-            else if (job && job.status === 'error') { clearInterval(poll); clearInterval(F._boot); F.setState({ screen: 'floor' }); }
+            if (!job) return;
+            if (job.status === 'done') { clearInterval(F._boot); F._forgeSelect(res.net); return; }
+            if (job.status === 'error') { clearInterval(F._boot); F.setState({ screen: 'floor' }); return; }
+            F.setState({ bootStep: Math.min(total - 1, Math.round((job.progress.length / estMsgs) * total)) });
           }).catch(function () {});
-        }, 1500);
+        }, 1000);
       })
       .catch(function () { clearInterval(F._boot); F.setState({ screen: 'floor' }); });
   }
