@@ -19,6 +19,9 @@
     "vitest": "^2.1"
   },
   "dependencies": {
+    "@ckb-ccc/core": "^1.16.1",
+    "@noble/ciphers": "^2.2.0",
+    "@noble/hashes": "^2.2.0",
     "yaml": "^2.9.0"
   }
 }
