@@ -39,6 +39,8 @@ export interface ContainerEngine {
   /** Create the network with the given subnet if it does not already exist. */
   ensureNetwork(name: string, subnet: string): Promise<void>;
   removeNetwork(name: string): Promise<void>;
+  /** Remove a named volume if it exists. */
+  removeVolume(name: string): Promise<void>;
   /** Create and start a container from the spec (removing any prior container of that name). */
   run(spec: ContainerSpec): Promise<void>;
   stop(name: string): Promise<void>;
@@ -70,6 +72,10 @@ export class FakeEngine implements ContainerEngine {
   async removeNetwork(name: string): Promise<void> {
     this.networks.delete(name);
     this.log.push(`rm-network ${name}`);
+  }
+
+  async removeVolume(name: string): Promise<void> {
+    this.log.push(`rm-volume ${name}`);
   }
 
   async run(spec: ContainerSpec): Promise<void> {
@@ -135,6 +141,14 @@ export class DockerEngine implements ContainerEngine {
   async removeNetwork(name: string): Promise<void> {
     try {
       await this.docker.getNetwork(name).remove();
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+    }
+  }
+
+  async removeVolume(name: string): Promise<void> {
+    try {
+      await this.docker.getVolume(name).remove({ force: true });
     } catch (error) {
       if (!isNotFound(error)) throw error;
     }

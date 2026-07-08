@@ -129,19 +129,6 @@ export interface NetworkView {
   channels: { from: string; to: string; capacityCkb: number; state: string }[];
 }
 
-/** Rich status: node container states + pubkeys (from the persisted layout, works when stopped). */
-export interface StatusReport {
-  net: string;
-  nodes: {
-    name: string;
-    container: string;
-    rpcHostPort: number;
-    pubkey: string;
-    status: string;
-  }[];
-  channels: { from: string; to: string; capacityCkb: number }[];
-}
-
 /** A channel as seen from one node. */
 export interface ChannelRow {
   node: string;
@@ -339,32 +326,26 @@ export class Orchestrator {
     return { net, nodes, channels };
   }
 
-  /** Remove all containers of a network, the network, and optionally its state + data volume. */
-  async down(net: string, options: { purge?: boolean } = {}): Promise<void> {
+  /**
+   * Tear a network down. By default removes its containers, network, and ckb data volume, keeping
+   * the state dir. `keep` preserves the data volume too (for a stateful restart); `purge` also
+   * deletes the state dir, leaving nothing on disk.
+   */
+  async down(
+    net: string,
+    options: { purge?: boolean; keep?: boolean } = {},
+  ): Promise<void> {
     for (const name of await this.engine.listByLabel(FORGE_LABEL, net)) {
       await this.engine.stop(name);
       await this.engine.remove(name);
     }
     await this.engine.removeNetwork(`forge-${net}`);
+    if (!options.keep) {
+      await this.engine.removeVolume(`forge-${net}-ckb-data`);
+    }
     if (options.purge) {
       await rm(join(this.stateDir, net), { recursive: true, force: true });
     }
-  }
-
-  /** Rich status from the persisted layout — real names, ports, pubkeys, and container states. */
-  async status(net: string): Promise<StatusReport> {
-    const state = await this.readState(net);
-    const nodes = [];
-    for (const node of state.nodes) {
-      nodes.push({
-        name: node.name,
-        container: node.container,
-        rpcHostPort: node.rpcHostPort,
-        pubkey: node.pubkey,
-        status: await this.engine.status(node.container),
-      });
-    }
-    return { net, nodes, channels: state.channels };
   }
 
   /** Every forge network on disk, with its node count and whether its ckb chain is running. */
