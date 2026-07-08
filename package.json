@@ -17,5 +17,8 @@
     "prettier": "^3.3",
     "typescript": "^5.6",
     "vitest": "^2.1"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
   }
 }
