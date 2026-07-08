@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { fnnConfigYaml, planLayout } from "./config";
-import { type Topology } from "./topology";
+import { fnnConfigYaml, planLayout } from "../src/config";
+import { type Topology } from "../src/topology";
 
 const trio: Topology = {
   name: "trio",

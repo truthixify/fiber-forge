@@ -9,7 +9,7 @@ import {
   dialAddress,
   isChannelReady,
   peerIdOf,
-} from "./rpc";
+} from "../src/rpc";
 
 class FakeTransport implements RpcTransport {
   readonly calls: { method: string; params: unknown[] }[] = [];

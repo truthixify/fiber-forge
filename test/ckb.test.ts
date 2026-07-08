@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DevChain } from "./ckb";
+import { DevChain } from "../src/ckb";
 
 // Address derivation is deterministic and offline — a deliberately unreachable URL proves it does
 // not touch the chain. Block generation, funding, and balance are exercised by the live E2E.

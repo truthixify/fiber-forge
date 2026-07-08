@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { planLayout } from "./config";
-import { FakeEngine } from "./engine";
+import { planLayout } from "../src/config";
+import { FakeEngine } from "../src/engine";
 import {
   FORGE_LABEL,
   Orchestrator,
   ckbContainerSpec,
   nodeContainerSpec,
-} from "./orchestrator";
-import { type Topology } from "./topology";
+} from "../src/orchestrator";
+import { type Topology } from "../src/topology";
 
 const duo: Topology = {
   name: "duo",

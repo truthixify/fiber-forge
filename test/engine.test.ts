@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FakeEngine } from "./engine";
+import { FakeEngine } from "../src/engine";
 
 describe("FakeEngine", () => {
   it("creates a network idempotently", async () => {

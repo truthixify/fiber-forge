@@ -5,7 +5,7 @@ import {
   TopologyError,
   parseTopology,
   validateTopology,
-} from "./topology";
+} from "../src/topology";
 
 const VALID = `
 name: my-net

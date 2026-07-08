@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decryptKey, encryptKey, generatePrivateKey } from "./keys";
+import { decryptKey, encryptKey, generatePrivateKey } from "../src/keys";
 
 // A real fnn-produced key file (fiber tests/nodes/1/ckb/key, encrypted with "password1") and the
 // private key it holds (tests/nodes/1/ckb/plain_key). Decrypting it proves our scrypt + AES-GCM
