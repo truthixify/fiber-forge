@@ -5,6 +5,8 @@
  * `list_channels{pubkey?} -> {channels}`. Only the verified method set is exposed.
  */
 
+import { type UdtScript } from "./ckb";
+
 /** Carries out a single JSON-RPC call and returns its `result`. */
 export interface RpcTransport {
   call(method: string, params: unknown[]): Promise<unknown>;
@@ -71,6 +73,8 @@ export interface OpenChannelParams {
   fundingAmount: string;
   /** Announce the channel to the network graph (needed for routing). */
   isPublic?: boolean;
+  /** Open a UDT-denominated channel: the asset's type script (whitelisted on both nodes). */
+  udtTypeScript?: UdtScript;
 }
 
 /** The typed FNN client. */
@@ -93,6 +97,9 @@ export class FnnRpc {
         pubkey: params.pubkey,
         funding_amount: params.fundingAmount,
         public: params.isPublic ?? true,
+        ...(params.udtTypeScript
+          ? { funding_udt_type_script: params.udtTypeScript }
+          : {}),
       },
     ]);
     return result as { temporary_channel_id: string };
@@ -126,9 +133,15 @@ export class FnnRpc {
     amount: string;
     description?: string;
     currency?: string;
+    udtTypeScript?: UdtScript;
   }): Promise<{ invoice_address: string }> {
+    const { udtTypeScript, ...rest } = params;
     return this.transport.call("new_invoice", [
-      { currency: "Fibd", ...params },
+      {
+        currency: "Fibd",
+        ...rest,
+        ...(udtTypeScript ? { udt_type_script: udtTypeScript } : {}),
+      },
     ]) as Promise<{ invoice_address: string }>;
   }
 

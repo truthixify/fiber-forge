@@ -310,8 +310,9 @@ export function buildCli(): Command {
     .argument("<net>", "network name")
     .argument("<from>", "paying node")
     .argument("<to>", "receiving node")
-    .argument("<amount>", "amount in CKB")
+    .argument("<amount>", "amount (CKB, or UDT with --udt)")
     .option("--description <text>", "invoice description")
+    .option("--udt", "denominate the payment in the dev UDT instead of CKB")
     .option("--json", "print machine-readable JSON")
     .action(
       async (
@@ -319,9 +320,10 @@ export function buildCli(): Command {
         from: string,
         to: string,
         amount: string,
-        options: { description?: string; json?: boolean },
+        options: { description?: string; udt?: boolean; json?: boolean },
       ) => {
         const amountCkb = Number(amount);
+        const unit = options.udt ? "UDT" : "CKB";
         if (options.json) {
           printJson(
             await orchestrator().pay(
@@ -330,12 +332,13 @@ export function buildCli(): Command {
               to,
               amountCkb,
               options.description,
+              options.udt,
             ),
           );
           return;
         }
         const progress = new ui.Progress(
-          `pay ${amountCkb} CKB   ${from} → ${to}`,
+          `pay ${amountCkb} ${unit}   ${from} → ${to}`,
           [{ key: "settle", label: "settle" }],
         );
         try {
@@ -346,12 +349,13 @@ export function buildCli(): Command {
             to,
             amountCkb,
             options.description,
+            options.udt,
           );
           if (result.status === "Success") {
             progress.finish();
             console.log(
               "\n" +
-                ui.box(`paid ${amountCkb} CKB`, result.status, ui.success, [
+                ui.box(`paid ${amountCkb} ${unit}`, result.status, ui.success, [
                   `${ui.success("✔")}  ${ui.text(from)} ${ui.muted("→")} ${ui.text(to)}`,
                   `${ui.muted("hash")}   ${ui.muted(ui.shortHash(result.paymentHash))}`,
                 ]) +
@@ -409,37 +413,48 @@ export function buildCli(): Command {
     .argument("<net>", "network name")
     .argument("<from>", "source node")
     .argument("<to>", "target node")
-    .argument("<capacity>", "channel capacity in CKB")
-    .action(async (net: string, from: string, to: string, capacity: string) => {
-      const capacityCkb = Number(capacity);
-      const progress = new ui.Progress(`open ${from} → ${to}`, [
-        { key: "connect", label: "connect" },
-        { key: "open", label: "open" },
-        { key: "ready", label: "ready" },
-      ]);
-      try {
-        await orchestrator().openChannelBetween(
-          net,
-          from,
-          to,
-          capacityCkb,
-          (message) => {
-            if (message.startsWith("connect"))
-              progress.enter("connect", message);
-            else if (message.startsWith("open"))
-              progress.enter("open", message);
-            else if (message.includes("ready")) progress.enter("ready");
-          },
-        );
-        progress.finish();
-        console.log(
-          `\n  ${ui.success("✔")}  channel ${ui.text(from)} ${ui.muted("→")} ${ui.text(to)}  ${ui.muted(capacityCkb + " CKB")}  ${ui.success("ChannelReady")}\n`,
-        );
-      } catch (error) {
-        progress.failActive((error as Error).message);
-        fail((error as Error).message);
-      }
-    });
+    .argument("<capacity>", "channel capacity (CKB, or UDT with --udt)")
+    .option("--udt", "open a UDT-denominated channel")
+    .action(
+      async (
+        net: string,
+        from: string,
+        to: string,
+        capacity: string,
+        options: { udt?: boolean },
+      ) => {
+        const capacityCkb = Number(capacity);
+        const unit = options.udt ? "UDT" : "CKB";
+        const progress = new ui.Progress(`open ${from} → ${to}`, [
+          { key: "connect", label: "connect" },
+          { key: "open", label: "open" },
+          { key: "ready", label: "ready" },
+        ]);
+        try {
+          await orchestrator().openChannelBetween(
+            net,
+            from,
+            to,
+            capacityCkb,
+            (message) => {
+              if (message.startsWith("connect"))
+                progress.enter("connect", message);
+              else if (message.startsWith("open"))
+                progress.enter("open", message);
+              else if (message.includes("ready")) progress.enter("ready");
+            },
+            options.udt,
+          );
+          progress.finish();
+          console.log(
+            `\n  ${ui.success("✔")}  channel ${ui.text(from)} ${ui.muted("→")} ${ui.text(to)}  ${ui.muted(capacityCkb + " " + unit)}  ${ui.success("ChannelReady")}\n`,
+          );
+        } catch (error) {
+          progress.failActive((error as Error).message);
+          fail((error as Error).message);
+        }
+      },
+    );
 
   channel
     .command("close")
@@ -506,6 +521,34 @@ export function buildCli(): Command {
         process.stdout.write(
           await orchestrator().logs(net, node, options.tail, options.level),
         );
+      },
+    );
+
+  const udt = program.command("udt").description("dev UDT asset operations");
+
+  udt
+    .command("issue")
+    .argument("<net>", "network name")
+    .argument("<node>", "node that will receive the UDT")
+    .argument("<amount>", "amount in whole UDT")
+    .option("--json", "print machine-readable JSON")
+    .action(
+      async (
+        net: string,
+        node: string,
+        amount: string,
+        options: { json?: boolean },
+      ) => {
+        const amountUdt = Number(amount);
+        const tx = await orchestrator().issueUdt(net, node, amountUdt);
+        if (options.json) {
+          printJson({ net, node, amountUdt, tx });
+          return;
+        }
+        console.log(
+          `\n  ${ui.muted(ui.caps("udt issue"))}   ${ui.text(node)}   ${ui.gold(amountUdt + " UDT")}`,
+        );
+        console.log(`  ${ui.muted("tx")}   ${ui.muted(ui.shortHash(tx))}\n`);
       },
     );
 

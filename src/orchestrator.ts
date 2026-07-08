@@ -10,7 +10,7 @@ import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { DevChain } from "./ckb";
+import { DevChain, SIMPLE_UDT_CODE_HASH } from "./ckb";
 import {
   CKB_RPC_PORT,
   FNN_P2P_PORT,
@@ -18,6 +18,7 @@ import {
   type LayoutOptions,
   type NetworkLayout,
   type NodeLayout,
+  type UdtWhitelistInfo,
   fnnConfigYaml,
   pickSubnetBase,
   planLayout,
@@ -30,6 +31,7 @@ import {
   FnnRpc,
   HttpTransport,
   type NodeInfo,
+  type OpenChannelParams,
   channelStateName,
   ckbToShannonHex,
   dialAddress,
@@ -232,12 +234,19 @@ export class Orchestrator {
     await chain.waitReady();
     await chain.generateBlocks(2);
 
+    const udtDep = await chain.udtDep();
+    const udtWhitelist: UdtWhitelistInfo = {
+      codeHash: SIMPLE_UDT_CODE_HASH,
+      depTxHash: udtDep.txHash,
+      depIndex: udtDep.index,
+    };
+
     const privateKeys = new Map<string, string>();
     for (const node of layout.nodes) {
       const nodeDir = join(netDir, node.container);
       const privateKey = generatePrivateKey();
       privateKeys.set(node.name, hex(privateKey));
-      await this.writeNodeDir(nodeDir, layout, node, privateKey);
+      await this.writeNodeDir(nodeDir, layout, node, privateKey, udtWhitelist);
       log(`node ${node.name} (${node.ip})`);
       await this.engine.run(
         nodeContainerSpec(layout, node, nodeDir, options.fnnImage),
@@ -428,40 +437,67 @@ export class Orchestrator {
     return summaries;
   }
 
-  /** Create an invoice on a node; returns the invoice address to pay. */
+  /**
+   * Create an invoice on a node; returns the invoice address to pay. With `udt`, the invoice is
+   * denominated in the dev UDT (`amount` is whole UDT; both scale by 8 decimals to base units).
+   */
   async createInvoice(
     net: string,
     node: string,
-    amountCkb: number,
+    amount: number,
     description?: string,
+    udt?: boolean,
   ): Promise<string> {
-    const target = await this.nodeOf(net, node);
+    const state = await this.readState(net);
+    const target = this.requireNode(state, node);
+    const udtTypeScript = udt
+      ? await new DevChain(`http://127.0.0.1:${state.ckbHostPort}`).udtScript()
+      : undefined;
     const { invoice_address } = await this.rpcFor(
       target.rpcHostPort,
     ).newInvoice({
-      amount: ckbToShannonHex(amountCkb),
+      amount: ckbToShannonHex(amount),
       description,
+      udtTypeScript,
     });
     return invoice_address;
   }
 
-  /** Pay `amountCkb` from one node to another (creates an invoice on the receiver, then pays it). */
+  /** Pay `amount` from one node to another (creates an invoice on the receiver, then pays it). */
   async pay(
     net: string,
     from: string,
     to: string,
-    amountCkb: number,
+    amount: number,
     description?: string,
+    udt?: boolean,
   ): Promise<PaymentReport> {
-    const invoice = await this.createInvoice(net, to, amountCkb, description);
+    const invoice = await this.createInvoice(net, to, amount, description, udt);
     const status = await this.payInvoiceInternal(net, from, invoice);
     return {
       from,
       to,
-      amountCkb,
+      amountCkb: amount,
       paymentHash: status.paymentHash,
       status: status.status,
     };
+  }
+
+  /** Mint `amountUdt` whole units of the dev UDT into a node's wallet; returns the tx hash. */
+  async issueUdt(
+    net: string,
+    node: string,
+    amountUdt: number,
+  ): Promise<string> {
+    const state = await this.readState(net);
+    const target = this.requireNode(state, node);
+    const chain = new DevChain(`http://127.0.0.1:${state.ckbHostPort}`);
+    const tx = await chain.issueUdt(
+      target.ckbAddress,
+      BigInt(Math.round(amountUdt * 1e8)),
+    );
+    await chain.generateBlocks(4);
+    return tx;
   }
 
   /** Pay an existing invoice string from a node. */
@@ -485,8 +521,9 @@ export class Orchestrator {
     net: string,
     from: string,
     to: string,
-    capacityCkb: number,
+    capacity: number,
     onProgress?: (message: string) => void,
+    udt?: boolean,
   ): Promise<void> {
     const log = onProgress ?? (() => {});
     const state = await this.readState(net);
@@ -495,6 +532,7 @@ export class Orchestrator {
     const fromRpc = this.rpcFor(fromNode.rpcHostPort);
     const toRpc = this.rpcFor(toNode.rpcHostPort);
     const chain = new DevChain(`http://127.0.0.1:${state.ckbHostPort}`);
+    const udtTypeScript = udt ? await chain.udtScript() : undefined;
 
     const toPeerId = peerIdOf(await toRpc.nodeInfo());
     if (!toPeerId) {
@@ -503,10 +541,11 @@ export class Orchestrator {
     log(`connect ${from} -> ${to}`);
     await fromRpc.connectPeer(dialAddress(toNode.ip, toPeerId, FNN_P2P_PORT));
     await this.waitPeerConnected(fromRpc, toNode.pubkey);
-    log(`open channel ${from} -> ${to} (${capacityCkb} CKB)`);
+    log(`open channel ${from} -> ${to} (${capacity} ${udt ? "UDT" : "CKB"})`);
     await this.openChannel(fromRpc, {
       pubkey: toNode.pubkey,
-      fundingAmount: ckbToShannonHex(capacityCkb),
+      fundingAmount: ckbToShannonHex(capacity),
+      udtTypeScript,
     });
     await this.waitChannelReady(
       fromRpc,
@@ -647,6 +686,7 @@ export class Orchestrator {
     layout: NetworkLayout,
     node: NodeLayout,
     privateKey: Uint8Array,
+    udt?: UdtWhitelistInfo,
   ): Promise<void> {
     await rm(dir, { recursive: true, force: true });
     await mkdir(join(dir, "ckb"), { recursive: true });
@@ -654,7 +694,7 @@ export class Orchestrator {
       join(dir, "ckb", "key"),
       encryptKey(privateKey, node.password),
     );
-    await writeFile(join(dir, "config.yml"), fnnConfigYaml(layout, node));
+    await writeFile(join(dir, "config.yml"), fnnConfigYaml(layout, node, udt));
     // dev.toml references the contracts relatively; sitting beside them in /fiber it is `contracts`.
     const devToml = await readFile(join(this.assetsDir, "dev.toml"), "utf8");
     await writeFile(
@@ -712,7 +752,7 @@ export class Orchestrator {
    */
   private async openChannel(
     rpc: FnnRpc,
-    params: { pubkey: string; fundingAmount: string },
+    params: OpenChannelParams,
     attempts = 15,
   ): Promise<void> {
     for (let attempt = 0; ; attempt += 1) {

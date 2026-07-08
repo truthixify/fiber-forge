@@ -136,8 +136,19 @@ export function pickSubnetBase(
 }
 
 /** Render the devnet `config.yml` for one node (the shape the spike verified boots). */
-export function fnnConfigYaml(layout: NetworkLayout, node: NodeLayout): string {
-  return [
+/** Genesis location + code hash of the dev UDT, so nodes can whitelist and route it. */
+export interface UdtWhitelistInfo {
+  codeHash: string;
+  depTxHash: string;
+  depIndex: number;
+}
+
+export function fnnConfigYaml(
+  layout: NetworkLayout,
+  node: NodeLayout,
+  udt?: UdtWhitelistInfo,
+): string {
+  const lines = [
     "fiber:",
     "  chain: dev.toml",
     "  auto_announce_node: true",
@@ -147,10 +158,24 @@ export function fnnConfigYaml(layout: NetworkLayout, node: NodeLayout): string {
     "  enabled_modules: [channel, payment, graph, info, invoice, peer, dev]",
     "ckb:",
     `  rpc_url: http://${layout.ckbContainer}:${CKB_RPC_PORT}`,
-    "services:",
-    "  - fiber",
-    "  - rpc",
-    "  - ckb",
-    "",
-  ].join("\n");
+  ];
+  if (udt) {
+    lines.push(
+      "  udt_whitelist:",
+      "    - name: simple_udt",
+      "      script:",
+      `        code_hash: ${udt.codeHash}`,
+      "        hash_type: data1",
+      '        args: "0x.*"',
+      "      auto_accept_amount: 1",
+      "      cell_deps:",
+      "        - cell_dep:",
+      "            out_point:",
+      `              tx_hash: ${udt.depTxHash}`,
+      `              index: "0x${udt.depIndex.toString(16)}"`,
+      "            dep_type: code",
+    );
+  }
+  lines.push("services:", "  - fiber", "  - rpc", "  - ckb", "");
+  return lines.join("\n");
 }

@@ -14,6 +14,23 @@ import { ccc } from "@ckb-ccc/core";
 export const DEPLOYER_PRIVATE_KEY =
   "0xd00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2bc";
 
+/** The `simple_udt` type-script code hash (its binary is baked into the dev-chain genesis). */
+export const SIMPLE_UDT_CODE_HASH =
+  "0xe1e354d6d643ad42724d40967e334984534e0367405c5ae42a9d7d63d77df419";
+
+/** A CKB type script in the shape fnn's config and RPC expect (snake_case, string fields). */
+export interface UdtScript {
+  code_hash: string;
+  hash_type: string;
+  args: string;
+}
+
+/** An out point identifying the on-chain cell a script's code lives in. */
+export interface OutPoint {
+  txHash: string;
+  index: number;
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function rawRpc(
@@ -36,6 +53,7 @@ async function rawRpc(
 export class DevChain {
   private readonly client: ccc.ClientPublicTestnet;
   private devScriptsReady = false;
+  private udtOutpoint?: OutPoint;
 
   constructor(private readonly rpcUrl: string) {
     this.client = new ccc.ClientPublicTestnet({ url: rpcUrl });
@@ -125,6 +143,13 @@ export class DevChain {
       throw new Error("could not read the dev chain genesis block");
     }
     const depGroupTxHash = genesis.transactions[1].hash();
+    const cellbase = genesis.transactions[0];
+    for (let i = 0; i < cellbase.outputsData.length; i += 1) {
+      if (ccc.hashCkb(cellbase.outputsData[i]) === SIMPLE_UDT_CODE_HASH) {
+        this.udtOutpoint = { txHash: cellbase.hash(), index: i };
+        break;
+      }
+    }
     const original = this.client.getKnownScript.bind(this.client);
     this.client.getKnownScript = async (script) => {
       const info = await original(script);
@@ -141,5 +166,82 @@ export class DevChain {
       return info;
     };
     this.devScriptsReady = true;
+  }
+
+  /** The out point of the `simple_udt` code cell in genesis (fnn needs it as a cell dep). */
+  async udtDep(): Promise<OutPoint> {
+    await this.ensureDevScripts();
+    if (!this.udtOutpoint) {
+      throw new Error("simple_udt not found in the dev chain genesis");
+    }
+    return this.udtOutpoint;
+  }
+
+  /** The deployer's lock-script hash — the owner of every UDT this dev chain issues. */
+  async udtOwnerLockHash(): Promise<string> {
+    const signer = new ccc.SignerCkbPrivateKey(
+      this.client,
+      DEPLOYER_PRIVATE_KEY,
+    );
+    const script = (
+      await ccc.Address.fromString(
+        await signer.getRecommendedAddress(),
+        this.client,
+      )
+    ).script;
+    return script.hash();
+  }
+
+  /** The `simple_udt` type script owned by the deployer, in fnn's config/RPC shape. */
+  async udtScript(): Promise<UdtScript> {
+    return {
+      code_hash: SIMPLE_UDT_CODE_HASH,
+      hash_type: "data1",
+      args: await this.udtOwnerLockHash(),
+    };
+  }
+
+  /** Mint `amount` base units of the dev UDT into `address` (signed by the deployer/owner). */
+  async issueUdt(address: string, amount: bigint): Promise<string> {
+    const dep = await this.udtDep();
+    const signer = new ccc.SignerCkbPrivateKey(
+      this.client,
+      DEPLOYER_PRIVATE_KEY,
+    );
+    const udtType = ccc.Script.from({
+      codeHash: SIMPLE_UDT_CODE_HASH,
+      hashType: "data1",
+      args: await this.udtOwnerLockHash(),
+    });
+    const to = await ccc.Address.fromString(address, this.client);
+    const tx = ccc.Transaction.from({
+      outputs: [
+        { lock: to.script, type: udtType, capacity: ccc.fixedPointFrom(200) },
+      ],
+      outputsData: [ccc.hexFrom(ccc.numLeToBytes(amount, 16))],
+    });
+    tx.cellDeps.push(
+      ccc.CellDep.from({
+        outPoint: { txHash: dep.txHash, index: dep.index },
+        depType: "code",
+      }),
+    );
+    await tx.completeInputsByCapacity(signer);
+    await tx.completeFeeBy(signer, 1000);
+    return signer.sendTransaction(tx);
+  }
+
+  /** Total dev-UDT base units held by `address`. */
+  async udtBalanceOf(address: string): Promise<bigint> {
+    const lock = (await ccc.Address.fromString(address, this.client)).script;
+    let total = 0n;
+    for await (const cell of this.client.findCellsByLock(lock)) {
+      if (cell.cellOutput.type?.codeHash === SIMPLE_UDT_CODE_HASH) {
+        total += ccc.numLeFromBytes(
+          ccc.bytesFrom(cell.outputData).slice(0, 16),
+        );
+      }
+    }
+    return total;
   }
 }

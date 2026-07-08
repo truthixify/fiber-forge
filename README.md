@@ -12,8 +12,7 @@ Built for the **"Gone in 60ms" Fiber Network Infrastructure Hackathon** — Cate
 connects them, and opens channels to `CHANNEL_READY` in well under a minute; multi-hop payments,
 invoices, and live channel open/close are all verified against real nodes. The CLI is complete and
 colorful; the web GUI serves a live network graph. Nodes are named after philosophers, scientists,
-and historical figures — every network gets a fresh cast. The GUI design lives in
-[`docs/design.md`](docs/design.md).
+and historical figures — every network gets a fresh cast.
 
 ## Usage
 
@@ -79,7 +78,6 @@ Run `make ci` before every push.
 
 - [`docs/spec.md`](docs/spec.md) — the authoritative specification. Read it first.
 - [`docs/fiber-integration.md`](docs/fiber-integration.md) — the shared Fiber (FNN) RPC reference.
-- [`CLAUDE.md`](CLAUDE.md) — the working agreement.
 
 ## License
 

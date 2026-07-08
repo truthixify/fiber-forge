@@ -69,3 +69,44 @@ describe.skipIf(!RUN)("live: a killed node surfaces as an error", () => {
     }
   }, 300_000);
 });
+
+describe.skipIf(!RUN)("live: UDT asset channel + payment", () => {
+  const assetsDir = join(import.meta.dirname, "..", "assets");
+  const nodesOnly: Topology = {
+    name: "e2e-udt",
+    nodes: [{ name: "alice" }, { name: "bob" }],
+    channels: [],
+    funding: { perNodeCkb: 100000 },
+  };
+
+  it("issues UDT, opens a UDT channel, and pays a UDT invoice", async () => {
+    const engine = new DockerEngine();
+    const orchestrator = new Orchestrator(engine, assetsDir);
+    try {
+      await orchestrator.up(nodesOnly, {
+        layout: { ckbHostPort: 8216, rpcHostPortBase: 8340 },
+        onProgress: (message) => console.log("  " + message),
+      });
+      await orchestrator.issueUdt("e2e-udt", "alice", 10000);
+      await orchestrator.openChannelBetween(
+        "e2e-udt",
+        "alice",
+        "bob",
+        5000,
+        undefined,
+        true,
+      );
+      const report = await orchestrator.pay(
+        "e2e-udt",
+        "alice",
+        "bob",
+        100,
+        undefined,
+        true,
+      );
+      expect(report.status).toBe("Success");
+    } finally {
+      await orchestrator.down("e2e-udt", { purge: true });
+    }
+  }, 300_000);
+});

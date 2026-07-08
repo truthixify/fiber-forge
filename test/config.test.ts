@@ -79,5 +79,22 @@ describe("fnnConfigYaml", () => {
     expect(yaml).toContain("rpc_url: http://forge-trio-ckb:8114");
     expect(yaml).toContain("chain: dev.toml");
     expect(yaml).toContain("- ckb");
+    expect(yaml).not.toContain("udt_whitelist");
+  });
+
+  it("emits a UDT whitelist fnn accepts when given a UDT dep", () => {
+    const layout = planLayout(trio, { subnetBase: "10.5.7" });
+    const yaml = fnnConfigYaml(layout, layout.nodes[0], {
+      codeHash: "0xe1e354",
+      depTxHash: "0xcfcbbe",
+      depIndex: 8,
+    });
+    expect(yaml).toContain("udt_whitelist:");
+    expect(yaml).toContain("code_hash: 0xe1e354");
+    expect(yaml).toContain("hash_type: data1");
+    // fnn requires the nested `cell_dep`, a hex out-point index, and a numeric auto-accept.
+    expect(yaml).toContain("cell_dep:");
+    expect(yaml).toContain('index: "0x8"');
+    expect(yaml).toMatch(/auto_accept_amount: \d/);
   });
 });
