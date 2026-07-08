@@ -14,6 +14,7 @@ import {
 } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { type WebSocket, WebSocketServer } from "ws";
 import { type NetworkLayout } from "./config";
 import {
   type ChannelRow,
@@ -124,7 +125,7 @@ export function createDaemon(backend: Backend): Server {
   const jobs = new Map<string, Job>();
   let jobSeq = 0;
 
-  return createServer(async (request, response) => {
+  const server = createServer(async (request, response) => {
     const method = request.method ?? "GET";
     const parsed = new URL(request.url ?? "/", "http://localhost");
     const path = parsed.pathname;
@@ -282,6 +283,88 @@ export function createDaemon(backend: Backend): Server {
     } catch (error) {
       sendJson(response, 500, { error: (error as Error).message });
     }
+  });
+
+  attachStateSocket(server, backend);
+  return server;
+}
+
+/**
+ * A WebSocket at `/ws` that pushes live network state. A client sends `{"sub":"<net>"}`; the
+ * daemon then inspects that network on a short interval (only while someone is watching) and
+ * pushes each {@link NetworkView} to its subscribers — so the GUI updates without polling.
+ */
+function attachStateSocket(server: Server, backend: Backend): void {
+  const wss = new WebSocketServer({ server, path: "/ws" });
+  const subscribers = new Map<string, Set<WebSocket>>();
+  const timers = new Map<string, ReturnType<typeof setInterval>>();
+
+  const startNet = (net: string): void => {
+    if (timers.has(net)) {
+      return;
+    }
+    let inFlight = false;
+    const tick = async (): Promise<void> => {
+      const clients = subscribers.get(net);
+      if (!clients || clients.size === 0 || inFlight) {
+        return;
+      }
+      inFlight = true;
+      try {
+        const message = JSON.stringify(await backend.inspect(net));
+        for (const socket of clients) {
+          if (socket.readyState === socket.OPEN) {
+            socket.send(message);
+          }
+        }
+      } catch {
+        // transient (node restarting, chain busy); the next tick retries
+      } finally {
+        inFlight = false;
+      }
+    };
+    timers.set(net, setInterval(tick, 1500));
+    void tick();
+  };
+
+  const stopIfIdle = (net: string): void => {
+    const clients = subscribers.get(net);
+    if ((!clients || clients.size === 0) && timers.has(net)) {
+      clearInterval(timers.get(net)!);
+      timers.delete(net);
+    }
+  };
+
+  wss.on("connection", (socket) => {
+    let joined: string | null = null;
+    socket.on("message", (data) => {
+      let message: { sub?: unknown };
+      try {
+        message = JSON.parse(String(data)) as { sub?: unknown };
+      } catch {
+        return;
+      }
+      if (typeof message.sub === "string") {
+        if (joined) {
+          subscribers.get(joined)?.delete(socket);
+          stopIfIdle(joined);
+        }
+        joined = message.sub;
+        if (!subscribers.has(joined)) {
+          subscribers.set(joined, new Set());
+        }
+        subscribers.get(joined)!.add(socket);
+        startNet(joined);
+      }
+    });
+    const leave = (): void => {
+      if (joined) {
+        subscribers.get(joined)?.delete(socket);
+        stopIfIdle(joined);
+      }
+    };
+    socket.on("close", leave);
+    socket.on("error", leave);
   });
 }
 
