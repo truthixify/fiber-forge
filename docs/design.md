@@ -1,507 +1,513 @@
 # fiber-forge — Design Specification
 
-> The design source of truth for the fiber-forge GUI (and the visual language the CLI already
-> implements). Feed this document to a design tool or build against it directly. It unifies three
-> explored directions — a spatial **canvas**, an observability **dashboard**, and an IDE
-> **workbench** — into one coherent product: a *living* local Fiber network you can watch, arrange,
-> and drive.
+> The design source of truth for the fiber-forge GUI (and the visual language the CLI mirrors).
+> Feed this document to a design tool or build against it directly. The aesthetic is a **forge
+> instrument panel** — flat, squared, hairline-ruled, mono-labeled — with a warm/cool palette where
+> **liquidity reads as heat**: ember fire for energy and funds, cool steel-teal for structure and
+> flow. Inspired by (not copied from) the infern control-console language.
 
 ---
 
-## 1. Vision & principles
+## 1. Concept & principles
 
-fiber-forge turns a local Fiber payment-channel network into a **living world you can see**. You
-don't read a table of channels — you watch liquidity sit on the wires, arrange nodes by hand, and
-see a payment race across the graph as a pulse of light. It is Polar's clarity with Figma's
-tactility and a power grid's sense of live energy.
+fiber-forge is a **forge you can see**. A local Fiber payment-channel network is a thermal system:
+nodes are forge cells, channels are conduits carrying **molten liquidity**, the CKB dev chain is a
+glowing core that pulses with every block, and a payment is a **spark** that races the conduits.
+Well-funded channels glow warm; depleted ones go cold. You don't read a table of balances — you
+read the network's *heat*.
 
 **Principles**
 
-1. **The graph is the product.** The network graph fills the screen; everything else floats over
-   it or docks to an edge. Chrome never boxes the graph into a column.
-2. **Selection drives everything.** Nothing selected → calm canvas. Select a node → its inspector
-   slides in. Select a channel → the channel inspector. One drawer swaps content by selection
-   type; never competing panels, never stacked modals.
-3. **Every animation maps to a real state transition.** A wire turning mint = `ChannelReady`. A
-   pulse arriving = `send_payment → Success`. Motion is information, not decoration.
-4. **Calm at rest, alive on events.** Ambient motion (wire shimmer, health ring) stays ≤ 4%
-   intensity. Only real events (a payment, a channel opening) draw the eye.
-5. **GUI ⇄ CLI transparency.** Every GUI action names its `forge …` command. The two share one
-   visual language (§11). Anything you can click, you can script.
+1. **The graph is the instrument.** The network fills the screen as one live panel; chrome is thin,
+   squared, and docked to edges — never a column that boxes the graph in.
+2. **Liquidity is heat.** Every balance, capacity, and flow is encoded as temperature and light, so
+   the whole network's state is legible at a glance without reading a number.
+3. **Selection drives everything.** Nothing selected → calm panel. Select a node or channel → one
+   right-side readout swaps to it. Never stacked modals, never competing panels.
+4. **Every motion is a real state transition.** A conduit igniting = `ChannelReady`. A spark
+   arriving = `send_payment → Success`. Motion is telemetry, not decoration.
+5. **Calm at rest, alive on events.** Ambient motion (core flicker, health pulse) stays ≤ 4%
+   intensity; only real events flare.
+6. **GUI ⇄ CLI are one tool.** Every action names its `forge …` command and shares this palette
+   and glyph set (§11). Anything you can click, you can script.
 
 **Grounded in the real data model.** `NetworkView { nodes[{name, container, rpcHostPort, pubkey,
 status}], channels[{from, to, capacityCkb, state}] }`; the RPC surface (`nodeInfo`, `connectPeer`,
 `openChannel`, `listChannels`, `shutdownChannel`, `newInvoice`, `sendPayment`, `getPayment`);
-presets (`duo/trio/hub`, `line:N/ring:N/star:N`); node names drawn from the fun pool (philosophers,
+presets (`duo/trio/hub`, `line:N/ring:N/star:N`); node names from the fun pool (philosophers,
 scientists, historical figures); channel states (`ChannelReady`, negotiating/pending, `unknown`).
 
 ---
 
-## 2. Information architecture
+## 2. The visual system (start here — it defines everything else)
 
-The screen is **z-layers**, not columns.
+### 2.1 Color — a warm/cool forge palette
 
-- **Layer 0 — The Canvas** (fills the viewport): an infinite, pannable, zoomable world holding the
-  network graph. 100% of the background.
-- **Layer 1 — Floating chrome** (glass panels docked to edges, `backdrop-blur(16px)` over the
-  canvas):
-  - **Top-left — Network HUD**: a pill with the network name, node/channel counts, and a health
-    dot. Click → the network switcher + "Forge a network" wizard.
-  - **Top-center — Vitals strip** (from the Observatory direction): 6 live monospace chips, each
-    with a 2px colored left border — `nodes ●`, `channels`, `capacity (CKB)`, `on-chain (CKB)`,
-    `block #`, `payments/min`. Update within the 2-second reactivity budget.
-  - **Top-center — Mode dock** (tldraw-style, keys `1–5`): **Select/Move (V)**, **Wire (W)**,
-    **Pay (P)**, **Fund (F)**, **Comment (C)**.
-  - **Top-right — Command bar**: `⌘K` command palette, `⚒ Spawn` (new network), `⚡ Pay`.
-  - **Bottom-left — Mini-map**: a miniature of the whole graph with a viewport rectangle; drag to
-    fly.
-  - **Bottom-center — Zoom + layout dock**: zoom %, fit-to-screen (`⌘0`), 100% (`⌘1`), and a
-    layout switch (radial / force / hierarchical) that tweens node positions.
-  - **Bottom — The DECK** (collapsible): Logs · Timeline · Payments · RPC console · Terminal.
-    Collapsed = a 28px strip showing the last event + a throughput sparkline.
-- **Layer 2 — Inspector drawer** (right, ~380px): swaps between node / channel / payment inspector
-  by selection. Slides over the canvas; canvas dims 8% and stays interactive behind it.
-- **Optional — Explorer** (left, 264px, from the Workbench direction): a collapsible tree
-  `Network › Nodes › (peers, channels)` with per-row status glyphs and a filter bar. **Linked
-  views:** selecting in the Explorer highlights on the graph and vice-versa. Off by default for
-  the calm canvas; toggled for power users.
+The beauty is the **duality**: cool graphite steel for structure, warm ember fire for energy and
+liquidity. Every surface is cool and quiet; every *live* thing is warm and glowing. Dark-only.
+
+**Surfaces — cool graphite, a whisper of warmth so it's never sterile**
+
+| Token | Hex | Use |
+|---|---|---|
+| `--void` | `#090B0F` | deepest backdrop, behind the graph |
+| `--base` | `#0E1217` | app background |
+| `--panel` | `#161B22` | docked panels, readout bodies |
+| `--panel-2` | `#1E252E` | node cells, raised rows, inputs |
+| `--inset` | `#06080B` | wells, code/log areas |
+| `--hairline` | `#232B35` | 1px dividers (used liberally) |
+| `--border` | `#323C48` | panel borders, button outlines |
+
+**Text — warm off-white, like light off hot metal**
+
+| Token | Hex | Use |
+|---|---|---|
+| `--bone` | `#F3EFE7` | headings, focal readings (the one bright thing per block) |
+| `--text` | `#C6CFDB` | body, values |
+| `--muted` | `#808B9C` | mono-caps labels, units, keys |
+| `--faint` | `#4C5768` | rules, timestamps, disabled |
+
+**Warm — fire, energy, local liquidity, focal action (use sparingly; it always means "live/hot")**
+
+| Token | Hex | Use |
+|---|---|---|
+| `--ember` | `#FF6A3D` | **hero accent** — brand, focal point, primary action, payment sparks, local liquidity |
+| `--ember-hot` | `#FF8F5E` | hover/active ember, hottest part of a flow |
+| `--ember-deep` | `#D2481D` | pressed, deep-heat gradient stop |
+| `--ember-glow` | `#FFC2A3` | bloom/halo behind live elements (low opacity) |
+| `--gold` | `#F5C451` | on-chain CKB, funding, treasury |
+
+**Cool — structure, ready state, remote liquidity, flow (the calm counterweight to ember)**
+
+| Token | Hex | Use |
+|---|---|---|
+| `--flux` | `#2DE0C7` | `ChannelReady`, healthy, remote liquidity, the cool accent |
+| `--flux-deep` | `#14A896` | flux gradient stop, dim flux |
+| `--signal` | `#5AA0FF` | info, links, secondary highlight |
+| `--violet` | `#A98BFF` | routes, invoices, multi-hop path highlight |
+
+**Alert**
+
+| Token | Hex | Use |
+|---|---|---|
+| `--amber` | `#F0A93C` | pending / negotiating, warnings |
+| `--alarm` | `#FF5765` | errors, failed payments, destructive |
+
+**The signature gradient — the liquidity conduit.** A channel's fill runs `--ember (local) →
+--flux (remote)` with the balance bead at the split. A 60/40 channel is 60% warm, 40% cool. A
+depleted local side cools toward `--faint` steel. This single encoding makes network-wide liquidity
+readable as a thermal map. Payment spark: `radial(#FFE9D8 → --ember → transparent)`. Ready-conduit
+glow: `--flux → --ember-glow` low-opacity bloom. Forge-core: `conic(--gold → --ember → --ember-deep)`
+slow rotate.
+
+### 2.2 Form — flat, squared, hairline
+
+- **Squared corners everywhere (radius 0).** No rounded cards. It reads as precision instrumentation.
+- **No drop shadows, no glass blur.** Depth comes from **hairline borders** and one-step surface
+  shifts (`--panel` → `--panel-2`), not elevation. The only "glow" is the ember/flux bloom on
+  genuinely live elements.
+- **Hairlines do the work.** Cells in a grid are separated by 1px `--hairline`, not gaps. Sections
+  are ruled, not boxed.
+- **HUD L-brackets** (ember, 2px, 14px arms) frame a *focal* reading — a node's balance, a
+  payment's amount — like a targeting reticle. Reserved for the one number that matters in a view.
+- **Offset-ember block:** a solid `--ember` rectangle nudged behind a hero card (no blur) — a
+  brutalist "hot backing plate." Used once per screen at most (the selected node, the pay result).
+- **Thermal grid:** the graph backdrop is a faint ember blueprint grid
+  (`color-mix(--ember 5%)` lines, 80px) with a cool vignette — the forge floor.
+
+### 2.3 Type
+
+- **Sans:** Geist (or Inter), variable. Headings `-0.01em`. Body 14px base.
+- **Mono:** Geist Mono / JetBrains Mono — used heavily for **labels** as small tracked caps
+  (`mono-caps`: 10–11px, `letter-spacing 0.14em`, uppercase, `--muted`), for all numbers (tabular
+  figures — non-negotiable so live counters don't jitter), pubkeys, ports, logs, console.
+- **Display:** Geist heavy for the network name and focal readings (26–40px).
+- Scale (px): `10 · 11 · 12 · 13 · 14 · 16 · 20 · 26 · 34 · 40`.
+
+### 2.4 Motion — precise, not bouncy
+
+Instrument motion: decisive eases, not playful springs. `cubic-bezier(0.2, 0.8, 0.2, 1)`, durations
+140ms (micro), 220ms (panels), 400ms (payment beats). Live signatures: **pulse-dot** (opacity
+0.6↔1, 1.6s) for anything live; **kindle** flicker (`--ember ↔ --ember-hot`, 2.4s) on the
+forge-core and node health; **ignite** (a conduit morphing pending→ready: amber-dashed → the
+ember/flux gradient fills in 400ms with one bright sweep); balance number rolls 600ms. Everything
+respects `prefers-reduced-motion` (pulses → single fades, flicker freezes).
+
+### 2.5 Iconography
+
+Lucide (1.5px stroke) + a small forge set: node = a hexagonal **cell** chip, channel = a two-headed
+**conduit**, payment = a **spark**, fund = a **coin-stack**, chain = an **anvil/core**, forge action
+= a **hammer** ⚒. States use a filled dot in the semantic color.
 
 ---
 
-## 3. The network graph — the centerpiece
+## 3. The network graph — the innovation
 
-### 3.1 Nodes — tactile cards, not circles
+This is the centerpiece and where fiber-forge stops looking like every other node-graph. It is a
+**live thermal circuit** on the forge floor.
 
-Each node is a rounded-rect **card** (~180×92 at 100% zoom) carrying live state at a glance:
+### 3.1 Nodes — forge cells (instrument readouts, not bubbles)
+
+Each node is a **squared cell** (~184×96 at 100%), built like an instrument readout: a mono-caps
+**state band** across the top, the identity below, a molten balance gauge inside. It is a component,
+not a circle.
 
 ```
-┌──────────────────────────────┐
-│ ● feynman          :8300  ⣿⣿ │   ● health: running = mint ring sweep, exited = slate, unhealthy = amber
-│ 0x03f2…9ac1                  │   truncated pubkey (mono), click to copy
-│ ┌──────────────────────────┐ │
-│ │ on-chain   9,842 CKB     │ │   funded balance (animated roll)
-│ │ ▓▓▓▓▓▓░░  channels ×3     │ │   local channel-capacity bar
-│ └──────────────────────────┘ │
-└──────────────────────────────┘
-     ◟ 4 rim wire-ports (N/E/S/W) glow in Wire mode
+┌ NODE ──────────────────────── ● RUNNING ┐   ← state band: mono-caps, dot pulses when live
+│ feynman                          :8300   │   name (sans) · port (mono, ember)
+│ 0x03f2…9ac1                              │   pubkey (mono, muted) — click to copy
+│ ┌ ON-CHAIN ──────────────────────────┐  │
+│ │ 9,842 CKB   ▛▀▀▀▀▀▀▀▀▀▀▀▀▚░░░░░░░  │  │   molten gauge: gold fill = funded, cools to steel
+│ └──────────────────────────────────────┘  │
+│ CHANNELS ×3        CAP 3,000 CKB          │   mono-caps footer, hairline-topped
+└───────────────────────────────────────────┘
+   ◟ 4 hairline conduit-ports (N/E/S/W) kindle in Wire mode
 ```
 
-- **Level-of-detail:** < 40% zoom → a labeled dot with a health halo; mid-zoom → header only;
-  full-zoom → balances + bars. Keeps a 10-node `hub` legible.
-- **Identity color** (from the Workbench direction): a deterministic hash of the pubkey picks a
-  stable gradient pair (e.g. `#4AD6C4→#8B7BFF`, `#3EE8A0→#4AD6C4`, `#F4C752→#FF5CC8`) so a node's
-  accent is the same forever — recognizable across sessions.
-- **Health ring:** 2px. Running = slow mint gradient sweep (4s). Unhealthy = amber. Exited = static
-  slate, card desaturated to 60%. Delivers the "node unhealthy within 2s" requirement viscerally.
-- **Selected:** teal focus ring + 6px lift; scales to 1.03 with a spring. **Dragging:** shadow
-  deepens, card tilts 1–2° toward velocity, connected wires rubber-band and re-tauten.
-- **Hub emphasis:** high-degree nodes (`hub`/`star` center) render larger with a faint radial glow
-  — topology reads instantly.
+- **Identity color:** a deterministic hash of the pubkey warms the state-band dot and the name to a
+  stable hue drawn from the palette (ember / gold / flux / signal / violet) — so a node is
+  recognizable at a glance and across sessions, without a rainbow.
+- **Health = kindle.** Running: the top state band reads `● RUNNING` with an ember dot that pulses;
+  the cell's border warms faintly. Unhealthy: band → `◍ DEGRADED` amber, border flickers amber.
+  Exited: band → `○ STOPPED`, the whole cell desaturates to cold steel (ash). Satisfies "node
+  unhealthy within 2s" as a visible cool-down.
+- **Level of detail:** < 40% zoom the cell collapses to a labeled chip with a heat halo; mid-zoom
+  shows the band + name; full-zoom shows the gauge + footer. Keeps a 10-node `hub` legible.
+- **Selected:** an offset-ember backing plate slides behind the cell + an ember focus border; the
+  cell lifts by surface shift (no shadow). **Dragging:** connected conduits rubber-band and
+  re-tauten; position persists per network.
+- **Hub emphasis:** high-degree nodes (`hub`/`star` center) render larger with a warmer thermal-grid
+  halo — topology reads instantly.
 
-### 3.2 Channels — living wires
+### 3.2 Channels — molten conduits (liquidity as heat)
 
-A channel is a **bézier wire** between two rims that encodes four things at once:
+A channel is a **conduit** (a squared-shouldered bézier rail, not a thin line) whose *fill* is the
+liquidity thermal map:
 
-- **State → color + texture:** `ChannelReady` → solid **mint** with a slow directional shimmer;
-  negotiating/pending → **amber**, dashed march (`stroke-dashoffset` loop); `unknown`/unreachable →
-  **slate**, 40% opacity, static.
-- **Capacity → thickness:** stroke width maps to `capacityCkb` (log-scaled, 2–8px).
-- **Balance split → a bead on the wire:** a small **balance bead** rides the wire at the
-  `local/capacity` position. A bead 30% from `feynman` means that side holds 30%. Hover → it
-  expands into an inline `local ⇄ remote` mini-bar with numbers. This one touch makes network-wide
-  liquidity legible at a glance — the single most information-dense element in the app.
-- **Ambient flow:** on ready channels, faint particles drift toward the higher-inbound side, so the
-  graph looks like it carries energy.
-- **Hover:** wire thickens 1.5×, lifts, shows `feynman ⇄ lorentz · 1,000 CKB · 60/40`. **Click:**
-  channel inspector.
+- **Fill = balance split.** The conduit is filled from the `from` end in **ember** and from the
+  `to` end in **flux**, meeting at a **balance bead** at the `local/capacity` position. You see, on
+  every wire, exactly how liquidity sits — warm where `from` holds it, cool where `to` does. Hover
+  → the bead expands into a mono-caps mini-readout `LOCAL 600 · REMOTE 400`.
+- **Capacity = conduit width** (log-scaled 3–9px). Fat conduits carry more.
+- **State = texture.** `ChannelReady` → the fill is solid and *glows* (ember/flux saturated, faint
+  bloom, a slow directional shimmer of energy). Pending/negotiating → **amber dashed march**, unlit.
+  `unknown`/unreachable → **cold steel**, 35% opacity, static.
+- **Ambient heat flow:** on ready conduits, faint ember motes drift from the hotter (funded) side —
+  the network looks like it's carrying molten metal, subtly.
+- **Hover:** conduit thickens 1.5×; a readout chip `feynman ⇄ lorentz · 1,000 CKB · 60/40`.
+  **Click:** the channel readout opens.
 
-### 3.3 Payments — pulses traveling the graph (the money shot)
+### 3.3 The CKB dev chain — the forge core
 
-When a payment fires (`sendPayment` → poll `getPayment`):
+At the graph's center sits the **forge-core**: a squared anvil glyph inside an ember/gold conic ring
+that **kindles**, and **pulses once per block** (a single ring expands and fades). Under it, a
+mono-caps readout `CORE · BLOCK #47 · 6 CKB TX`. It's the visual anchor that says "this network is
+alive and mining," and the loading state grows out of it (§7).
 
-1. The route highlights: participating wires brighten to **teal**, everything else dims to 25%
-   (spotlight the path). On a `line` network `feynman → …` lights up every hop.
-2. A **luminous pulse** (bright teal orb, comet trail, soft bloom) launches from the sender,
-   travels wire 1, lands at each relay (which ripples as it forwards), and continues to the
-   receiver.
-3. On `Success`: the receiver emits a mint **success ripple**, the pulse bursts into particles, and
-   the **balance beads on every hop slide** to their new split with a spring — you watch liquidity
-   shift across the multi-hop route in real time. A `+250 CKB` chip floats up.
-4. On failure: the pulse turns **red**, halts at the failing hop, shakes, dissolves; that wire
-   flashes red; a toast names the failing node. The red pulse lingers ~1.5s so the failure point is
-   seen.
+### 3.4 Payments — sparks racing the conduits (the money shot)
 
-Tuned so a 2-hop payment reads in ~1.4s. Concurrent payments = concurrent pulses (great for a
+On `sendPayment` → poll `getPayment`:
+
+1. The route ignites: participating conduits flare to full ember/flux glow; everything else cools to
+   25% (spotlight the path). A multi-hop route lights **every** hop, tinted `--violet`.
+2. A **spark** (bright ember orb, comet trail, `--ember-glow` bloom) launches from the sender, races
+   conduit 1, and **strikes** each relay (which flares as it forwards), then continues to the payee.
+3. On `Success`: the payee emits a **flux ignition ring**, the spark bursts into motes, and the
+   **balance beads on every hop slide** to their new split — you watch liquidity redistribute across
+   the multi-hop route in real time, warm shifting to cool. An HUD-bracketed `+250 CKB` reading
+   flares up from the payee.
+4. On failure: the spark turns `--alarm`, halts at the failing hop, shudders, and gutters out; that
+   conduit flashes red; a toast names the failing node. The dead spark lingers ~1.5s so the failure
+   point is *seen*.
+
+Tuned so a 2-hop payment reads in ~1.4s. Concurrent payments = concurrent sparks (great for a
 traffic generator).
 
-### 3.4 Canvas mechanics
+### 3.5 Canvas mechanics
 
-Infinite pan (space-drag / middle-mouse), scroll-zoom toward cursor, pinch-zoom, `⌘0` fit, `⌘1`
-100%. Auto-layout with animated transitions between **radial** (default; matches the current SVG
-ring), **force-directed** (custom topologies), and **hierarchical/dagre** (`line` chains). Manual
-positions are sticky and persisted per network. Dotted-grid background, faint edge vignette.
-
----
-
-## 4. Node inspector (right drawer, ~380px)
-
-Tabbed: **Overview · Peers · Channels · Logs · Console**.
-
-```
-┌─ feynman ──────────────────────── ✕ ─┐
-│ ● Running   forge-trio-node-0         │
-│ 0x03f2c9…9ac1              [copy] [⧉] │  ⧉ = "point your app here" → copies RPC URL
-│  Overview  Peers  Channels  Logs  ›_  │
-│ ───────────────────────────────────  │
-│  BALANCE                              │
-│   On-chain      9,842.0 CKB           │
-│   In channels   1,830.0 CKB  (3)      │
-│   ◕ capacity donut · 60s sparkline    │
-│  ENDPOINT                             │
-│   RPC   http://127.0.0.1:8300  [copy] │
-│   P2P   /ip4/…/tcp/8228/p2p/Qm…       │
-│  QUICK ACTIONS                        │
-│   [ Fund + ]  [ Open channel → ]      │
-│   [ Create invoice ]  [ Pay from ]    │
-└───────────────────────────────────────┘
-```
-
-- **Overview:** balance breakdown (on-chain vs in-channel), a capacity donut, a per-node
-  **throughput sparkline** (payments routed over the last 60s, from the Observatory direction), and
-  the endpoint block with copy-to-clipboard — the "point your app at a forge node" story.
-- **Peers:** `listPeers` as pubkey chips with connection dots; click pans to that node.
-- **Channels:** this node's channels with mini balance bars; row click selects the wire.
-- **Logs:** streamed `docker logs` with level filter chips (`info/warn/error/debug`), search,
-  autoscroll toggle, level-colored gutter.
-- **Console:** a raw RPC console — pick a method (`node_info`, `list_channels`, …), fill params,
-  send, see pretty JSON. Turns the GUI into a learning + debugging tool; mutating methods badged.
+Infinite pan (space/middle-drag), scroll-zoom to cursor, `⌘0` fit, `⌘1` 100%. Layout switch —
+**radial** (default, matches the current SVG ring), **force**, **hierarchical/dagre** (`line`
+chains) — tweens positions with a staggered ease. Manual positions persist per network. Thermal-grid
+backdrop, cool edge vignette.
 
 ---
 
-## 5. Channel inspector (right drawer)
+## 4. Information architecture
+
+Z-layers over the forge floor — thin, squared, hairline chrome; never full-height columns.
+
+- **Layer 0 — Forge floor** (fills viewport): the thermal graph.
+- **Layer 1 — Chrome** (squared panels, hairline borders, docked to edges):
+  - **Top-left — Rig readout:** network name, `● healthy` pulse-dot, node/channel counts.
+  - **Top-center — Vitals rail:** hairline-separated mono-caps cells — `NODES 3 · CHANNELS 2 ·
+    CAPACITY 2,000 · ON-CHAIN 29,530 · BLOCK #47 · PAY/MIN 4`. Updates within the 2s budget.
+  - **Top-center — Mode dock** (keys 1–5): `SELECT · WIRE · PAY · FUND · PIN`.
+  - **Top-right — Command bar:** `⌘K` palette, `⚒ SPAWN`, `⚡ PAY`.
+  - **Bottom-left — Mini-map** (thermal miniature + viewport frame).
+  - **Bottom-center — Zoom + layout dock.**
+  - **Bottom — The DECK** (collapsible): `LOGS · TIMELINE · PAYMENTS · CONSOLE · TERMINAL`.
+    Collapsed = a 28px ticker: last event + a throughput sparkline.
+- **Layer 2 — Readout drawer** (right, ~380px): swaps node / channel / payment readout by
+  selection. Slides over the floor; floor cools 8% behind it, stays interactive.
+- **Optional — Explorer** (left, 264px): a hairline tree `NETWORK › NODES › (peers, channels)` with
+  per-row state dots and a filter. **Linked views:** selecting here highlights on the floor and vice
+  versa. Off by default for the calm floor; on for power users.
+
+---
+
+## 5. Readout drawers
+
+### 5.1 Node readout (right)
+
+Tabbed: `OVERVIEW · PEERS · CHANNELS · LOGS · CONSOLE`.
 
 ```
-┌─ Channel ──────────────────────── ✕ ─┐
-│  feynman  ⇄  lorentz   ● ChannelReady │
-│  0x9c1a…be40                   [copy] │
-│  CAPACITY            1,000 CKB        │
-│   feynman ◀━━━━━━━━━●━━━━━▶ lorentz   │  balance split bar with a bead
-│          600 CKB    │    400 CKB      │
-│  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░           │
-│  STATE   Negotiating → Ready ✓        │  state-machine breadcrumb (current step lit)
-│  Funding 0x4f…  ·  opened 12s ago     │
-│  [ Send payment across → ]            │
-│  [ ⚠ Close channel ]                  │
-└───────────────────────────────────────┘
+┌ NODE ─────────────────────────────── ✕ ┐
+│ ● RUNNING   forge-trio-node-0            │
+│ feynman                                  │
+│ 0x03f2c9…9ac1                [copy] [⧉]  │  ⧉ = copy RPC URL ("point your app here")
+├──────────────────────────────────────────┤
+│ OVERVIEW  PEERS  CHANNELS  LOGS  CONSOLE  │
+├──────────────────────────────────────────┤
+│ ┌ BALANCE ─────────────────────────────┐ │  HUD-bracketed focal reading (ember)
+│ │  9,842.0 CKB   on-chain               │ │
+│ │  1,830.0 CKB   in channels (3)        │ │
+│ │  ◕ heat donut · 60s throughput ▁▂▅▃▇  │ │
+│ └───────────────────────────────────────┘ │
+│ ENDPOINT   http://127.0.0.1:8300   [copy] │
+│ P2P        /ip4/…/tcp/8228/p2p/Qm…        │
+│ ─────────────────────────────────────────│
+│ [ FUND + ]  [ OPEN CHANNEL → ]            │  ember primary / bone-outline secondary
+│ [ INVOICE ]  [ PAY FROM ]                 │
+└───────────────────────────────────────────┘
 ```
 
-- **Balance split is the hero:** a large bar with a bead at the split, animated whenever balances
-  change (post-payment).
-- **State-machine breadcrumb:** `Negotiating → FundingReady → ChannelReady` with the current step
-  lit — makes amber "pending" wires legible while opening.
-- **Close** (`shutdownChannel`): inline confirm ("Close feynman ⇄ lorentz? Funds settle
-  on-chain."). On confirm the wire drains mint → slate, the split collapses to the settling side,
-  and the wire retracts into both nodes with a soft snap; a settlement event lands in the timeline.
+- **Overview:** on-chain vs in-channel, a **heat donut** (funded = gold arc, locked = ember,
+  free = steel), a per-node throughput sparkline, and the copyable endpoint (the "point your app at
+  a forge node" story).
+- **Peers:** `listPeers` as pubkey chips + connection dots; click pans to that node.
+- **Channels:** this node's conduits with mini thermal bars; row click selects the conduit.
+- **Logs:** streamed `docker logs`, level filter chips, search, color-coded gutter.
+- **Console:** a raw RPC console (pick method → params → pretty JSON). Mutating methods badged. Turns
+  the GUI into a learning + debugging tool.
+
+### 5.2 Channel readout (right)
+
+```
+┌ CHANNEL ──────────────────────────── ✕ ┐
+│ feynman  ⇄  lorentz         ● CHANNELREADY│
+│ 0x9c1a…be40                      [copy]  │
+├──────────────────────────────────────────┤
+│ CAPACITY   1,000 CKB                      │
+│  feynman ▟█████████████▙░░░░░░░ lorentz   │  the liquidity conduit, full width
+│          600 CKB   ◆ split   400 CKB      │  ember (local) ◆ flux (remote)
+│ STATE   NEGOTIATING → FUNDING → READY ✓   │  state-machine breadcrumb, current lit
+│ FUNDING 0x4f…   ·   OPENED 12s ago        │
+│ ─────────────────────────────────────────│
+│ [ SEND PAYMENT ACROSS → ]                 │
+│ [ ⚠ CLOSE CHANNEL ]                       │  alarm-outline, inline confirm
+└───────────────────────────────────────────┘
+```
+
+- The **liquidity bar is the hero**: ember→flux with the split bead, animated on any balance change.
+- **State-machine breadcrumb** makes amber "pending" conduits legible while opening.
+- **Close** (`shutdownChannel`): inline confirm; on confirm the conduit *cools* (glow drains, ember
+  and flux fade to steel), the split collapses to the settling side, the conduit retracts into both
+  cells with a snap, and a settlement event lands in the timeline.
 
 ---
 
 ## 6. Core flows
 
-### 6.1 Create-network wizard (`forge up`, over the daemon)
-A right-anchored 3-step slide-over (glass, graph visible behind): **Topology → Funding → Review &
-forge**. Preset cards render an **animated topology glyph** of the actual shape; `line/ring/star`
-reveal an **N stepper** (bounded `MIN_NODES..MAX_NODES`) with a live-updating preview graph
-mirroring `presets.ts`. "Build custom" opens a visual node-editor (or a Monaco YAML editor) with
-inline `topology.ts` validation errors (unknown ref, capacity below reserve, dup names). **Forge it
-→ the boot sequence _is_ the loading state** (§9).
-
-### 6.2 Fund a node (Fund mode / quick action)
-A compact sheet: amount stepper (1k / 10k / 100k CKB), source = devnet treasury. Confirm → the node
-card plays a coin-drop, the on-chain counter rolls up, a `+10,000 CKB` chip floats off, the timeline
-logs `funded feynman 10,000 CKB`.
-
-### 6.3 Open a channel (drag between nodes) — the signature interaction
-In **Wire mode** (or dragging from a rim port anytime): grab a rim → a wire rubber-bands from the
-cursor (amber dashed, "live"); valid targets glow mint, invalid (self / already-channeled /
-unreachable) dim; release → a **capacity popover** (`Capacity ◀━●━ 1,000 CKB`, `public ✓`,
-`[Open]`). Confirm → `connectPeer → openChannel → poll listChannels`; the wire renders amber/dashed
-with the state stepper floating on it, then **snaps to solid mint** on `ChannelReady` with a scale
-bounce. Maps 1:1 to `forge channel open`.
-
-### 6.4 Create / pay an invoice
-**Create:** node inspector → amount + description → `newInvoice` → a copyable `invoice_address` pill
-+ QR, and a playful claimable "invoice token" dropped on the canvas near the receiver. **Pay sheet
-(Pay mode):** click sender → click receiver →
-
-```
-┌─ Send payment ─────────────────────┐
-│  From feynman     To  pericles      │
-│  Amount  [ 250 CKB ]                │
-│  Route   feynman → lorentz → pericles (2 hop)   ← previewed, hops highlight on canvas
-│           [ Cancel ]  [ Send ⚡ ]    │
-└─────────────────────────────────────┘
-```
-
-On send: invoice auto-created on the receiver, `sendPayment` from the sender, poll `getPayment`;
-the route animates (§3.3). Maps to `forge pay`.
-
-### 6.5 Close a channel / tear down
-Channel inspector → Close (§5). Network teardown from the HUD → confirm → `forge down` (with
-`--keep` / `--purge` options surfaced as "keep data" / "wipe everything" toggles).
+- **Create-network wizard** (`forge up`): a right-anchored 3-step slide-over (`TOPOLOGY → FUNDING →
+  REVIEW & FORGE`), floor visible behind. Preset cards render an animated topology glyph of the
+  actual shape; `line/ring/star` reveal an **N stepper** (`MIN..MAX_NODES`) with a live preview.
+  "Build custom" → a visual editor or Monaco YAML with inline `topology.ts` validation (unknown ref,
+  capacity below reserve, dup names). **Forge it → the boot sequence _is_ the loading state** (§7).
+- **Fund a node** (Fund mode / quick action): amount stepper (1k/10k/100k CKB) from the treasury →
+  the cell's on-chain gauge **fills with gold** (animated), a `+10,000 CKB` chip flares, timeline
+  logs it. Maps to funding.
+- **Open a channel** (Wire mode — the signature gesture): grab a cell's conduit-port → an
+  **amber-dashed rail** rubber-bands to the cursor; valid targets kindle, invalid dim; release → a
+  squared **capacity popover** (`CAPACITY ◀━●━ 1,000 CKB`, `PUBLIC ✓`, `OPEN ⚒`). Confirm →
+  `connectPeer → openChannel → poll listChannels`; the rail renders amber/dashed with a state
+  stepper, then **ignites** into the ember/flux gradient on `ChannelReady`. Maps to `forge channel
+  open`.
+- **Create / pay an invoice:** create → `newInvoice` → a copyable `invoice_address` + QR, and a
+  playful claimable "invoice token" dropped near the payee. Pay (Pay mode): click sender → click
+  payee → a squared pay sheet (`FROM · TO · AMOUNT · ROUTE feynman→lorentz→galileo`, hops preview on
+  the floor) → the spark animation (§3.4). Maps to `forge pay`.
+- **Close / teardown:** channel readout → Close (§5.2); network teardown from the rig readout → maps
+  to `forge down` with `KEEP DATA` / `WIPE EVERYTHING` toggles.
 
 ---
 
-## 7. Live logs + event timeline (the DECK)
+## 7. Live logs + timeline (the DECK) and states
 
-- **Event timeline (semantic):** a stream of typed, iconographic events — `network forged`,
-  `funded feynman 10,000 CKB`, `channel feynman⇄lorentz → ChannelReady`, `payment feynman→pericles
-  Success (250 CKB)`, `channel closed`. Each is clickable → flies the canvas to the involved
-  elements (replay feel). Color-coded: fund = gold, channel = mint, payment = teal, error = red.
-- **Payments ledger:** time, from→to, amount, hop count, status, latency; row click replays the
-  animation.
-- **Raw logs:** tabbed by node, level filter chips, search, follow/pause (`docker logs`).
-- **Terminal:** shows the equivalent `forge …` command for whatever you just did — GUI→CLI
-  transparency.
+**DECK** tabs: **Timeline** (typed, iconographic events — `NETWORK FORGED`, `FUNDED feynman 10,000
+CKB`, `CHANNEL feynman⇄lorentz → READY`, `PAYMENT feynman→galileo SUCCESS 250 CKB`, `CHANNEL
+CLOSED`; each clickable → flies the floor to the elements, color-coded warm/cool/alarm),
+**Payments** (a ledger: time · from→to · amount · hops · status · latency; row click replays the
+spark), **Logs** (per-node `docker logs`, level chips, search, follow), **Console** (RPC console),
+**Terminal** (shows the equivalent `forge …` command for whatever you just did — GUI→CLI
+transparency). Collapsed = a single-line ticker.
 
-The semantic timeline derives from the orchestrator's `onProgress` messages + RPC state diffs; raw
-logs stream from `engine.logs`. Collapsed = a single-line ticker.
+**States**
 
----
-
-## 8. Visual system
-
-Dark-first, cool near-black surfaces with electric accents. **This palette is a superset of the
-CLI's** (§11) so the two tools read as one product; the CLI uses the truecolor subset marked ★.
-
-### 8.1 Color palette
-
-| Token | Hex | Role |
-|---|---|---|
-| `--bg-void` | `#070A0F` | canvas backdrop (deepest) |
-| `--bg-grid` | `#0E141C` | grid dots (low opacity) |
-| `--surface-1` | `#111823` | floating glass panels |
-| `--surface-2` | `#172130` | node cards, raised surfaces |
-| `--surface-3` | `#1E2A3C` | hover / inputs |
-| `--line` | `#24324A` | hairlines, borders |
-| `--text-hi` | `#EAF1F8` | headings, the one bright thing per block ★ `heading #EAEDF2` |
-| `--text` | `#C4D0DE` | body / values ★ `text #C3C9D3` |
-| `--text-mute` | `#7E8DA1` | keys, labels, units ★ `muted #8A93A3` |
-| `--text-faint` | `#4C596B` | rules, connectors, timestamps ★ `dim #5A6273` |
-| `--accent` ★ | `#4AD6C4` | brand, selection, active spinner, ports, primary numbers |
-| `--accent-pulse` | `#38E1FF` | payment pulses, live-motion sibling of accent |
-| `--mint` ★ | `#5FD98A` | `ChannelReady`, healthy, success (`success`) |
-| `--mint-glow` | `#6FFFC4` | success ripple bloom |
-| `--amber` ★ | `#E3B341` | pending / negotiating, warnings (`pending`) |
-| `--gold` | `#F4C752` | funding / on-chain CKB |
-| `--red` ★ | `#F2737A` | errors, failed payments, destructive (`error`) |
-| `--violet` | `#A88BFF` | routes / invoices, secondary highlight |
-
-Gradients: payment pulse `radial(#EAFBFF → #38E1FF → transparent)`; ready-wire shimmer
-`linear(#2FBF86 → #5FD98A → #6FFFC4)`; health ring `conic(mint → accent)` slow rotate; node card
-fill `top-lit(#172130 → #111823)`.
-
-### 8.2 Typography
-- **UI:** Inter / Geist (variable), `-0.01em` tracking on headings.
-- **Numbers/balances:** tabular figures (`font-feature-settings: "tnum"`) everywhere numbers change
-  — non-negotiable so live counters don't jitter.
-- **Mono (pubkeys, logs, console, ports):** Geist Mono / JetBrains Mono.
-- **Display (HUD name, wizard titles):** Geist heavy, tight tracking.
-- Scale (px): `11 · 12 · 13 · 14(base) · 16 · 20 · 26 · 34`. Line-height 1.5 body, 1.15 display.
-
-### 8.3 Spacing & radii
-4-based scale: `2 · 4 · 8 · 12 · 16 · 24 · 32 · 48 · 64`. Panels: 16 padding, 12 gaps; node card
-internal 8/12. Radii: `6` inputs, `10` cards, `14` panels, `full` pills.
-
-### 8.4 Elevation
-Cool-tinted (never pure black), with a subtle inner top-highlight for glass:
-- `--e1` panels: `0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px -12px rgba(0,0,0,.6)`
-- `--e2` node cards: `0 2px 4px -1px rgba(0,0,0,.5), 0 12px 32px -12px rgba(0,0,0,.7)`
-- `--e3` drawer/modal: `0 24px 64px -20px rgba(0,0,0,.8)`
-- **Glow** for live elements: selected node `0 0 0 2px var(--accent), 0 0 32px -6px rgba(74,214,196,.5)`.
-- Floating panels: `backdrop-filter: blur(16px)`, `--surface-1` at 82% opacity.
-
-### 8.5 Iconography
-Lucide (1.5px stroke, rounded caps) + a small Fiber-specific set: node (hexagon chip), channel
-(two-headed link), payment (lightning-drop), fund (coin-stack), forge (anvil ⚒). Health = filled
-dot in semantic colors. 16/20px, `--text-mute` default, brighten on hover.
-
-### 8.6 Motion
-- **Springs, not linear.** UI `spring(stiffness 320, damping 30)`; canvas nodes softer
-  `spring(220, 26)` (weighty, physical).
-- Drawer slide-in 240ms; node select scale 1→1.03 (180ms); balance number rolls 600ms ease-out;
-  wire pending→ready 400ms color morph + one 1.15 "thump"; payment pulse ~700ms/hop with an
-  afterimage trail; layout re-flow staggered 30ms.
-- Ambient animations ≤ 4% intensity. **Respect `prefers-reduced-motion`:** pulses become a single
-  fade-move, shimmers freeze, ripples become opacity flashes.
-
----
-
-## 9. Empty / loading / error states
-
-- **Empty:** a large centered dotted **anvil silhouette**, "No network forged yet.", a primary
-  `Forge a network ⚒` button. Faint ghost-nodes drift behind. Inviting, not dead.
-- **Loading = the boot sequence (the best loading state you'll see):** the wizard's "Forge it"
-  transitions _into the canvas_. Nodes **materialize one by one** as the orchestrator boots them;
-  the CKB dev chain is an **anvil-core** at center pulsing while mining; channels draw themselves
-  amber/dashed and march toward mint; a slim top rail mirrors `onProgress` verbatim (`funding
-  feynman 10,000 CKB`, `channel feynman→lorentz ready`). The user watches the network **forge
-  itself** — loading state and wow-moment in one. Needs a WS push of orchestrator progress
-  (upgrade from the 2s poll).
-- **Skeleton:** node cards shimmer for balances until `listChannels` returns; wires render slate
+- **Empty:** the thermal grid with a large cold **anvil silhouette**, `NO NETWORK FORGED YET`, a
+  primary `FORGE A NETWORK ⚒`. Faint ash-nodes drift behind. Inviting, not dead.
+- **Loading = the forge sequence (loading state _and_ the wow moment):** "Forge it" transitions into
+  the floor. The **forge-core ignites** and starts mining; nodes **materialize cold and warm up**
+  one by one as the orchestrator boots them; conduits draw themselves amber/dashed and **ignite** to
+  the gradient as channels reach ready; a slim top rail mirrors `onProgress` verbatim. The user
+  watches the network **forge itself**. Needs a WS push of orchestrator progress (upgrade from the
+  2s poll).
+- **Skeleton:** cells shimmer for balances until `listChannels` returns; conduits render cold steel
   until state is known.
-- **Daemon disconnected:** HUD dot → red, non-blocking "Lost connection — retrying…" banner, canvas
-  dims 30% and freezes ambient motion but stays readable (last-known state); auto-reconnect with
-  backoff, green flash on return.
-- **Node unhealthy:** within 2s the health ring flips amber/red, the card desaturates, its wires dim
-  to slate, a timeline error lands, and the open inspector surfaces the last log lines.
-- **Action failed** (open/pay/close): inline in the sheet + a red toast naming the failing
-  node/hop; never a raw stack.
+- **Daemon lost:** rig dot → alarm, non-blocking `LOST CONNECTION — RETRYING…` banner, floor cools
+  30% and freezes but stays readable (last-known state); auto-reconnect, flux flash on return.
+- **Node unhealthy:** within 2s the cell cools to ash, its conduits go steel, a timeline alarm lands,
+  the open readout surfaces the last log lines.
+- **Action failed:** inline in the sheet + an alarm toast naming the failing node/hop; never a raw
+  stack.
+
+**Responsive:** ≥1280 full; 768–1280 Explorer→icons, readout→overlay sheet, vitals wrap; <768
+view-only (floor + rig + bottom sheet, actions via buttons). The GUI is a companion to the CLI.
 
 ---
 
-## 10. Responsive & layout behavior
+## 8. Tech stack & component inventory
 
-- **≥ 1280px:** full experience — canvas + all floating chrome + optional Explorer + inspector
-  drawer.
-- **768–1280px:** Explorer collapses to icons; inspector becomes an overlay sheet; vitals strip
-  wraps to 3+3.
-- **< 768px (view-only):** canvas + HUD + a bottom sheet for inspectors; drag-to-open disabled,
-  actions via buttons. The GUI is a companion to the CLI, not a phone-first app.
-- Panels never exceed the viewport; the canvas always retains ≥ 50% width on desktop.
+**Core:** React 18 + TypeScript + Vite (ESM). The daemon serves the built bundle in place of today's
+single `gui.html`; a single-file build (`vite-plugin-singlefile`) keeps "the daemon serves one
+artifact" true.
+
+**Graph/floor:** **React Flow (`@xyflow/react`)** — infinite pan/zoom, draggable custom node/edge
+components (forge cells + molten conduits are components), `onConnect` → open-channel for free, plus
+mini-map. `d3-force`/`dagre`/`elkjs` for layouts; a hand-rolled radial default. A **custom
+SVG/Canvas overlay** synced to the viewport transform renders sparks, conduit fills, and core pulses
+along the edge paths (drop to PixiJS/regl only if a traffic generator stresses it).
+
+**Motion:** Framer Motion (precise eases, `AnimatePresence`, number rolls). **Styling:** Tailwind
+with the palette as CSS variables + shadcn/ui (Radix) for drawers, dialogs, popovers, palette,
+toasts, tabs, tooltips; `cmdk` for `⌘K`; `lucide-react` icons. **State/data:** Zustand (selection,
+mode, positions), TanStack Query for daemon fetches. **Upgrade the daemon** from `GET /api/state`
+polling to a **WebSocket** pushing `NetworkView` diffs + orchestrator progress — powers < 2s
+reactivity, the forge-sequence loading, and payment/close animations. Keep `/api/state` as fallback.
+
+**Component inventory:** `ForgeFloor`, `NodeCell`, `ConduitEdge`, `ForgeCore`, `SparkLayer`,
+`RigReadout`, `VitalsRail`, `ModeDock`, `CommandBar`, `MiniMap`, `LayoutDock`, `ReadoutDrawer`
+(`NodeReadout`/`ChannelReadout`/`PaymentReadout`), `ExplorerTree`, `Deck`
+(`Timeline`/`PaymentsLedger`/`LogsPanel`/`RpcConsole`/`Terminal`), `Wizard`, `FundSheet`, `PaySheet`,
+`CapacityPopover`, `HudBracket`, `StateBand`, `PulseDot`, `EmberBrackets`, `Toast`, `EmptyState`,
+`ForgeSequence`.
 
 ---
 
-## 11. CLI alignment (already implemented in `src/ui.ts`)
+## 9. CLI alignment (`src/ui.ts`)
 
-The CLI mirrors the GUI's visual language in the terminal: one teal accent, state carried by glyph
-color, generous space. The palette is the truecolor subset marked ★ in §8.1.
+The terminal is the same instrument in ANSI: warm ember for the live/focal thing, cool flux/teal for
+structure and ready state, mono-caps labels, hairline rules, squared ASCII brackets, and a braille
+spinner. `--json` bypasses it all for scripting.
 
-| GUI token | Terminal (truecolor) | Glyph vocabulary |
+| Role | Truecolor | Terminal use |
 |---|---|---|
-| `--accent` | `#4AD6C4` | ports, primary numbers, active spinner `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` |
-| `--mint` | `#5FD98A` | `●` ready/running, `✔` done |
-| `--amber` | `#E3B341` | `◍` pending/negotiating |
-| `--red` | `#F2737A` | `✗` failed / unreachable |
-| `--text-mute` | `#8A93A3` | keys, `→` direction, `·` separators |
-| `--text-faint` | `#5A6273` | rules `─`, tree `├─ └─ │`, box borders `╭ ╮ ╰ ╯` |
+| ember | `#FF6A3D` | brand, active spinner, focal number, payment beat, headings' accent |
+| flux | `#2DE0C7` | `ChannelReady`, healthy `●`, ports, "ready" state |
+| gold | `#F5C451` | CKB amounts, funded |
+| amber | `#F0A93C` | `◍` pending/negotiating |
+| alarm | `#FF5765` | `✗` failed / unreachable / errors |
+| muted | `#808B9C` | mono-caps labels, `→`, `·` |
+| faint | `#4C5768` | rules `─`, tree `├─ └─ │`, brackets `┌ ┐ └ ┘` |
 
-Rounded boxes are the reward at the end of a command; tables and trees carry lists; progress is an
-in-place multi-step checklist with a braille spinner on the active step (stderr), and `--json`
-bypasses all of it for scripting.
-
-`forge up trio` — live progress → summary card:
+`forge up trio` — live progress then a squared summary readout:
 ```
-  fiber-forge  ·  spinning up trio
+  FIBER-FORGE · spinning up trio
 
-  ✔ network              0.3s
-  ✔ ckb                  2.1s
-  ✔ nodes    3/3         4.8s
-  ✔ fund     3/3         3.2s
-  ✔ connect              1.1s
-  ✔ channels 2/2         6.0s
-  ✔ ready
+  ✔ NETWORK              0.3s
+  ✔ CKB                  2.1s
+  ✔ NODES    3/3         4.8s
+  ✔ FUND     3/3         3.2s
+  ✔ CONNECT              1.1s
+  ✔ CHANNELS 2/2         6.0s
+  ✔ READY
 
-  ╭─ trio ─────────────────────────────────────────── ready ─╮
-  │ network   forge-trio                                      │
-  │ ckb rpc   http://127.0.0.1:8114                           │
-  │                                                           │
-  │ nodes                                                     │
-  │ ● feynman   http://127.0.0.1:8300                         │
-  │ ● lorentz   http://127.0.0.1:8301                         │
-  │ ● galileo   http://127.0.0.1:8302                         │
-  │                                                           │
-  │ channels                                                  │
-  │ feynman → lorentz   ● ChannelReady   1000 CKB             │
-  │ lorentz → galileo   ● ChannelReady   1000 CKB             │
-  ╰───────────────────────────────────────────────────────────╯
+  ┌ TRIO ──────────────────────────────────────────── READY ┐
+  │ NETWORK   forge-trio                                     │
+  │ CKB RPC   http://127.0.0.1:8114                          │
+  │ ───────────────────────────────────────────────────────│
+  │ ● feynman   http://127.0.0.1:8300                        │
+  │ ● lorentz   http://127.0.0.1:8301                        │
+  │ ● galileo   http://127.0.0.1:8302                        │
+  │ ───────────────────────────────────────────────────────│
+  │ feynman → lorentz   ● CHANNELREADY   1000 CKB            │
+  │ lorentz → galileo   ● CHANNELREADY   1000 CKB            │
+  └──────────────────────────────────────────────────────────┘
 
-  next   forge status trio  ·  forge pay trio feynman galileo 42  ·  forge gui trio
+  NEXT   forge status trio · forge pay trio feynman galileo 42 · forge gui trio
 ```
 
-`forge status trio` — nodes + channels tree · `forge ls` — networks table · `forge pay a b 42` —
-a settle spinner then a `paid 42 CKB · Success` card. Every GUI action shows its equivalent command
-in the DECK's Terminal tab, closing the loop.
+`forge status` — nodes + channels tree; `forge ls` — a hairline-ruled table; `forge pay` — a settle
+spinner then an ember-bracketed `PAID 42 CKB · SUCCESS` readout; errors render as a squared alarm
+readout (`✗ ERROR` band + the message + a suggested next command), never a raw stack. Every GUI
+action prints its `forge …` equivalent in the DECK's Terminal — the loop is closed.
 
 ---
 
-## 12. Tech stack & component inventory
+## Appendix — reference wireframes (monospace = the real proportions)
 
-**Core:** React 18 + TypeScript + Vite (ESM, matching the repo). The daemon serves the built bundle
-in place of today's single `gui.html`; a single-file build (`vite-plugin-singlefile`) keeps "the
-daemon serves one artifact" simple.
-
-**Graph/canvas:** **React Flow (`@xyflow/react`)** — infinite pan/zoom, draggable nodes, custom
-node/edge React components (node cards + living wires are components), and connection-drag
-(`onConnect` → open-channel) for free, plus a mini-map and controls. `d3-force` for force layout,
-`dagre`/`elkjs` for hierarchical, a hand-rolled radial function for the default. A **custom
-SVG/Canvas overlay** synced to the viewport transform renders payment pulses and wire shimmer along
-the same bézier paths (drop to PixiJS/regl only if a traffic generator stresses it).
-
-**Animation:** Framer Motion (springs, `AnimatePresence`, number rolls). **Styling:** Tailwind +
-shadcn/ui (Radix) for drawers, dialogs, popovers, palette, toasts, tabs, tooltips; `cmdk` for `⌘K`;
-`lucide-react` for icons. **State/data:** Zustand (selection, mode, node positions), TanStack Query
-for daemon fetches. **Upgrade the daemon** from `GET /api/state` polling to a **WebSocket** pushing
-`NetworkView` diffs + orchestrator progress — this powers < 2s reactivity, the live-forge loading
-state, and payment/close animations. Keep `/api/state` as a fallback.
-
-**Component inventory:** `Canvas`, `NodeCard`, `ChannelWire`, `PaymentPulseLayer`, `NetworkHUD`,
-`VitalsStrip`, `ModeDock`, `CommandBar`, `MiniMap`, `LayoutDock`, `InspectorDrawer`
-(`NodeInspector` / `ChannelInspector` / `PaymentInspector`), `ExplorerTree`, `Deck`
-(`LogsPanel` / `Timeline` / `PaymentsLedger` / `RpcConsole` / `Terminal`), `WizardSlideOver`,
-`FundSheet`, `PaySheet`, `CapacityPopover`, `Toast`, `EmptyState`, `BootSequence`.
-
----
-
-## Appendix — reference wireframes
-
-### A. Canvas at rest (trio, nothing selected)
+### A. Forge floor at rest (trio)
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│ ╭─────────────────────────╮      nodes● 3  ch 2  cap 2k  #47      ╭─────────╮   │
-│ │ ⬡ trio · ● healthy      │         ⌘K search                     │⚒ ⚡ Pay  │   │
-│ ╰─────────────────────────╯   ┌─[ V ][ W ][ P ][ F ][ C ]─┐       ╰─────────╯   │
-│              ┌──────────────┐                                                   │
-│              │● feynman :8300│═════════(mint, 60●40)═════════╗                  │
-│              │ 9,842 CKB ▓▓░ │                              ┌──────────────┐    │
-│              └──────────────┘                               │● lorentz:8301│    │
-│                                                             └──────┬───────┘    │
-│                                                    ════(mint,40●60)════╗        │
-│                                                                   ┌──────────────┐
-│                                                                   │● galileo:8302│
-│ ╭ ▖mini ╮          ╭ radial 100% ⊹ ⤢ ╮      ╭ ⚡ payment …→galileo ✓ ╮        │
+│ ┌ TRIO · ● HEALTHY ┐   NODES 3 · CH 2 · CAP 2K · #47      ┌ ⚒ SPAWN · ⚡ PAY ┐  │
+│ └──────────────────┘        ⌘K                            └─────────────────┘  │
+│                     ┌ SELECT · WIRE · PAY · FUND · PIN ┐                        │
+│        ┌ NODE ── ● RUNNING ┐                                                    │
+│        │ feynman     :8300 │▟███████████(60 ◆ 40)███████▙ ┌ NODE ── ● RUNNING ┐ │
+│        │ 9,842 CKB ▛▀▀▚░░░ │                             │ lorentz     :8301 │ │
+│        └───────────────────┘             ◍ CORE #47      │ 9,970 CKB ▛▀▀▀▚░░ │ │
+│                                          (kindling)      └─────────┬─────────┘ │
+│                                             ▟███████(40 ◆ 60)██████▙            │
+│                                                        ┌ NODE ── ● RUNNING ┐    │
+│                                                        │ galileo     :8302 │    │
+│                                                        └───────────────────┘    │
+│ ┌ ▖MAP ┐        ┌ RADIAL · 100% · ⤢ ┐        ┌ ⚡ PAYMENT …→galileo SUCCESS ┐  │
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### B. Node selected → inspector + payment pulse mid-flight
+### B. Node selected → readout + spark mid-flight
 ```
 ┌───────────────────────────────────────────────────────┬─────────────────────┐
-│ ⬡ trio      [ V ][ W ][ P ][ F ][ C ]                 │ feynman         ✕   │
-│      ┌──────────────┐                                  │ ● Running  node-0   │
-│      │◎ feynman     │  ← selected (teal ring)          │ 0x03f2…9ac1 [copy]  │
-│      └──────┬───────┘                                  │ Overview Peers Chan │
-│             ●→→→ ✦ pulse (teal comet)                  │ BALANCE 9,842 CKB   │
-│        ┌──────────────┐                                │ Channels 1,830 (3)  │
-│        │◉ lorentz     │ ← ripples, forwarding          │ ENDPOINT :8300 [⧉]  │
-│        └──────┬───────┘                                │ [Fund+][Open ch →]  │
-│          ✦→→→● ═══┐                                    │ [Invoice][Pay from] │
-│              ┌──────────────┐                          │                     │
-│              │○ galileo     │ (dimmed, awaiting)       │                     │
-│  ╭ ⚡ paying feynman→galileo 250 CKB … ╮               │                     │
+│ ┌ TRIO ┐   SELECT · WIRE · PAY · FUND · PIN            │ ┌ NODE ──── ● RUN ┐ │
+│ ▓┌ NODE ── ● RUNNING ┐   ← offset-ember backing        │ │ feynman         │ │
+│ ▓│ feynman     :8300 │                                 │ │ 0x03f2…9ac1     │ │
+│  └────────●✦→→→──────┘  spark (ember comet)            │ ├ OVERVIEW ─────── │ │
+│      route flares ember/violet                         │ │┌ BALANCE ──────┐ │ │
+│        ┌ NODE ── ● RELAY ┐  ← flares, forwarding       │ ││ 9,842 CKB     │ │ │
+│        │ lorentz         │                             │ │└───────────────┘ │ │
+│        └───────✦→→→●─────┘                             │ │ ENDPOINT :8300   │ │
+│              ┌ NODE ── ○ … ┐  (cooled, awaiting)       │ │ [FUND+][OPEN →]  │ │
+│              │ galileo     │                           │ │ [INVOICE][PAY]   │ │
+│  ┌ ⚡ PAYING feynman→galileo 250 CKB … ┐               │ └──────────────────┘ │
 └───────────────────────────────────────────────────────┴─────────────────────┘
 ```
 
-### C. Live forge (loading = the network building itself)
+### C. Forge sequence (loading = the network building itself)
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│                          ⚒  Forging  trio  ⚒                                   │
-│  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░  funding lorentz 10,000 CKB                     │
-│                              ◍ anvil-core (CKB) · block #47                     │
-│         ┌──────────────┐                                                        │
-│         │● feynman ✓   │┄┄┄┄amber dashed┄┄┄┄┐ connecting peer                   │
-│         └──────────────┘              ┌──────────────┐                          │
-│                                       │◌ lorentz …   │  ← springing in          │
-│                                       └──────────────┘   ⋯ galileo queued       │
-│  rail →  ● network  ● ckb ready  ● feynman rpc  ◐ funding…  ○ open feynman→…    │
-│                                                      [ Run in background ]      │
+│                          ⚒  FORGING  trio  ⚒                                   │
+│  ██████████████████████████░░░░░░░░  FUNDING lorentz 10,000 CKB                 │
+│                          ◍ FORGE-CORE · BLOCK #47 · kindling                    │
+│         ┌ NODE ── ● BOOT ┐                                                       │
+│         │ feynman        │┄┄┄┄ amber dashed ┄┄┄┄┐ CONNECTING PEER                │
+│         └────────────────┘             ┌ NODE ── ◌ … ┐                          │
+│                                        │ lorentz     │  ← warming in             │
+│                                        └─────────────┘   ⋯ galileo (cold)        │
+│  RAIL →  ● network  ● ckb ready  ● feynman rpc  ◐ funding  ○ open feynman→…      │
+│                                                      [ RUN IN BACKGROUND ]       │
 └───────────────────────────────────────────────────────────────────────────────┘
+```
+```
+LEGEND   ● live/ready (flux)   ◍ pending (amber)   ○ cold/stopped   ✦ spark (ember)
+         ◆ balance split       ▟█▙ molten conduit  ⚒ forge action   ◐ in progress
 ```
