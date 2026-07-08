@@ -1,0 +1,21 @@
+{
+  "name": "fiber-forge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "One-click local Fiber networks with a visual channel GUI",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "lint": "tsc --noEmit",
+    "fmt": "prettier --write .",
+    "fmt:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "prettier": "^3.3",
+    "typescript": "^5.6",
+    "vitest": "^2.1"
+  }
+}
