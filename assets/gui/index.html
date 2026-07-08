@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+<template id="__bundler_thumbnail" data-bg-color="#0E1217">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#0E1217"/>
+    <g stroke="#232B35" stroke-width="3">
+      <line x1="330" y1="300" x2="600" y2="400"/>
+      <line x1="600" y1="400" x2="870" y2="300"/>
+      <line x1="600" y1="400" x2="600" y2="560"/>
+    </g>
+    <g>
+      <path d="M320 265 H620 V335 H320 Z" fill="#1E252E" stroke="#FF6A3D" stroke-width="3"/>
+      <rect x="320" y="265" width="300" height="16" fill="#FF6A3D" opacity="0.85"/>
+      <path d="M580 265 H880 V335 H580 Z" fill="#1E252E" stroke="#2DE0C7" stroke-width="3"/>
+      <rect x="580" y="265" width="120" height="16" fill="#2DE0C7" opacity="0.85"/>
+    </g>
+    <circle cx="600" cy="470" r="70" fill="none" stroke="#F5C451" stroke-width="10"/>
+    <circle cx="600" cy="470" r="52" fill="#090B0F"/>
+    <text x="600" y="500" font-size="64" text-anchor="middle" fill="#FF6A3D" font-family="sans-serif">&#9878;</text>
+  </svg>
+</template>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#090B0F;--base:#0E1217;--panel:#161B22;--panel-2:#1E252E;--inset:#06080B;
+    --hairline:#232B35;--border:#323C48;
+    --bone:#F3EFE7;--text:#C6CFDB;--muted:#808B9C;--faint:#4C5768;
+    --ember:#FF6A3D;--ember-hot:#FF8F5E;--ember-deep:#D2481D;--ember-glow:#FFC2A3;--gold:#F5C451;
+    --flux:#2DE0C7;--flux-deep:#14A896;--signal:#5AA0FF;--violet:#A98BFF;
+    --amber:#F0A93C;--alarm:#FF5765;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--void);}
+  body{font-family:'Geist',system-ui,sans-serif;color:var(--text);-webkit-font-smoothing:antialiased;overflow:hidden;}
+  a{color:var(--signal);text-decoration:none}
+  a:hover{color:var(--flux)}
+  .mc{font-family:'Geist Mono','JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+  .num{font-family:'Geist Mono','JetBrains Mono',monospace;font-variant-numeric:tabular-nums;}
+  button{font-family:inherit;}
+  input[type=range]{accent-color:var(--ember);}
+  ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--border)}::-webkit-scrollbar-track{background:transparent}
+  @keyframes pulseDot{0%,100%{opacity:1}50%{opacity:.45}}
+  @keyframes kindle{0%,100%{filter:brightness(1)}50%{filter:brightness(1.3) saturate(1.15)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes coreping{0%{transform:scale(.7);opacity:.5}100%{transform:scale(2.7);opacity:0}}
+  @keyframes shimmer{to{stroke-dashoffset:-60}}
+  @keyframes march{to{stroke-dashoffset:-34}}
+  @keyframes drawerIn{from{transform:translateX(30px);opacity:0}to{transform:translateX(0);opacity:1}}
+  @keyframes sheetIn{from{transform:translate(-50%,-46%);opacity:0}to{transform:translate(-50%,-50%);opacity:1}}
+  @keyframes flare{0%{transform:scale(.6);opacity:0}35%{opacity:1}100%{transform:scale(1);opacity:1}}
+  @keyframes igniteFade{from{opacity:.9}to{opacity:0}}
+  @keyframes drift{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+  @keyframes bootFlick{0%,100%{box-shadow:0 0 10px rgba(240,169,60,.35)}50%{box-shadow:0 0 20px rgba(240,169,60,.6)}}
+  @media (prefers-reduced-motion: reduce){*{animation-duration:.001ms !important;animation-iteration-count:1 !important}}
+</style>
+</helmet>
+<div style="position:fixed;inset:0;background:var(--void);overflow:hidden;">
+
+  <div style="position:absolute;inset:0;background-image:linear-gradient(color-mix(in srgb,var(--ember) 5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--ember) 5%,transparent) 1px,transparent 1px);background-size:80px 80px;background-position:center;"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 42%,transparent 40%,rgba(6,8,11,.55) 78%,rgba(6,8,11,.94) 100%);pointer-events:none;"></div>
+
+  {{ floor }}
+
+  <!-- ============ EMPTY STATE ============ -->
+  <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;text-align:center;z-index:8;">
+      <div class="mc" style="color:var(--faint);">FIBER-FORGE · LOCAL FIBER NETWORK</div>
+      <div style="font-size:40px;font-weight:800;color:var(--bone);letter-spacing:-.02em;line-height:1;">No network forged yet</div>
+      <div style="font-size:15px;color:var(--muted);max-width:440px;line-height:1.6;">Spin up a local Fiber payment-channel network — nodes, funded channels and a CKB dev chain — as one live thermal circuit.</div>
+      <button onClick="{{ enterWizard }}" style="margin-top:6px;background:var(--ember);color:#1a0b06;border:none;padding:15px 30px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:13px;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:10px;box-shadow:0 0 40px rgba(255,106,61,.35);">FORGE A NETWORK ⚒</button>
+      <div class="mc" style="color:var(--faint);margin-top:2px;">OR RUN · forge up trio</div>
+    </div>
+  </sc-if>
+
+  <!-- ============ FORGE SEQUENCE (loading) ============ -->
+  <sc-if value="{{ isForging }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;top:0;left:0;right:0;padding:22px 26px;z-index:8;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="font-size:16px;">⚒</span>
+          <span style="font-weight:700;font-size:16px;color:var(--bone);letter-spacing:-.01em;">FORGING <span style="color:var(--ember);">{{ netName }}</span></span>
+          <span class="mc" style="color:var(--muted);">· {{ bootLabel }}</span>
+        </div>
+        <button onClick="{{ goFloor }}" style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:8px 14px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;">RUN IN BACKGROUND</button>
+      </div>
+      <div style="height:6px;background:var(--inset);border:1px solid var(--hairline);overflow:hidden;">
+        <div style="height:100%;width:{{ bootPctW }};background:linear-gradient(90deg,var(--ember-deep),var(--ember),var(--gold));transition:width .5s cubic-bezier(.2,.8,.2,1);"></div>
+      </div>
+      <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-top:14px;width:fit-content;">
+        <sc-for list="{{ bootSteps }}" as="s" hint-placeholder-count="5">
+          <div style="background:var(--panel);padding:7px 13px;display:flex;align-items:center;gap:7px;">
+            <span style="color:{{ s.color }};font-size:11px;">{{ s.dot }}</span>
+            <span class="mc" style="color:{{ s.color }};">{{ s.label }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ FLOOR CHROME ============ -->
+  <sc-if value="{{ isFloor }}" hint-placeholder-val="{{ false }}">
+  <div>
+    <div style="position:absolute;top:20px;left:20px;display:flex;align-items:stretch;gap:1px;background:var(--border);border:1px solid var(--border);">
+      <div style="background:var(--panel);padding:10px 16px;display:flex;flex-direction:column;gap:5px;">
+        <div style="display:flex;align-items:center;gap:9px;">
+          <span class="mc">RIG</span>
+          <span style="font-weight:700;font-size:15px;color:var(--bone);letter-spacing:-.01em;">{{ netName }}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;">
+          <span style="width:7px;height:7px;background:var(--flux);animation:pulseDot 1.6s ease-in-out infinite;box-shadow:0 0 8px var(--flux);"></span>
+          <span class="mc" style="color:var(--flux);">HEALTHY</span>
+        </div>
+      </div>
+      <div style="background:var(--panel);padding:10px 16px;display:flex;align-items:center;gap:16px;">
+        <div style="display:flex;flex-direction:column;gap:2px;"><span class="mc">NODES</span><span class="num" style="font-size:16px;color:var(--bone);">{{ vNodes }}</span></div>
+        <div style="display:flex;flex-direction:column;gap:2px;"><span class="mc">CHANNELS</span><span class="num" style="font-size:16px;color:var(--bone);">{{ vChannels }}</span></div>
+      </div>
+    </div>
+
+    <div style="position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:1px;background:var(--border);border:1px solid var(--border);">
+      <sc-for list="{{ vitals }}" as="v" hint-placeholder-count="4">
+        <div style="background:var(--panel);padding:8px 15px;display:flex;flex-direction:column;gap:3px;align-items:center;min-width:64px;">
+          <span class="mc">{{ v.k }}</span>
+          <span class="num" style="font-size:14px;color:{{ v.c }};">{{ v.val }}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="position:absolute;top:78px;left:50%;transform:translateX(-50%);display:flex;gap:1px;background:var(--border);border:1px solid var(--border);">
+      <sc-for list="{{ modes }}" as="m" hint-placeholder-count="5">
+        <button onClick="{{ m.set }}" style="background:{{ m.bg }};color:{{ m.fg }};border:none;padding:7px 15px;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;transition:all .14s;">
+          <span class="num" style="opacity:.55;">{{ m.key }}</span>{{ m.label }}
+        </button>
+      </sc-for>
+    </div>
+
+    <div style="position:absolute;top:20px;right:20px;display:flex;gap:1px;background:var(--border);border:1px solid var(--border);">
+      <div style="background:var(--panel);color:var(--muted);padding:10px 14px;display:flex;align-items:center;"><span class="mc">⌘K</span></div>
+      <button onClick="{{ enterWizard }}" style="background:var(--panel);color:var(--text);border:none;padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;"><span style="color:var(--gold);">⚒</span> SPAWN</button>
+      <button onClick="{{ openPay }}" style="background:var(--ember);color:#1a0b06;border:none;padding:10px 18px;cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;">⚡ PAY</button>
+    </div>
+
+    <div style="position:absolute;bottom:20px;left:20px;width:190px;height:118px;background:var(--panel);border:1px solid var(--border);">
+      <div style="padding:6px 10px;border-bottom:1px solid var(--hairline);"><span class="mc">▖ MAP</span></div>
+      <div style="position:relative;height:82px;">{{ miniMap }}</div>
+    </div>
+
+    <div style="position:absolute;bottom:20px;left:222px;display:flex;gap:1px;background:var(--border);border:1px solid var(--border);height:fit-content;">
+      <div style="background:var(--panel);padding:8px 14px;"><span class="mc" style="color:var(--ember);">RADIAL</span></div>
+      <div style="background:var(--panel);padding:8px 12px;"><span class="mc">FORCE</span></div>
+      <div style="background:var(--panel);padding:8px 12px;"><span class="mc">DAGRE</span></div>
+      <button onClick="{{ zoomOut }}" style="background:var(--panel);border:none;color:var(--text);padding:8px 13px;cursor:pointer;font-size:14px;line-height:1;">−</button>
+      <div style="background:var(--panel);padding:8px 6px;min-width:48px;text-align:center;"><span class="num" style="font-size:11px;color:var(--text);">{{ zoomPct }}%</span></div>
+      <button onClick="{{ zoomIn }}" style="background:var(--panel);border:none;color:var(--text);padding:8px 13px;cursor:pointer;font-size:14px;line-height:1;">+</button>
+      <button onClick="{{ zoomFit }}" style="background:var(--panel);border:none;color:var(--muted);padding:8px 12px;cursor:pointer;"><span class="mc">⤢ FIT</span></button>
+    </div>
+
+    <div style="position:absolute;bottom:20px;right:20px;width:320px;background:var(--panel);border:1px solid var(--border);display:flex;flex-direction:column;">
+      <div style="padding:6px 12px;border-bottom:1px solid var(--hairline);display:flex;justify-content:space-between;align-items:center;">
+        <span class="mc">TIMELINE</span><span class="mc" style="color:var(--faint);">LOGS · PAY · CONSOLE · TERMINAL</span>
+      </div>
+      <div style="padding:7px 12px;display:flex;flex-direction:column;gap:6px;">
+        <sc-for list="{{ events }}" as="e" hint-placeholder-count="2">
+          <div style="display:flex;gap:8px;align-items:baseline;">
+            <span class="num" style="font-size:10px;color:var(--faint);flex:none;">{{ e.t }}</span>
+            <span style="width:6px;height:6px;background:{{ e.c }};flex:none;"></span>
+            <span class="num" style="font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ e.msg }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="padding:6px 12px;border-top:1px solid var(--hairline);display:flex;align-items:center;gap:8px;background:var(--inset);">
+        <span style="color:var(--flux);font-size:11px;">≡</span>
+        <span class="num" style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ lastCmd }}</span>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ SCENE SWITCHER (always) ============ -->
+  <div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;align-items:stretch;gap:1px;background:var(--border);border:1px solid var(--border);z-index:9;">
+    <div style="background:var(--inset);padding:8px 12px;display:flex;align-items:center;"><span class="mc" style="color:var(--faint);">◆ SCENE</span></div>
+    <sc-for list="{{ scenes }}" as="sc" hint-placeholder-count="4">
+      <button onClick="{{ sc.go }}" style="background:{{ sc.bg }};color:{{ sc.fg }};border:none;padding:8px 14px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;transition:all .14s;">{{ sc.label }}</button>
+    </sc-for>
+  </div>
+
+  <!-- ============ NODE READOUT DRAWER ============ -->
+  <sc-if value="{{ isNode }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;top:0;right:0;bottom:0;width:380px;background:var(--panel);border-left:1px solid var(--border);animation:drawerIn .22s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;z-index:10;">
+      <div style="padding:16px 18px;border-bottom:1px solid var(--hairline);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <span class="mc">NODE</span>
+          <button onClick="{{ clearSel }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;">✕</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px;">
+          <span style="width:8px;height:8px;background:var(--flux);animation:pulseDot 1.6s ease-in-out infinite;box-shadow:0 0 8px var(--flux);"></span>
+          <span class="mc" style="color:var(--flux);">RUNNING</span>
+          <span class="mc" style="color:var(--faint);">· {{ netName }}-node</span>
+        </div>
+        <div style="font-size:26px;font-weight:800;color:var(--bone);letter-spacing:-.02em;line-height:1;">{{ nName }}</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+          <span class="num" style="font-size:12px;color:var(--muted);">{{ nPubkey }}</span>
+          <span class="mc" style="color:var(--signal);cursor:pointer;">COPY</span>
+          <span class="mc" style="color:var(--signal);cursor:pointer;">⧉ RPC</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:1px;background:var(--hairline);border-bottom:1px solid var(--hairline);">
+        <div style="flex:1;background:var(--panel);padding:9px 0;text-align:center;border-bottom:2px solid var(--ember);"><span class="mc" style="color:var(--bone);">OVERVIEW</span></div>
+        <div style="flex:1;background:var(--panel);padding:9px 0;text-align:center;"><span class="mc">PEERS</span></div>
+        <div style="flex:1;background:var(--panel);padding:9px 0;text-align:center;"><span class="mc">CHANNELS</span></div>
+        <div style="flex:1;background:var(--panel);padding:9px 0;text-align:center;"><span class="mc">LOGS</span></div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:18px;">
+        <div style="position:relative;padding:18px 16px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:16px;">
+          <span style="position:absolute;top:-1px;left:-1px;width:14px;height:14px;border-top:2px solid var(--ember);border-left:2px solid var(--ember);"></span>
+          <span style="position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid var(--ember);border-right:2px solid var(--ember);"></span>
+          <span style="position:absolute;bottom:-1px;left:-1px;width:14px;height:14px;border-bottom:2px solid var(--ember);border-left:2px solid var(--ember);"></span>
+          <span style="position:absolute;bottom:-1px;right:-1px;width:14px;height:14px;border-bottom:2px solid var(--ember);border-right:2px solid var(--ember);"></span>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+            <span class="num" style="font-size:28px;font-weight:700;color:var(--bone);">{{ nOnchain }}</span>
+            <span class="mc" style="color:var(--gold);">CKB · ON-CHAIN</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;">
+            <span class="num" style="font-size:16px;color:var(--ember);">{{ nInChannel }}</span>
+            <span class="mc">IN CHANNELS · {{ nChannels }}</span>
+          </div>
+          <div style="display:flex;gap:3px;align-items:flex-end;height:26px;margin-top:14px;">
+            <sc-for list="{{ spark }}" as="s" hint-placeholder-count="12">
+              <div style="flex:1;background:var(--flux-deep);height:{{ s.h }};opacity:.85;"></div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
+          <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--hairline);padding-bottom:9px;">
+            <span class="mc">ENDPOINT</span><span class="num" style="font-size:12px;color:var(--text);">http://127.0.0.1:{{ nPort }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--hairline);padding-bottom:9px;">
+            <span class="mc">P2P</span><span class="num" style="font-size:12px;color:var(--muted);">…/tcp/{{ nP2p }}/p2p/Qm…</span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);">
+          <button onClick="{{ openFund }}" style="background:var(--ember);color:#1a0b06;border:none;padding:12px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">FUND +</button>
+          <button onClick="{{ openCap }}" style="background:var(--panel-2);color:var(--bone);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">OPEN CHANNEL →</button>
+          <button style="background:var(--panel-2);color:var(--text);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">INVOICE</button>
+          <button onClick="{{ openPay }}" style="background:var(--panel-2);color:var(--text);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">PAY FROM</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ CHANNEL READOUT DRAWER ============ -->
+  <sc-if value="{{ isChannel }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;top:0;right:0;bottom:0;width:380px;background:var(--panel);border-left:1px solid var(--border);animation:drawerIn .22s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;z-index:10;">
+      <div style="padding:16px 18px;border-bottom:1px solid var(--hairline);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <span class="mc">CHANNEL</span>
+          <button onClick="{{ clearSel }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;">✕</button>
+        </div>
+        <div style="font-size:22px;font-weight:700;color:var(--bone);letter-spacing:-.01em;">{{ chFrom }} <span style="color:var(--faint);">⇄</span> {{ chTo }}</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+          <span style="width:7px;height:7px;background:var(--flux);box-shadow:0 0 8px var(--flux);"></span>
+          <span class="mc" style="color:var(--flux);">CHANNELREADY</span>
+          <span class="num" style="font-size:11px;color:var(--faint);margin-left:auto;">{{ chHash }}</span>
+        </div>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+          <span class="mc">CAPACITY</span><span class="num" style="font-size:18px;color:var(--bone);">{{ chCap }} CKB</span>
+        </div>
+        <div style="margin:10px 0 6px;">{{ liquidityBar }}</div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:22px;">
+          <span class="num" style="font-size:13px;color:var(--ember);">{{ chLocal }} CKB</span>
+          <span class="mc" style="color:var(--faint);">◆ SPLIT</span>
+          <span class="num" style="font-size:13px;color:var(--flux);">{{ chRemote }} CKB</span>
+        </div>
+        <div style="margin-bottom:18px;">
+          <span class="mc" style="display:block;margin-bottom:10px;">STATE</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="mc" style="color:var(--faint);">NEGOTIATING</span><span style="color:var(--faint);">→</span>
+            <span class="mc" style="color:var(--faint);">FUNDING</span><span style="color:var(--faint);">→</span>
+            <span class="mc" style="color:var(--flux);">READY ✓</span>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--hairline);padding-bottom:9px;margin-bottom:9px;">
+          <span class="mc">FUNDING TX</span><span class="num" style="font-size:12px;color:var(--muted);">0x4f…c2</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--hairline);padding-bottom:9px;margin-bottom:22px;">
+          <span class="mc">OPENED</span><span class="num" style="font-size:12px;color:var(--text);">12s ago</span>
+        </div>
+        <button onClick="{{ openPay }}" style="width:100%;background:var(--ember);color:#1a0b06;border:none;padding:13px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;margin-bottom:1px;">SEND PAYMENT ACROSS →</button>
+        <button style="width:100%;background:transparent;color:var(--alarm);border:1px solid var(--alarm);padding:13px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">⚠ CLOSE CHANNEL</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ PAY SHEET ============ -->
+  <sc-if value="{{ payOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:rgba(6,8,11,.55);z-index:11;" onClick="{{ closePay }}"></div>
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:420px;background:var(--panel);border:1px solid var(--border);z-index:12;animation:sheetIn .22s cubic-bezier(.2,.8,.2,1);">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--hairline);display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--ember);">⚡</span><span class="mc" style="color:var(--bone);font-size:12px;">SEND PAYMENT</span></div>
+        <button onClick="{{ closePay }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
+      </div>
+      <div style="padding:20px;">
+        <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:18px;">
+          <div style="flex:1;background:var(--inset);padding:12px 14px;"><span class="mc" style="display:block;margin-bottom:5px;">FROM</span><span style="font-size:15px;font-weight:600;color:{{ payFromHue }};">{{ payFromName }}</span></div>
+          <div style="flex:none;background:var(--inset);padding:12px 10px;display:flex;align-items:center;color:var(--faint);">→</div>
+          <div style="flex:1;background:var(--inset);padding:12px 14px;"><span class="mc" style="display:block;margin-bottom:5px;">TO</span><span style="font-size:15px;font-weight:600;color:{{ payToHue }};">{{ payToName }}</span></div>
+        </div>
+        <span class="mc" style="display:block;margin-bottom:8px;">AMOUNT · CKB</span>
+        <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:16px;">
+          <button onClick="{{ decPay }}" style="background:var(--panel-2);color:var(--bone);border:none;width:46px;cursor:pointer;font-size:18px;">−</button>
+          <div style="flex:1;background:var(--inset);padding:14px;text-align:center;"><span class="num" style="font-size:26px;font-weight:700;color:var(--bone);">{{ payAmtDisp }}</span></div>
+          <button onClick="{{ incPay }}" style="background:var(--panel-2);color:var(--bone);border:none;width:46px;cursor:pointer;font-size:18px;">+</button>
+        </div>
+        <div style="background:var(--inset);border:1px solid var(--hairline);padding:12px 14px;margin-bottom:18px;">
+          <span class="mc" style="display:block;margin-bottom:8px;">ROUTE · {{ payHopsLabel }} HOPS</span>
+          {{ payRoute }}
+        </div>
+        <button onClick="{{ confirmPay }}" style="width:100%;background:var(--ember);color:#1a0b06;border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;">SEND SPARK ⚡</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ FUND SHEET ============ -->
+  <sc-if value="{{ fundOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:rgba(6,8,11,.55);z-index:11;" onClick="{{ closeFund }}"></div>
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:400px;background:var(--panel);border:1px solid var(--border);z-index:12;animation:sheetIn .22s cubic-bezier(.2,.8,.2,1);">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--hairline);display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--gold);">◈</span><span class="mc" style="color:var(--bone);font-size:12px;">FUND NODE · {{ fundTargetName }}</span></div>
+        <button onClick="{{ closeFund }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
+      </div>
+      <div style="padding:20px;">
+        <span class="mc" style="display:block;margin-bottom:8px;">AMOUNT FROM TREASURY · CKB</span>
+        <div style="text-align:center;padding:14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:12px;">
+          <span class="num" style="font-size:30px;font-weight:700;color:var(--gold);">{{ fundAmtDisp }}</span>
+        </div>
+        <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:18px;">
+          <sc-for list="{{ fundPresets }}" as="p" hint-placeholder-count="3">
+            <button onClick="{{ p.set }}" style="flex:1;background:{{ p.bg }};color:{{ p.fg }};border:none;padding:11px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.06em;">{{ p.label }}</button>
+          </sc-for>
+        </div>
+        <button onClick="{{ confirmFund }}" style="width:100%;background:var(--gold);color:#1a1206;border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;">FUND ⚒</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ CAPACITY POPOVER ============ -->
+  <sc-if value="{{ capOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:rgba(6,8,11,.55);z-index:11;" onClick="{{ closeCap }}"></div>
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:400px;background:var(--panel);border:1px solid var(--border);z-index:12;animation:sheetIn .22s cubic-bezier(.2,.8,.2,1);">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--hairline);display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--flux);">⇄</span><span class="mc" style="color:var(--bone);font-size:12px;">OPEN CHANNEL · {{ capPair }}</span></div>
+        <button onClick="{{ closeCap }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
+      </div>
+      <div style="padding:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+          <span class="mc">CAPACITY</span><span class="num" style="font-size:22px;font-weight:700;color:var(--bone);">{{ capDisp }} <span style="font-size:12px;color:var(--muted);">CKB</span></span>
+        </div>
+        <input type="range" min="200" max="5000" step="100" value="{{ capacity }}" onInput="{{ setCapRange }}" style="width:100%;margin-bottom:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:18px;">
+          <span class="mc">PUBLIC CHANNEL</span><span style="color:var(--flux);font-family:'Geist Mono',monospace;font-size:12px;">✓ YES</span>
+        </div>
+        <button onClick="{{ confirmCap }}" style="width:100%;background:var(--flux);color:#04120f;border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;">OPEN ⚒</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ CREATE-NETWORK WIZARD ============ -->
+  <sc-if value="{{ isWizard }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:rgba(6,8,11,.45);z-index:11;" onClick="{{ closeWizard }}"></div>
+    <div style="position:absolute;top:0;right:0;bottom:0;width:440px;background:var(--panel);border-left:1px solid var(--border);z-index:12;animation:drawerIn .24s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;">
+      <div style="padding:18px 22px;border-bottom:1px solid var(--hairline);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:15px;">⚒</span><span class="mc" style="color:var(--bone);font-size:12px;">FORGE A NETWORK</span></div>
+          <button onClick="{{ closeWizard }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
+        </div>
+        <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);">
+          <sc-for list="{{ wizSteps }}" as="w" hint-placeholder-count="3">
+            <div style="flex:1;background:{{ w.bg }};padding:9px 0;text-align:center;"><span class="mc" style="color:{{ w.fg }};">{{ w.label }}</span></div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:22px;">
+        <sc-if value="{{ wizStep1 }}" hint-placeholder-val="{{ true }}">
+          <div>
+            <span class="mc" style="display:block;margin-bottom:14px;color:var(--faint);">SELECT A PRESET TOPOLOGY</span>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);">
+              <sc-for list="{{ presets }}" as="p" hint-placeholder-count="6">
+                <button onClick="{{ p.set }}" style="background:{{ p.bg }};border:none;border-top:2px solid {{ p.accent }};padding:16px 14px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:10px;transition:background .14s;">
+                  <div style="height:40px;">{{ p.glyph }}</div>
+                  <div>
+                    <div style="font-weight:700;font-size:14px;color:{{ p.name }};">{{ p.label }}</div>
+                    <div class="mc" style="margin-top:3px;color:var(--faint);">{{ p.desc }}</div>
+                  </div>
+                </button>
+              </sc-for>
+            </div>
+            <sc-if value="{{ showNStepper }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--inset);border:1px solid var(--hairline);">
+                <span class="mc">NODE COUNT · N</span>
+                <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);">
+                  <button onClick="{{ decN }}" style="background:var(--panel-2);color:var(--bone);border:none;width:38px;height:38px;cursor:pointer;font-size:18px;">−</button>
+                  <div style="width:56px;display:flex;align-items:center;justify-content:center;background:var(--inset);"><span class="num" style="font-size:20px;font-weight:700;color:var(--flux);">{{ nodeCount }}</span></div>
+                  <button onClick="{{ incN }}" style="background:var(--panel-2);color:var(--bone);border:none;width:38px;height:38px;cursor:pointer;font-size:18px;">+</button>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ wizStep2 }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <span class="mc" style="display:block;margin-bottom:6px;color:var(--faint);">INITIAL ON-CHAIN FUNDING PER NODE</span>
+            <div style="text-align:center;padding:18px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:12px;">
+              <span class="num" style="font-size:34px;font-weight:700;color:var(--gold);">{{ fundingDisp }}</span>
+              <span class="mc" style="display:block;margin-top:4px;">CKB</span>
+            </div>
+            <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:20px;">
+              <sc-for list="{{ fundingPresets }}" as="f" hint-placeholder-count="3">
+                <button onClick="{{ f.set }}" style="flex:1;background:{{ f.bg }};color:{{ f.fg }};border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;">{{ f.label }}</button>
+              </sc-for>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:12px 14px;background:var(--inset);border:1px solid var(--hairline);">
+              <span class="mc">TREASURY DRAW</span><span class="num" style="font-size:13px;color:var(--gold);">{{ treasuryDraw }} CKB</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ wizStep3 }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <span class="mc" style="display:block;margin-bottom:14px;color:var(--faint);">REVIEW & FORGE</span>
+            <div style="display:flex;flex-direction:column;">
+              <div style="display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--hairline);"><span class="mc">TOPOLOGY</span><span style="font-weight:600;font-size:14px;color:var(--bone);">{{ reviewName }}</span></div>
+              <div style="display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--hairline);"><span class="mc">NODES</span><span class="num" style="font-size:14px;color:var(--flux);">{{ reviewNodes }}</span></div>
+              <div style="display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--hairline);"><span class="mc">CHANNELS</span><span class="num" style="font-size:14px;color:var(--flux);">{{ reviewChannels }}</span></div>
+              <div style="display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--hairline);"><span class="mc">FUNDING / NODE</span><span class="num" style="font-size:14px;color:var(--gold);">{{ fundingDisp }} CKB</span></div>
+              <div style="display:flex;justify-content:space-between;padding:13px 0;"><span class="mc">TOTAL TREASURY</span><span class="num" style="font-size:14px;color:var(--ember);">{{ treasuryDraw }} CKB</span></div>
+            </div>
+            <div style="margin-top:16px;padding:12px 14px;background:var(--inset);border:1px solid var(--hairline);display:flex;align-items:center;gap:8px;">
+              <span style="color:var(--flux);">≡</span><span class="num" style="font-size:11px;color:var(--muted);">forge up {{ reviewCmd }}</span>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="padding:16px 22px;border-top:1px solid var(--hairline);display:flex;gap:1px;background:var(--border);">
+        <button onClick="{{ wizBack }}" style="flex:none;background:var(--panel-2);color:var(--text);border:none;padding:14px 20px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;">← BACK</button>
+        <sc-if value="{{ wizNotLast }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ wizNext }}" style="flex:1;background:var(--bone);color:#0b0e13;border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;">NEXT →</button>
+        </sc-if>
+        <sc-if value="{{ wizLast }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ forgeIt }}" style="flex:1;background:var(--ember);color:#1a0b06;border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;box-shadow:0 0 30px rgba(255,106,61,.3);">FORGE IT ⚒</button>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;}}">
+class Component extends DCLogic {
+  NAMES = ['feynman', 'lorentz', 'galileo', 'curie', 'tesla', 'bohr', 'newton', 'darwin', 'hypatia', 'turing', 'kepler', 'euler'];
+  HUES = ['var(--ember)', 'var(--flux)', 'var(--violet)', 'var(--signal)', 'var(--gold)', 'var(--ember-hot)', 'var(--flux-deep)', 'var(--amber)', 'var(--ember)', 'var(--flux)', 'var(--violet)', 'var(--signal)'];
+  CW = 192; CH = 110; FW = 1440; FH = 900;
+  _paths = {};
+
+  state = {
+    screen: 'floor', mode: 'select', sel: null,
+    payMin: 4, lastCmd: 'forge up trio',
+    events: [
+      { t: '12:04:41', c: 'var(--flux)', msg: 'CHANNEL galileo⇄lorentz → READY' },
+      { t: '12:04:38', c: 'var(--gold)', msg: 'FUNDED galileo 10,000 CKB' },
+    ],
+    paying: false, relayId: null, showResult: false, payAmt: 250,
+    wizardStep: 1, preset: 'trio', nodeCount: 3, funding: 10000,
+    bootStep: 99,
+    payOpen: false, fundOpen: false, fundTarget: null, fundAmt: 10000,
+    capOpen: false, capacity: 1000, capFrom: null, capTo: null,
+    fundFlash: null, igniteId: null, zoomPct: 100,
+    nodes: [], channels: [], chState: {}, balances: {}, onchain: {}, core: { x: 720, y: 440 },
+    name: 'forge-trio', payFrom: null, payTo: null,
+  };
+
+  constructor(props) {
+    super(props);
+    const t = this.build('trio', 3, 10000);
+    Object.assign(this.state, t);
+    this._view = this.computeFit();
+  }
+
+  // ---------------- topology builder ----------------
+  mkPub(i) { const h = '0123456789abcdef'; return '0x0' + (3 + i % 9) + h[(i * 5 + 2) % 16] + h[(i * 7 + 1) % 16] + (i % 10) + '…' + h[(i * 11 + 3) % 16] + h[(i * 3 + 5) % 16] + (i % 9) + h[(i * 13) % 16]; }
+  mkHash(j) { const pad = (n) => (n % 65536).toString(16).padStart(4, '0'); return '0x' + pad(j * 2749 + 5231) + '…' + pad(j * 911 + 77); }
+
+  build(preset, nRaw, funding) {
+    const minMap = { duo: 2, trio: 3, line: 2, ring: 3, star: 3, hub: 3 };
+    const n = preset === 'duo' ? 2 : preset === 'trio' ? 3 : Math.max(minMap[preset] || 2, Math.min(10, nRaw || 3));
+    const cx = 720, scale = n <= 4 ? 1 : n <= 6 ? 0.85 : n <= 8 ? 0.74 : 0.64, cw = this.CW * scale;
+    let pos = [], core;
+    if (preset === 'line' || preset === 'duo' || preset === 'trio') {
+      const cy = 448, amp = n > 6 ? 24 : 44, gap = Math.min(262, Math.max(cw * 1.16, 1000 / Math.max(1, n - 1)));
+      const x0 = cx - (n - 1) * gap / 2;
+      for (let i = 0; i < n; i++) pos.push({ x: x0 + i * gap, y: cy + (i % 2 ? amp : -amp) });
+      core = { x: cx, y: cy + 178 };
+    } else if (preset === 'ring') {
+      const cy = 430, R = Math.max(178, Math.min(206, (cw * 1.16) / (2 * Math.sin(Math.PI / n))));
+      for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + i * 2 * Math.PI / n; pos.push({ x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) }); }
+      core = { x: cx, y: cy };
+    } else {
+      const cy = 430, ringN = n - 1, R = Math.max(178, Math.min(206, (cw * 1.16) / (2 * Math.sin(Math.PI / Math.max(2, ringN)))));
+      pos.push({ x: cx, y: cy });
+      const start = -Math.PI / 2 + Math.PI / ringN;
+      for (let i = 0; i < ringN; i++) { const a = start + i * 2 * Math.PI / ringN; pos.push({ x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) }); }
+      core = { x: Math.max(300, cx - R - 120), y: cy };
+    }
+    const nodes = pos.map((p, i) => ({ id: 'n' + i, name: this.NAMES[i % this.NAMES.length], port: 8300 + i, p2p: 8228 + i, x: Math.round(p.x), y: Math.round(p.y), hue: this.HUES[i % this.HUES.length], pubkey: this.mkPub(i) }));
+    const pairs = [];
+    if (preset === 'duo') pairs.push([0, 1]);
+    else if (preset === 'trio') pairs.push([0, 1], [1, 2]);
+    else if (preset === 'line') for (let i = 0; i < n - 1; i++) pairs.push([i, i + 1]);
+    else if (preset === 'ring') { for (let i = 0; i < n - 1; i++) pairs.push([i, i + 1]); if (n > 2) pairs.push([n - 1, 0]); }
+    else for (let i = 1; i < n; i++) pairs.push([0, i]);
+    const channels = pairs.map((pr, j) => ({ id: 'c' + j, from: nodes[pr[0]].id, to: nodes[pr[1]].id, cap: 1000, hash: this.mkHash(j) }));
+    const chState = {}, balances = {}, onchain = {};
+    channels.forEach((c, j) => { chState[c.id] = 'ready'; balances[c.id] = Math.round(1000 * (0.5 + 0.17 * Math.sin(j * 1.7 + 0.4))); });
+    nodes.forEach((nd, i) => { onchain[nd.id] = (funding || 10000) - 150 - i * 40; });
+    const dp = this._diameter(nodes, channels);
+    const name = 'forge-' + preset + (['line', 'ring', 'star', 'hub'].includes(preset) ? (':' + n) : '');
+    return { nodes, channels, chState, balances, onchain, core, name, payFrom: dp[0], payTo: dp[1] };
+  }
+
+  // ---------------- graph helpers ----------------
+  node(id) { return this.state.nodes.find(n => n.id === id); }
+  fmt(n) { return (n || 0).toLocaleString('en-US'); }
+  now() { return new Date().toTimeString().slice(0, 8); }
+  degree(id) { return this.state.channels.filter(c => c.from === id || c.to === id).length; }
+  sz() { const n = this.state.nodes.length; return n <= 4 ? 1 : n <= 6 ? 0.85 : n <= 8 ? 0.74 : 0.64; }
+
+  _adj(nodes, channels) { const m = {}; nodes.forEach(n => m[n.id] = []); channels.forEach(c => { if (m[c.from]) m[c.from].push({ to: c.to, ch: c.id }); if (m[c.to]) m[c.to].push({ to: c.from, ch: c.id }); }); return m; }
+  _bfs(nodes, channels, u) { const m = this._adj(nodes, channels), prev = {}; prev[u] = null; const q = [u]; while (q.length) { const x = q.shift(); for (const e of m[x]) if (!(e.to in prev)) { prev[e.to] = { node: x, ch: e.ch }; q.push(e.to); } } return prev; }
+  _pathNodes(nodes, channels, u, v) { const prev = this._bfs(nodes, channels, u); if (!(v in prev)) return [u]; const arr = [v]; let c = v; while (prev[c]) { arr.unshift(prev[c].node); c = prev[c].node; } return arr; }
+  _routeHops(nodes, channels, u, v) { const prev = this._bfs(nodes, channels, u); if (!(v in prev)) return []; const hops = []; let c = v; while (prev[c]) { const p = prev[c], ch = channels.find(x => x.id === p.ch); hops.unshift({ chId: p.ch, reversed: ch.from !== p.node }); c = p.node; } return hops; }
+  _diameter(nodes, channels) { let best = [nodes[0].id, nodes[nodes.length - 1].id], bd = -1; nodes.forEach(u => { const prev = this._bfs(nodes, channels, u.id); nodes.forEach(v => { if (v.id === u.id || !(v.id in prev)) return; let d = 0, c = v.id; while (prev[c]) { d++; c = prev[c].node; } if (d > bd) { bd = d; best = [u.id, v.id]; } }); }); return best; }
+  routeHops(u, v) { return this._routeHops(this.state.nodes, this.state.channels, u, v); }
+  pathNodes(u, v) { return this._pathNodes(this.state.nodes, this.state.channels, u, v); }
+
+  // ---------------- selection / scene ----------------
+  select(type, id) { this.setState({ sel: { type, id } }); }
+  clearSel = () => this.setState({ sel: null });
+  setMode = (id) => this.setState({ mode: id });
+  goEmpty = () => { clearInterval(this._boot); this.setState({ screen: 'empty', sel: null, payOpen: false, fundOpen: false, capOpen: false }); };
+  goWizard = () => { clearInterval(this._boot); this.setState({ screen: 'wizard', wizardStep: 1, sel: null }); };
+  enterWizard = () => this.goWizard();
+  closeWizard = () => this.setState({ screen: 'empty' });
+  goForging = () => this.startForge();
+  goFloor = () => { clearInterval(this._boot); this.setState(s => ({ screen: 'floor', bootStep: s.nodes.length + 1 + s.channels.length, chState: Object.fromEntries(s.channels.map(c => [c.id, 'ready'])) })); };
+
+  // ---------------- wizard ----------------
+  setPreset = (p) => { const nc = p === 'duo' ? 2 : p === 'trio' ? 3 : ['hub', 'star'].includes(p) ? 6 : p === 'ring' ? 6 : 5; this.setState({ preset: p, nodeCount: nc }); };
+  incN = () => this.setState(s => ({ nodeCount: Math.min(10, s.nodeCount + 1) }));
+  decN = () => this.setState(s => ({ nodeCount: Math.max(2, s.nodeCount - 1) }));
+  setFunding = (v) => this.setState({ funding: v });
+  wizNext = () => this.setState(s => ({ wizardStep: Math.min(3, s.wizardStep + 1) }));
+  wizBack = () => this.setState(s => (s.wizardStep === 1 ? { screen: 'empty' } : { wizardStep: s.wizardStep - 1 }));
+  forgeIt = () => this.startForge();
+  effN() { const p = this.state.preset; return p === 'duo' ? 2 : p === 'trio' ? 3 : this.state.nodeCount; }
+
+  startForge = () => {
+    clearInterval(this._boot);
+    const t = this.build(this.state.preset, this.effN(), this.state.funding);
+    this.setState({ screen: 'forging', bootStep: 0, sel: null, ...t, chState: Object.fromEntries(t.channels.map(c => [c.id, 'pending'])) });
+    const total = t.nodes.length + 1 + t.channels.length;
+    const iv = Math.max(240, Math.min(600, Math.round(4600 / total)));
+    this._boot = setInterval(() => {
+      this.setState(st => {
+        const ns = st.bootStep + 1;
+        if (ns >= total) { clearInterval(this._boot); setTimeout(() => this.setState(s => ({ screen: 'floor', chState: Object.fromEntries(s.channels.map(c => [c.id, 'ready'])) })), 700); }
+        return { bootStep: Math.min(total, ns) };
+      });
+    }, iv);
+  };
+
+  // ---------------- pay ----------------
+  openPay = () => this.setState({ payOpen: true, sel: null });
+  closePay = () => this.setState({ payOpen: false });
+  incPay = () => this.setState(s => ({ payAmt: Math.min(900, s.payAmt + 50) }));
+  decPay = () => this.setState(s => ({ payAmt: Math.max(50, s.payAmt - 50) }));
+  confirmPay = () => { const f = this.node(this.state.payFrom), t = this.node(this.state.payTo); this.setState({ payOpen: false, lastCmd: 'forge pay ' + this.state.name.replace('forge-', '') + ' ' + (f ? f.name : '') + ' ' + (t ? t.name : '') + ' ' + this.state.payAmt }); this.startPayment(); };
+
+  startPayment = () => {
+    if (this.state.paying) return;
+    const { payFrom, payTo } = this.state;
+    const hops = this.routeHops(payFrom, payTo);
+    if (!hops.length) return;
+    const paths = hops.map(hp => this._paths[hp.chId]);
+    if (paths.some(p => !p)) return;
+    const lens = paths.map(p => p.getTotalLength());
+    const total = lens.reduce((a, b) => a + b, 0);
+    const pnodes = this.pathNodes(payFrom, payTo);
+    const amt = this.state.payAmt;
+    this.setState({ paying: true, sel: null, relayId: null, showResult: false });
+    this._t0 = performance.now();
+    const DUR = Math.min(2600, 600 + hops.length * 470);
+    const step = (now) => {
+      const t = Math.min(1, (now - this._t0) / DUR);
+      let dist = t * total, k = 0;
+      while (k < lens.length - 1 && dist > lens[k]) { dist -= lens[k]; k++; }
+      const hp = hops[k], path = paths[k], L = lens[k], dd = Math.max(0, Math.min(L, dist));
+      const pt = hp.reversed ? path.getPointAtLength(L - dd) : path.getPointAtLength(dd);
+      if (this._spark && pt) { this._spark.setAttribute('cx', pt.x); this._spark.setAttribute('cy', pt.y); this._spark.setAttribute('opacity', '1'); }
+      if (this._sparkCore && pt) { this._sparkCore.setAttribute('cx', pt.x); this._sparkCore.setAttribute('cy', pt.y); this._sparkCore.setAttribute('opacity', '1'); }
+      if (k >= 1 && pnodes[k] && this.state.relayId !== pnodes[k]) this.setState({ relayId: pnodes[k] });
+      if (t < 1) this._raf = requestAnimationFrame(step); else this.finishPayment(amt, hops);
+    };
+    this._raf = requestAnimationFrame(step);
+  };
+
+  finishPayment(amt, hops) {
+    if (this._spark) this._spark.setAttribute('opacity', '0');
+    if (this._sparkCore) this._sparkCore.setAttribute('opacity', '0');
+    this.setState(st => {
+      const b = { ...st.balances };
+      hops.forEach(hp => { const ch = st.channels.find(c => c.id === hp.chId); const cur = b[hp.chId] != null ? b[hp.chId] : ch.cap / 2; b[hp.chId] = hp.reversed ? Math.min(ch.cap - 60, cur + amt) : Math.max(60, cur - amt); });
+      const f = this.node(st.payFrom), t = this.node(st.payTo);
+      return { paying: false, relayId: null, showResult: true, balances: b, payMin: st.payMin + 1, events: [{ t: this.now(), c: 'var(--ember)', msg: 'PAYMENT ' + (f ? f.name : '') + '→' + (t ? t.name : '') + ' SUCCESS ' + amt + ' CKB' }, ...st.events].slice(0, 2) };
+    });
+    clearTimeout(this._resT); this._resT = setTimeout(() => this.setState({ showResult: false }), 2200);
+  }
+
+  // ---------------- fund ----------------
+  openFund = () => this.setState(s => ({ fundOpen: true, fundTarget: (s.sel && s.sel.type === 'node') ? s.sel.id : s.nodes[0].id }));
+  closeFund = () => this.setState({ fundOpen: false });
+  setFundAmt = (v) => this.setState({ fundAmt: v });
+  confirmFund = () => {
+    const { fundTarget, fundAmt } = this.state, tn = this.node(fundTarget);
+    this.setState(st => ({ fundOpen: false, onchain: { ...st.onchain, [fundTarget]: st.onchain[fundTarget] + fundAmt }, fundFlash: { id: fundTarget, amt: fundAmt }, lastCmd: 'forge fund ' + st.name.replace('forge-', '') + ' ' + tn.name + ' ' + fundAmt, events: [{ t: this.now(), c: 'var(--gold)', msg: 'FUNDED ' + tn.name + ' +' + this.fmt(fundAmt) + ' CKB' }, ...st.events].slice(0, 2) }));
+    clearTimeout(this._ff); this._ff = setTimeout(() => this.setState({ fundFlash: null }), 2200);
+  };
+
+  // ---------------- capacity / open channel ----------------
+  capTarget(fromId) {
+    const conn = new Set(); this.state.channels.forEach(c => { if (c.from === fromId) conn.add(c.to); if (c.to === fromId) conn.add(c.from); });
+    const f = this.node(fromId), cands = this.state.nodes.filter(n => n.id !== fromId && !conn.has(n.id));
+    if (!cands.length) return null;
+    cands.sort((a, b) => Math.hypot(b.x - f.x, b.y - f.y) - Math.hypot(a.x - f.x, a.y - f.y));
+    return cands[0].id;
+  }
+  openCap = () => { const fromId = (this.state.sel && this.state.sel.type === 'node') ? this.state.sel.id : this.state.nodes[0].id; this.setState({ capOpen: true, capacity: 1000, capFrom: fromId, capTo: this.capTarget(fromId) }); };
+  closeCap = () => this.setState({ capOpen: false });
+  setCapRange = (e) => this.setState({ capacity: parseInt(e.target.value, 10) });
+  confirmCap = () => {
+    if (!this.state.capTo) { this.setState({ capOpen: false }); return; }
+    const id = 'x' + (this._cc = (this._cc || 0) + 1), cap = this.state.capacity;
+    const fn = this.node(this.state.capFrom), tn = this.node(this.state.capTo);
+    const ch = { id, from: this.state.capFrom, to: this.state.capTo, cap, hash: this.mkHash(90 + this._cc) };
+    this.setState(st => ({ capOpen: false, sel: null, channels: [...st.channels, ch], chState: { ...st.chState, [id]: 'pending' }, balances: { ...st.balances, [id]: Math.round(cap / 2) }, lastCmd: 'forge channel open ' + st.name.replace('forge-', '') + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' NEGOTIATING' }, ...st.events].slice(0, 2) }));
+    clearTimeout(this._ig);
+    this._ig = setTimeout(() => { this.setState(st => ({ chState: { ...st.chState, [id]: 'ready' }, igniteId: id, events: [{ t: this.now(), c: 'var(--flux)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' → READY' }, ...st.events].slice(0, 2) })); setTimeout(() => this.setState({ igniteId: null }), 700); }, 1700);
+  };
+
+  componentWillUnmount() { cancelAnimationFrame(this._raf); clearInterval(this._boot); window.removeEventListener('resize', this._onResize); window.removeEventListener('wheel', this._onWheel); window.removeEventListener('keydown', this._onKey); }
+  componentDidMount() {
+    if (window.__FORGE__ && window.__FORGE__.net) {
+      var F = this;
+      var pm = window.__FORGE__.net.match(/^[a-z]+/);
+      var preset = pm ? pm[0] : 'line';
+      if (['duo','trio','line','ring','star','hub'].indexOf(preset) < 0) preset = 'line';
+      var mapLive = function (v) {
+        var n = v.nodes.length;
+        var g = F.build(preset, n, 10000);
+        var idOf = {};
+        v.nodes.forEach(function (nd, i) { idOf[nd.name] = 'n' + i; });
+        var nodes = v.nodes.map(function (nd, i) {
+          return Object.assign({}, g.nodes[i] || {}, { id: 'n' + i, name: nd.name, port: nd.rpcHostPort, pubkey: nd.pubkey, dead: nd.status !== 'running' });
+        });
+        var channels = v.channels.map(function (c, j) {
+          return Object.assign({}, g.channels[j] || {}, { id: 'c' + j, from: idOf[c.from], to: idOf[c.to], cap: c.capacityCkb });
+        });
+        var chState = {}, balances = {};
+        v.channels.forEach(function (c, j) {
+          chState['c' + j] = c.state === 'ChannelReady' ? 'ready' : (c.state === 'unknown' ? 'dead' : 'pending');
+          balances['c' + j] = c.localCkb != null ? c.localCkb : Math.round(c.capacityCkb / 2);
+        });
+        var onchain = {};
+        v.nodes.forEach(function (nd, i) { onchain['n' + i] = nd.onchainCkb != null ? nd.onchainCkb : 10000; });
+        return { screen: 'floor', nodes: nodes, channels: channels, chState: chState, balances: balances, onchain: onchain, core: g.core, name: 'forge-' + v.net };
+      };
+      var tick = function () {
+        fetch('/api/state').then(function (r) { return r.json(); }).then(function (v) {
+          if (v && v.nodes && v.nodes.length) F.setState(mapLive(v), function () {
+            if (!F._forgeFitted) { F._forgeFitted = true; if (F.fitView) F.fitView(); }
+          });
+        }).catch(function () {});
+      };
+      tick();
+      F._forgePoll = setInterval(tick, 2500);
+    }
+
+    if (!this._view) this._view = this.computeFit();
+    this.applyView(); this.setZoomPct();
+    this._onResize = () => this.fitView();
+    this._onWheel = (e) => this.handleWheel(e);
+    this._onKey = (e) => this.handleKey(e);
+    window.addEventListener('resize', this._onResize);
+    window.addEventListener('wheel', this._onWheel, { passive: false });
+    window.addEventListener('keydown', this._onKey);
+  }
+
+  // ---------------- canvas pan / zoom ----------------
+  computeFit() { const W = window.innerWidth, H = window.innerHeight, k = Math.min(W / this.FW, H / this.FH) * 0.94; return { x: (W - this.FW * k) / 2, y: (H - this.FH * k) / 2, k }; }
+  applyView() { if (this._floorInner) { const v = this._view; this._floorInner.style.transform = 'translate(' + v.x + 'px,' + v.y + 'px) scale(' + v.k + ')'; } if (this._floorEl) this._floorEl.style.cursor = this._pan ? 'grabbing' : 'grab'; }
+  setZoomPct() { clearTimeout(this._zt); this._zt = setTimeout(() => this.setState({ zoomPct: Math.round(this._view.k * 100) }), 120); }
+  fitView = () => { this._view = this.computeFit(); this.applyView(); this.setZoomPct(); };
+  reset100 = () => { const W = window.innerWidth, H = window.innerHeight; this._view = { x: (W - this.FW) / 2, y: (H - this.FH) / 2, k: 1 }; this.applyView(); this.setZoomPct(); };
+  zoomAt(cx, cy, factor) { const v = this._view, nk = Math.min(3, Math.max(0.2, v.k * factor)); const wx = (cx - v.x) / v.k, wy = (cy - v.y) / v.k; v.x = cx - wx * nk; v.y = cy - wy * nk; v.k = nk; this.applyView(); this.setZoomPct(); }
+  zoomIn = () => { const r = this._floorEl.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 1.25); };
+  zoomOut = () => { const r = this._floorEl.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 0.8); };
+  handleWheel(e) { if (!e.target || !e.target.closest || !e.target.closest('[data-floor]')) return; e.preventDefault(); const r = this._floorEl.getBoundingClientRect(); this.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0016)); }
+  handleKey(e) { if (!(e.metaKey || e.ctrlKey)) return; if (e.key === '0') { e.preventDefault(); this.fitView(); } else if (e.key === '1') { e.preventDefault(); this.reset100(); } }
+  onPointerDown = (e) => { if (e.target.closest && (e.target.closest('[data-node]') || e.target.closest('[data-conduit]'))) return; this._pan = { x: e.clientX, y: e.clientY, vx: this._view.x, vy: this._view.y, moved: false }; try { this._floorEl.setPointerCapture(e.pointerId); } catch (_) {} this.applyView(); };
+  onPointerMove = (e) => { if (!this._pan) return; const dx = e.clientX - this._pan.x, dy = e.clientY - this._pan.y; if (Math.abs(dx) + Math.abs(dy) > 3) this._pan.moved = true; this._view.x = this._pan.vx + dx; this._view.y = this._pan.vy + dy; this.applyView(); };
+  onPointerUp = (e) => { const moved = this._pan && this._pan.moved; this._pan = null; try { this._floorEl.releasePointerCapture(e.pointerId); } catch (_) {} this.applyView(); if (!moved && this.state.sel) this.clearSel(); };
+  wrapFloor(kids) {
+    const h = React.createElement, v = this._view || { x: 0, y: 0, k: 1 };
+    return h('div', { 'data-floor': '1', ref: el => this._floorEl = el, onPointerDown: this.onPointerDown, onPointerMove: this.onPointerMove, onPointerUp: this.onPointerUp, onPointerLeave: this.onPointerUp, style: { position: 'absolute', inset: 0, overflow: 'hidden', cursor: 'grab', touchAction: 'none' } },
+      h('div', { ref: el => this._floorInner = el, style: { position: 'absolute', left: 0, top: 0, width: this.FW, height: this.FH, transformOrigin: '0 0', transform: 'translate(' + v.x + 'px,' + v.y + 'px) scale(' + v.k + ')' } }, kids));
+  }
+
+  // ---------------- routing geometry ----------------
+  sideOf(node, other) { const dx = other.x - node.x, dy = other.y - node.y; return Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'bottom' : 'top'); }
+  edgeOffset(node, other, chId) {
+    const side = this.sideOf(node, other);
+    const sibs = this.state.channels.filter(c => { const oid = c.from === node.id ? c.to : (c.to === node.id ? c.from : null); return oid && this.node(oid) && this.sideOf(node, this.node(oid)) === side; });
+    if (sibs.length <= 1) return 0;
+    const idx = sibs.findIndex(c => c.id === chId), s = this.sz();
+    const span = ((side === 'left' || side === 'right') ? this.CH : this.CW) * s;
+    const gap = Math.min(30 * s + 4, span * 0.64 / sibs.length);
+    return (idx - (sibs.length - 1) / 2) * gap;
+  }
+  port(n, side, off) {
+    off = off || 0; const s = this.sz(), hw = this.CW * s / 2, hh = this.CH * s / 2;
+    if (side === 'left') return { x: n.x - hw, y: n.y + off, d: [-1, 0] };
+    if (side === 'right') return { x: n.x + hw, y: n.y + off, d: [1, 0] };
+    if (side === 'top') return { x: n.x + off, y: n.y - hh, d: [0, -1] };
+    return { x: n.x + off, y: n.y + hh, d: [0, 1] };
+  }
+  route(A, B, offA, offB) {
+    const dx = B.x - A.x, dy = B.y - A.y, S = Math.max(20, 30 * this.sz()), H = Math.abs(dx) >= Math.abs(dy);
+    const pA = H ? this.port(A, dx > 0 ? 'right' : 'left', offA) : this.port(A, dy > 0 ? 'bottom' : 'top', offA);
+    const pB = H ? this.port(B, dx > 0 ? 'left' : 'right', offB) : this.port(B, dy > 0 ? 'top' : 'bottom', offB);
+    const s1 = { x: pA.x + pA.d[0] * S, y: pA.y + pA.d[1] * S };
+    const s2 = { x: pB.x + pB.d[0] * S, y: pB.y + pB.d[1] * S };
+    const pts = [{ x: pA.x, y: pA.y }, s1];
+    if (H) { const mx = (s1.x + s2.x) / 2; pts.push({ x: mx, y: s1.y }, { x: mx, y: s2.y }); }
+    else { const my = (s1.y + s2.y) / 2; pts.push({ x: s1.x, y: my }, { x: s2.x, y: my }); }
+    pts.push(s2, { x: pB.x, y: pB.y });
+    const out = [pts[0]];
+    for (let i = 1; i < pts.length; i++) { const p = pts[i], q = out[out.length - 1]; if (Math.abs(p.x - q.x) > 0.5 || Math.abs(p.y - q.y) > 0.5) out.push(p); }
+    return out;
+  }
+  roundedPath(pts, r) {
+    if (pts.length < 2) return '';
+    let d = 'M ' + pts[0].x + ' ' + pts[0].y;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1], p1 = pts[i], p2 = pts[i + 1];
+      const v1 = { x: p1.x - p0.x, y: p1.y - p0.y }, v2 = { x: p2.x - p1.x, y: p2.y - p1.y };
+      const l1 = Math.hypot(v1.x, v1.y), l2 = Math.hypot(v2.x, v2.y);
+      if (l1 < 1 || l2 < 1) { d += ' L ' + p1.x + ' ' + p1.y; continue; }
+      const rr = Math.min(r, l1 / 2, l2 / 2);
+      const a = { x: p1.x - v1.x / l1 * rr, y: p1.y - v1.y / l1 * rr }, b = { x: p1.x + v2.x / l2 * rr, y: p1.y + v2.y / l2 * rr };
+      d += ' L ' + a.x.toFixed(1) + ' ' + a.y.toFixed(1) + ' Q ' + p1.x + ' ' + p1.y + ' ' + b.x.toFixed(1) + ' ' + b.y.toFixed(1);
+    }
+    const last = pts[pts.length - 1];
+    return d + ' L ' + last.x + ' ' + last.y;
+  }
+  polyLen(pts) { let t = 0; for (let i = 0; i < pts.length - 1; i++) t += Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y); return t; }
+  polyPointAt(pts, frac) {
+    const total = this.polyLen(pts); let d = frac * total;
+    for (let i = 0; i < pts.length - 1; i++) { const seg = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y); if (d <= seg || i === pts.length - 2) { const tt = seg ? d / seg : 0; return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * tt, y: pts[i].y + (pts[i + 1].y - pts[i].y) * tt }; } d -= seg; }
+    return pts[pts.length - 1];
+  }
+
+  // ---------------- visual state ----------------
+  nodeState(id) {
+    if (this.state.screen !== 'forging') return 'running';
+    const i = this.state.nodes.findIndex(n => n.id === id), bs = this.state.bootStep;
+    if (bs > i + 1) return 'running';
+    if (bs === i + 1) return 'boot';
+    return 'cold';
+  }
+  conduitState(ch) {
+    if (this.state.screen === 'forging') {
+      const N = this.state.nodes.length, j = this.state.channels.findIndex(c => c.id === ch.id), bs = this.state.bootStep;
+      if (bs >= N + 2 + j) return 'ready';
+      if (bs === N + 1 + j) return 'pending';
+      return 'hidden';
+    }
+    return this.state.chState[ch.id] || 'ready';
+  }
+
+  liquidityBar() {
+    const ch = this.state.sel && this.state.channels.find(c => c.id === this.state.sel.id);
+    if (!ch) return null;
+    const f = (this.state.balances[ch.id] || 0) / ch.cap, h = React.createElement;
+    return h('div', { style: { position: 'relative', height: 20, background: 'var(--inset)', border: '1px solid var(--hairline)', display: 'flex' } },
+      h('div', { style: { width: (f * 100) + '%', background: 'linear-gradient(90deg,var(--ember-deep),var(--ember))', transition: 'width .6s cubic-bezier(.2,.8,.2,1)' } }),
+      h('div', { style: { flex: 1, background: 'linear-gradient(90deg,var(--flux),var(--flux-deep))' } }),
+      h('div', { style: { position: 'absolute', top: '50%', left: 'calc(' + (f * 100) + '% - 6px)', width: 12, height: 12, background: 'var(--bone)', transform: 'translateY(-50%) rotate(45deg)', boxShadow: '0 0 10px var(--ember-glow)', transition: 'left .6s cubic-bezier(.2,.8,.2,1)' } }));
+  }
+
+  glyph(id) {
+    const h = React.createElement, s = { width: 64, height: 40, overflow: 'visible' };
+    const dot = (x, y, c, r) => h('circle', { key: 'd' + x + '-' + y, cx: x, cy: y, r: r || 3.2, fill: c || 'var(--muted)' });
+    const ln = (x1, y1, x2, y2, k) => h('line', { key: 'l' + k, x1, y1, x2, y2, stroke: 'var(--faint)', strokeWidth: 1.4 });
+    if (id === 'duo') return h('svg', { style: s }, ln(18, 20, 46, 20, 0), dot(18, 20, 'var(--ember)'), dot(46, 20, 'var(--flux)'));
+    if (id === 'trio') return h('svg', { style: s }, ln(14, 28, 32, 10, 0), ln(32, 10, 50, 28, 1), dot(14, 28, 'var(--ember)'), dot(32, 10, 'var(--flux)'), dot(50, 28, 'var(--violet)'));
+    if (id === 'hub') return h('svg', { style: s }, ln(32, 20, 12, 8, 0), ln(32, 20, 52, 8, 1), ln(32, 20, 12, 32, 2), ln(32, 20, 52, 32, 3), dot(12, 8, 'var(--ember)'), dot(52, 8, 'var(--flux)'), dot(12, 32, 'var(--violet)'), dot(52, 32, 'var(--signal)'), dot(32, 20, 'var(--gold)', 4.5));
+    if (id === 'line') return h('svg', { style: s }, ln(10, 20, 54, 20, 0), dot(10, 20, 'var(--ember)'), dot(25, 20, 'var(--flux)'), dot(40, 20, 'var(--violet)'), dot(54, 20, 'var(--signal)'));
+    if (id === 'ring') return h('svg', { style: s }, h('circle', { cx: 32, cy: 20, r: 15, fill: 'none', stroke: 'var(--faint)', strokeWidth: 1.4 }), dot(32, 5, 'var(--ember)'), dot(47, 20, 'var(--flux)'), dot(32, 35, 'var(--violet)'), dot(17, 20, 'var(--signal)'));
+    return h('svg', { style: s }, ln(32, 20, 32, 6, 0), ln(32, 20, 50, 30, 1), ln(32, 20, 14, 30, 2), dot(32, 6, 'var(--ember)'), dot(50, 30, 'var(--flux)'), dot(14, 30, 'var(--violet)'), dot(32, 20, 'var(--gold)', 4));
+  }
+
+  // ---------------- node cell ----------------
+  nodeCell(n) {
+    const h = React.createElement, s = this.sz(), st = this.nodeState(n.id), sel = this.state.sel;
+    const isSel = sel && sel.type === 'node' && sel.id === n.id;
+    const relay = this.state.paying && this.state.relayId === n.id;
+    const onchain = this.state.onchain[n.id], deg = this.degree(n.id);
+    const cfg = st === 'running' ? { dot: n.hue, band: n.hue, char: '●', txt: 'RUNNING', gray: false, pulse: true }
+      : st === 'boot' ? { dot: 'var(--amber)', band: 'var(--amber)', char: '◍', txt: 'BOOTING', gray: false, pulse: true }
+      : { dot: 'var(--faint)', band: 'var(--faint)', char: '○', txt: 'COLD', gray: true, pulse: false };
+    const border = isSel ? 'var(--ember)' : relay ? 'var(--ember-hot)' : st === 'boot' ? 'var(--amber)' : 'var(--border)';
+    const gaugeFrac = Math.min(1, onchain / 14000);
+    return h('div', { key: n.id, 'data-node': '1', onClick: (e) => { e.stopPropagation(); if (this.state.screen === 'floor') this.select('node', n.id); }, style: { position: 'absolute', left: n.x - this.CW / 2, top: n.y - this.CH / 2, width: this.CW, height: this.CH, transform: 'scale(' + s + ')', transformOrigin: 'center', cursor: 'pointer', zIndex: isSel ? 6 : 4, filter: cfg.gray ? 'grayscale(1) brightness(.7)' : 'none', opacity: cfg.gray ? 0.72 : 1, transition: 'opacity .3s,filter .3s' } },
+      isSel && h('div', { key: 'plate', style: { position: 'absolute', left: 8, top: 8, right: -8, bottom: -8, background: 'var(--ember)', zIndex: 0 } }),
+      h('div', { style: { position: 'relative', zIndex: 1, width: '100%', height: '100%', background: 'var(--panel-2)', border: '1px solid ' + border, boxShadow: relay ? '0 0 24px var(--ember)' : isSel ? '0 0 0 1px var(--ember)' : 'none', display: 'flex', flexDirection: 'column', transition: 'box-shadow .2s,border-color .2s', animation: st === 'boot' ? 'bootFlick 1s ease-in-out infinite' : 'none' } },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid var(--hairline)' } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+            h('span', { style: { fontSize: 9, color: cfg.dot, animation: cfg.pulse ? 'pulseDot 1.6s ease-in-out infinite' : 'none' } }, cfg.char),
+            h('span', { className: 'mc', style: { color: cfg.band } }, cfg.txt)),
+          h('span', { className: 'num', style: { fontSize: 11, color: 'var(--ember)' } }, ':' + n.port)),
+        h('div', { style: { padding: '7px 10px', flex: 1 } },
+          h('div', { style: { fontSize: 15, fontWeight: 700, color: 'var(--bone)', letterSpacing: '-.01em', lineHeight: 1 } }, n.name),
+          h('div', { className: 'num', style: { fontSize: 10, color: 'var(--muted)', marginTop: 3 } }, n.pubkey),
+          h('div', { style: { marginTop: 9 } },
+            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 } },
+              h('span', { className: 'num', style: { fontSize: 12, color: 'var(--gold)' } }, this.fmt(onchain)),
+              h('span', { className: 'mc', style: { fontSize: 9 } }, 'CKB')),
+            h('div', { style: { height: 5, background: 'var(--inset)', border: '1px solid var(--hairline)' } },
+              h('div', { style: { height: '100%', width: (gaugeFrac * 100) + '%', background: 'linear-gradient(90deg,var(--gold),var(--ember))', transition: 'width .6s cubic-bezier(.2,.8,.2,1)' } })))),
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '4px 10px', borderTop: '1px solid var(--hairline)' } },
+          h('span', { className: 'mc' }, 'CH ×' + deg),
+          h('span', { className: 'mc' }, 'CAP ' + this.fmt(deg * 1000)))));
+  }
+
+  // ---------------- conduit ----------------
+  conduit(ch) {
+    const h = React.createElement, state = this.conduitState(ch);
+    if (state === 'hidden') return null;
+    const a = this.node(ch.from), b = this.node(ch.to);
+    if (!a || !b) return null;
+    const oa = this.edgeOffset(a, b, ch.id), ob = this.edgeOffset(b, a, ch.id);
+    const pts = this.route(a, b, oa, ob), d = this.roundedPath(pts, 16), len = this.polyLen(pts);
+    const width = 4 + Math.log2(ch.cap / 250 + 1) * 1.5;
+    const paying = this.state.paying, sel = this.state.sel;
+    const onRoute = paying ? this.routeHops(this.state.payFrom, this.state.payTo).some(hp => hp.chId === ch.id) : false;
+    let dim = 1;
+    if (paying) dim = onRoute ? 1 : 0.22;
+    else if (sel && sel.type === 'channel' && sel.id !== ch.id) dim = 0.4;
+    const onClick = () => { if (this.state.screen === 'floor') this.select('channel', ch.id); };
+    const setRef = (el) => { this._paths[ch.id] = el; };
+
+    if (state === 'pending') {
+      const mid = this.polyPointAt(pts, 0.5);
+      return h('g', { key: ch.id, 'data-conduit': '1', onClick, style: { cursor: 'pointer' } },
+        h('path', { d, stroke: 'transparent', strokeWidth: width + 16, fill: 'none' }),
+        h('path', { d, stroke: 'var(--amber)', strokeWidth: width, fill: 'none', strokeDasharray: '10 9', strokeLinecap: 'round', opacity: 0.9, style: { animation: 'march 1s linear infinite' }, ref: setRef }),
+        h('rect', { x: mid.x - 24, y: mid.y - 9, width: 48, height: 16, fill: 'var(--base)', stroke: 'var(--amber)', strokeWidth: 0.75, opacity: 0.92 }),
+        h('text', { x: mid.x, y: mid.y + 2, fill: 'var(--amber)', fontSize: 8, fontFamily: 'Geist Mono,monospace', letterSpacing: '1.4', textAnchor: 'middle' }, 'OPENING'));
+    }
+
+    const f = (this.state.balances[ch.id] != null ? this.state.balances[ch.id] : ch.cap / 2) / ch.cap;
+    const emberLen = len * f, bead = this.polyPointAt(pts, f), pid = 'p-' + ch.id, igniting = this.state.igniteId === ch.id;
+    return h('g', { key: ch.id, 'data-conduit': '1', onClick, style: { cursor: 'pointer' }, opacity: dim },
+      h('path', { d, stroke: 'var(--flux)', strokeWidth: width + 10, fill: 'none', opacity: 0.09, strokeLinecap: 'round', style: { filter: 'blur(6px)' } }),
+      h('path', { d, stroke: 'var(--ember)', strokeWidth: width + 10, fill: 'none', opacity: 0.12, strokeLinecap: 'round', strokeDasharray: emberLen + ' ' + (len + 20), style: { filter: 'blur(6px)' } }),
+      h('path', { id: pid, d, stroke: 'var(--flux)', strokeWidth: width, fill: 'none', strokeLinecap: 'round', ref: setRef }),
+      h('path', { d, stroke: 'var(--ember)', strokeWidth: width, fill: 'none', strokeLinecap: 'round', strokeDasharray: emberLen + ' ' + (len + 20) }),
+      h('path', { d, stroke: 'var(--ember-glow)', strokeWidth: 1.4, fill: 'none', opacity: 0.5, strokeDasharray: '2 22', style: { animation: 'shimmer 2.6s linear infinite' }, pointerEvents: 'none' }),
+      igniting && h('path', { key: 'ign', d, stroke: '#FFE9D8', strokeWidth: width + 3, fill: 'none', strokeLinecap: 'round', style: { animation: 'igniteFade .7s ease-out forwards' }, pointerEvents: 'none' }),
+      h('circle', { r: 2.6, fill: 'var(--ember-glow)', opacity: 0.5, pointerEvents: 'none' }, h('animateMotion', { dur: '4s', repeatCount: 'indefinite', keyPoints: '0;1', keyTimes: '0;1', calcMode: 'linear' }, h('mpath', { href: '#' + pid }))),
+      h('rect', { x: bead.x - 6, y: bead.y - 6, width: 12, height: 12, fill: 'var(--bone)', transform: 'rotate(45 ' + bead.x + ' ' + bead.y + ')', style: { filter: 'drop-shadow(0 0 6px var(--ember-glow))' }, pointerEvents: 'none' }));
+  }
+
+  emptyGraph() {
+    const h = React.createElement;
+    const spots = [[380, 300], [1040, 320], [560, 600], [900, 600]];
+    const ash = spots.map((p, i) => h('div', { key: i, style: { position: 'absolute', left: p[0] - 60, top: p[1] - 34, width: 120, height: 68, border: '1px solid var(--hairline)', background: 'var(--panel)', opacity: 0.26, animation: 'drift ' + (5 + i) + 's ease-in-out infinite', animationDelay: (i * 0.6) + 's' } }));
+    return this.wrapFloor([...ash, h('div', { key: 'anvil', style: { position: 'absolute', left: 630, top: 310, width: 180, textAlign: 'center', fontSize: 130, lineHeight: 1, color: 'var(--faint)', opacity: 0.2 } }, '⚒')]);
+  }
+
+  floor() {
+    if (!this.state.nodes.length) return null;
+    if (this.state.screen === 'empty') return this.emptyGraph();
+    const h = React.createElement, kids = [], core = this.state.core;
+
+    kids.push(h('svg', { key: 'base', width: this.FW, height: this.FH, viewBox: '0 0 ' + this.FW + ' ' + this.FH, style: { position: 'absolute', inset: 0, overflow: 'visible' } }, this.state.channels.map(ch => this.conduit(ch))));
+
+    const coreCold = this.state.screen === 'forging' && this.state.bootStep < 1;
+    kids.push(h('div', { key: 'core', style: { position: 'absolute', left: core.x - 34, top: core.y - 34, width: 68, height: 68, filter: coreCold ? 'grayscale(1) brightness(.6)' : 'none', transition: 'filter .5s' } },
+      !coreCold && h('div', { key: 'ping', style: { position: 'absolute', inset: -6, border: '1.5px solid var(--ember)', borderRadius: '50%', animation: 'coreping 2.6s ease-out infinite' } }),
+      h('div', { key: 'ring', style: { position: 'absolute', inset: 0, borderRadius: '50%', background: 'conic-gradient(from 0deg,var(--gold),var(--ember),var(--ember-deep),var(--gold))', animation: 'spin 9s linear infinite' } }),
+      h('div', { key: 'in', style: { position: 'absolute', inset: 6, borderRadius: '50%', background: 'var(--void)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: coreCold ? 'none' : 'kindle 2.4s ease-in-out infinite' } },
+        h('span', { style: { fontSize: 24, filter: 'drop-shadow(0 0 6px var(--ember))' } }, '⚒'))));
+    kids.push(h('div', { key: 'clabel', style: { position: 'absolute', left: core.x - 90, top: core.y + 44, width: 180, textAlign: 'center', fontFamily: 'Geist Mono,monospace', fontSize: 10, letterSpacing: '.14em', color: 'var(--muted)' } }, 'CORE · BLOCK #47 · 6 TX'));
+
+    this.state.nodes.forEach(n => kids.push(this.nodeCell(n)));
+
+    kids.push(h('svg', { key: 'top', width: this.FW, height: this.FH, viewBox: '0 0 ' + this.FW + ' ' + this.FH, style: { position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 7 } },
+      h('defs', null, h('radialGradient', { id: 'sparkg' }, h('stop', { offset: 0, stopColor: '#FFE9D8' }), h('stop', { offset: 0.4, stopColor: 'var(--ember)' }), h('stop', { offset: 1, stopColor: 'var(--ember)', stopOpacity: 0 }))),
+      h('circle', { r: 15, fill: 'url(#sparkg)', opacity: 0, ref: el => this._spark = el }),
+      h('circle', { r: 4.5, fill: '#FFE9D8', opacity: 0, ref: el => this._sparkCore = el })));
+
+    if (this.state.fundFlash) {
+      const fn = this.node(this.state.fundFlash.id);
+      if (fn) kids.push(h('div', { key: 'ff', style: { position: 'absolute', left: fn.x + 30, top: fn.y - 66, animation: 'flare .4s cubic-bezier(.2,.8,.2,1)', zIndex: 8, padding: '6px 12px', background: 'var(--panel)', border: '1px solid var(--gold)', boxShadow: '0 0 20px rgba(245,196,81,.4)' } },
+        h('span', { className: 'num', style: { fontSize: 18, fontWeight: 700, color: 'var(--gold)' } }, '+' + this.fmt(this.state.fundFlash.amt) + ' CKB')));
+    }
+    if (this.state.showResult) {
+      const g = this.node(this.state.payTo);
+      if (g) kids.push(h('div', { key: 'res', style: { position: 'absolute', left: g.x + 40, top: g.y - 60, animation: 'flare .4s cubic-bezier(.2,.8,.2,1)', zIndex: 8 } },
+        h('div', { style: { position: 'relative', padding: '8px 14px', background: 'var(--panel)', border: '1px solid var(--flux)', boxShadow: '0 0 26px rgba(45,224,199,.4)' } },
+          h('span', { style: { position: 'absolute', top: -1, left: -1, width: 12, height: 12, borderTop: '2px solid var(--flux)', borderLeft: '2px solid var(--flux)' } }),
+          h('span', { style: { position: 'absolute', bottom: -1, right: -1, width: 12, height: 12, borderBottom: '2px solid var(--flux)', borderRight: '2px solid var(--flux)' } }),
+          h('span', { className: 'num', style: { fontSize: 22, fontWeight: 700, color: 'var(--flux)' } }, '+' + this.state.payAmt + ' CKB'))));
+    }
+
+    return this.wrapFloor(kids);
+  }
+
+  miniMap() {
+    const h = React.createElement;
+    return h('div', { style: { position: 'absolute', inset: '6px 10px' } },
+      this.state.nodes.map((n, i) => h('div', { key: n.id, style: { position: 'absolute', left: ((n.x - 200) / 1100 * 100) + '%', top: ((n.y - 120) / 660 * 100) + '%', width: 6, height: 6, background: n.hue } })),
+      h('div', { style: { position: 'absolute', left: ((this.state.core.x - 200) / 1100 * 100) + '%', top: ((this.state.core.y - 120) / 660 * 100) + '%', width: 5, height: 5, background: 'var(--gold)', borderRadius: '50%' } }),
+      h('div', { style: { position: 'absolute', left: '8%', top: '10%', width: '70%', height: '66%', border: '1px solid var(--ember)', opacity: 0.5 } }));
+  }
+
+  renderVals() {
+    const S = this.state, sel = S.sel;
+    const n = sel && sel.type === 'node' ? this.node(sel.id) : null;
+    const ch = sel && sel.type === 'channel' ? S.channels.find(c => c.id === sel.id) : null;
+    const totalOnchain = Object.values(S.onchain).reduce((a, b) => a + b, 0);
+    const readyChans = S.channels.filter(c => (S.chState[c.id] || 'ready') === 'ready');
+    const totalCap = readyChans.reduce((a, c) => a + c.cap, 0);
+    const isFloor = S.screen === 'floor';
+    const h = React.createElement;
+
+    const scene = (label, id, go) => ({ label, go, bg: S.screen === id ? 'var(--ember)' : 'var(--panel)', fg: S.screen === id ? '#1a0b06' : 'var(--muted)' });
+    const modeDefs = [['1', 'SELECT', 'select'], ['2', 'WIRE', 'wire'], ['3', 'PAY', 'pay'], ['4', 'FUND', 'fund'], ['5', 'PIN', 'pin']];
+    const chLocal = ch ? (S.balances[ch.id] != null ? S.balances[ch.id] : ch.cap / 2) : 0;
+    let nInch = 0;
+    if (n) S.channels.forEach(c => { if (c.from === n.id) nInch += (S.balances[c.id] || 0); else if (c.to === n.id) nInch += (c.cap - (S.balances[c.id] || 0)); });
+
+    const N = S.nodes.length, C = S.channels.length, total = N + 1 + C, bs = S.bootStep;
+    const nd = Math.max(0, Math.min(N, bs - 1)), cd = Math.max(0, Math.min(C, bs - 1 - N));
+    const bstep = (label, done, active) => ({ label, color: done ? 'var(--flux)' : active ? 'var(--amber)' : 'var(--faint)', dot: done ? '●' : active ? '◐' : '○' });
+    const bootSteps = [
+      bstep('NETWORK', bs >= 1, bs === 0), bstep('CKB', bs >= 1, false),
+      bstep('NODES ' + nd + '/' + N, nd === N, nd > 0 && nd < N),
+      bstep('CHANNELS ' + cd + '/' + C, C > 0 && cd === C, cd >= 0 && bs > N && cd < C),
+      bstep('READY', bs >= total, false),
+    ];
+    let bootLabel = 'NETWORK READY';
+    if (bs === 0) bootLabel = 'IGNITING FORGE-CORE';
+    else if (bs <= N) bootLabel = 'BOOTING ' + (S.nodes[bs - 1] ? S.nodes[bs - 1].name : '');
+    else if (bs < total) { const cc = S.channels[bs - 1 - N]; bootLabel = cc ? ('OPENING ' + this.node(cc.from).name + '⇄' + this.node(cc.to).name) : 'OPENING'; }
+
+    const presetDefs = [['duo', 'Duo', '2 nodes · 1 channel'], ['trio', 'Trio', '3 nodes · line'], ['hub', 'Hub', 'star · 1 center'], ['line', 'Line : N', 'chain of N'], ['ring', 'Ring : N', 'closed loop'], ['star', 'Star : N', 'N spokes']];
+    const presets = presetDefs.map(([id, label, desc]) => { const on = S.preset === id; return { set: () => this.setPreset(id), glyph: this.glyph(id), label, desc, accent: on ? 'var(--ember)' : 'transparent', bg: on ? 'var(--panel-2)' : 'var(--panel)', name: on ? 'var(--ember)' : 'var(--bone)' }; });
+    const fundPreset = (v) => ({ label: v >= 1000 ? (v / 1000) + 'k' : String(v), set: () => this.setFundAmt(v), bg: S.fundAmt === v ? 'var(--gold)' : 'var(--panel-2)', fg: S.fundAmt === v ? '#1a1206' : 'var(--text)' });
+    const fundingPreset = (v) => ({ label: (v / 1000) + 'k', set: () => this.setFunding(v), bg: S.funding === v ? 'var(--gold)' : 'var(--panel-2)', fg: S.funding === v ? '#1a1206' : 'var(--text)' });
+    const wizStep = (i, label) => ({ label, bg: S.wizardStep === i ? 'var(--panel-2)' : 'var(--panel)', fg: S.wizardStep === i ? 'var(--ember)' : 'var(--faint)' });
+    const showN = ['line', 'ring', 'star', 'hub'].includes(S.preset);
+    const presetName = { duo: 'Duo', trio: 'Trio', hub: 'Hub', line: 'Line', ring: 'Ring', star: 'Star' }[S.preset];
+    const eN = this.effN(), reviewCmd = showN ? (S.preset + ':' + eN) : S.preset;
+    const reviewCh = S.preset === 'duo' ? 1 : S.preset === 'trio' ? 2 : S.preset === 'line' ? eN - 1 : S.preset === 'ring' ? eN : eN - 1;
+
+    const pf = this.node(S.payFrom), pt = this.node(S.payTo);
+    const dispPath = (pf && pt) ? this.pathNodes(S.payFrom, S.payTo) : [];
+    const routeItems = [];
+    dispPath.forEach((id, i) => { const nd2 = this.node(id); routeItems.push(h('span', { key: id, style: { color: nd2 ? nd2.hue : 'var(--text)', fontWeight: 600 } }, nd2 ? nd2.name : '')); if (i < dispPath.length - 1) routeItems.push(h('span', { key: 'a' + i, style: { color: 'var(--faint)' } }, '→')); });
+    const payRoute = h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontFamily: 'Geist Mono,monospace', fontSize: 12 } }, routeItems);
+
+    const capF = this.node(S.capFrom), capT = this.node(S.capTo);
+
+    return {
+      floor: this.floor(), liquidityBar: this.liquidityBar(), miniMap: this.miniMap(),
+      netName: S.name,
+      isEmpty: S.screen === 'empty', isWizard: S.screen === 'wizard', isForging: S.screen === 'forging', isFloor,
+      scenes: [scene('EMPTY', 'empty', this.goEmpty), scene('WIZARD', 'wizard', this.goWizard), scene('FORGING', 'forging', this.goForging), scene('FLOOR', 'floor', this.goFloor)],
+      modes: modeDefs.map(([key, label, id]) => ({ key, label, set: () => this.setMode(id), bg: S.mode === id ? 'var(--ember)' : 'var(--panel)', fg: S.mode === id ? '#1a0b06' : 'var(--muted)' })),
+      vitals: [{ k: 'CAPACITY', val: this.fmt(totalCap), c: 'var(--flux)' }, { k: 'ON-CHAIN', val: this.fmt(totalOnchain), c: 'var(--gold)' }, { k: 'BLOCK', val: '#47', c: 'var(--text)' }, { k: 'PAY/MIN', val: String(S.payMin), c: 'var(--ember)' }],
+      vNodes: String(N), vChannels: String(readyChans.length),
+      events: S.events, lastCmd: S.lastCmd,
+      enterWizard: this.enterWizard, openPay: this.openPay, openFund: this.openFund, openCap: this.openCap, clearSel: this.clearSel, goFloor: this.goFloor,
+      zoomPct: String(S.zoomPct), zoomIn: this.zoomIn, zoomOut: this.zoomOut, zoomFit: this.fitView,
+      bootSteps, bootLabel, bootPctW: Math.round(bs / total * 100) + '%',
+      isNode: isFloor && !!n, isChannel: isFloor && !!ch,
+      nName: n ? n.name : '', nPubkey: n ? n.pubkey : '', nPort: n ? String(n.port) : '', nP2p: n ? String(n.p2p) : '',
+      nOnchain: n ? this.fmt(S.onchain[n.id]) : '', nInChannel: n ? this.fmt(nInch) : '', nChannels: n ? String(this.degree(n.id)) : '',
+      spark: [40, 70, 55, 90, 30, 65, 85, 45, 100, 60, 75, 50].map(hh => ({ h: hh + '%' })),
+      chFrom: ch ? this.node(ch.from).name : '', chTo: ch ? this.node(ch.to).name : '', chCap: ch ? this.fmt(ch.cap) : '', chLocal: ch ? this.fmt(chLocal) : '', chRemote: ch ? this.fmt(ch.cap - chLocal) : '', chHash: ch ? ch.hash : '',
+      payOpen: S.payOpen, closePay: this.closePay, incPay: this.incPay, decPay: this.decPay, confirmPay: this.confirmPay, payAmtDisp: this.fmt(S.payAmt),
+      payFromName: pf ? pf.name : '', payToName: pt ? pt.name : '', payFromHue: pf ? pf.hue : 'var(--ember)', payToHue: pt ? pt.hue : 'var(--violet)', payHopsLabel: String(dispPath.length > 0 ? dispPath.length - 1 : 0), payRoute,
+      fundOpen: S.fundOpen, closeFund: this.closeFund, confirmFund: this.confirmFund, fundTargetName: this.node(S.fundTarget) ? this.node(S.fundTarget).name : '', fundAmtDisp: this.fmt(S.fundAmt), fundPresets: [fundPreset(1000), fundPreset(10000), fundPreset(100000)],
+      capOpen: S.capOpen, closeCap: this.closeCap, confirmCap: this.confirmCap, setCapRange: this.setCapRange, capacity: S.capacity, capDisp: this.fmt(S.capacity), capPair: (capF ? capF.name : '') + ' ⇄ ' + (capT ? capT.name : '—'),
+      closeWizard: this.closeWizard, wizNext: this.wizNext, wizBack: this.wizBack, forgeIt: this.forgeIt,
+      wizSteps: [wizStep(1, '1 · TOPOLOGY'), wizStep(2, '2 · FUNDING'), wizStep(3, '3 · REVIEW')],
+      wizStep1: S.wizardStep === 1, wizStep2: S.wizardStep === 2, wizStep3: S.wizardStep === 3, wizNotLast: S.wizardStep < 3, wizLast: S.wizardStep === 3,
+      presets, showNStepper: showN, nodeCount: String(S.nodeCount), incN: this.incN, decN: this.decN,
+      fundingPresets: [fundingPreset(1000), fundingPreset(10000), fundingPreset(50000)], fundingDisp: this.fmt(S.funding), treasuryDraw: this.fmt(S.funding * eN),
+      reviewName: presetName, reviewNodes: String(eN), reviewChannels: String(reviewCh), reviewCmd,
+    };
+  }
+}
+</script>
+</body>
+</html>

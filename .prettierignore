@@ -4,3 +4,6 @@ package-lock.json
 *.md
 **/*.md
 assets/
+
+# large/generated html (the GUI bundle + design source)
+*.html

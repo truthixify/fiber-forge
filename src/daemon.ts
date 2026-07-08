@@ -16,22 +16,30 @@ export interface Inspector {
 
 /** Build the daemon HTTP server for one network (not yet listening). */
 export function createDaemon(inspector: Inspector, net: string): Server {
-  const guiPath = join(
+  const guiDir = join(
     dirname(fileURLToPath(import.meta.url)),
     "..",
     "assets",
-    "gui.html",
+    "gui",
   );
   return createServer(async (request, response) => {
     const url = request.url ?? "/";
     try {
       if (url === "/" || url === "/index.html") {
-        const html = (await readFile(guiPath, "utf8")).replaceAll(
-          "__NET__",
-          net,
-        );
+        const raw = await readFile(join(guiDir, "index.html"), "utf8");
+        const inject = `<script>window.__FORGE__=${JSON.stringify({ net })};</script>`;
+        const html = raw.includes("<head>")
+          ? raw.replace("<head>", `<head>${inject}`)
+          : inject + raw;
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         response.end(html);
+        return;
+      }
+      if (url === "/support.js") {
+        response.writeHead(200, {
+          "content-type": "text/javascript; charset=utf-8",
+        });
+        response.end(await readFile(join(guiDir, "support.js"), "utf8"));
         return;
       }
       if (url.startsWith("/api/state")) {

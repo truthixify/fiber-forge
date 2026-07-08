@@ -126,7 +126,14 @@ export interface NetworkView {
     pubkey: string;
     status: string;
   }[];
-  channels: { from: string; to: string; capacityCkb: number; state: string }[];
+  channels: {
+    from: string;
+    to: string;
+    capacityCkb: number;
+    state: string;
+    localCkb: number;
+    remoteCkb: number;
+  }[];
 }
 
 /** A channel as seen from one node. */
@@ -304,6 +311,8 @@ export class Orchestrator {
       const fromNode = state.nodes.find((n) => n.name === channel.from)!;
       const toNode = state.nodes.find((n) => n.name === channel.to)!;
       let channelState = "unknown";
+      let localCkb = Math.round(channel.capacityCkb / 2);
+      let remoteCkb = channel.capacityCkb - localCkb;
       try {
         const rpc = new FnnRpc(
           new HttpTransport(`http://127.0.0.1:${fromNode.rpcHostPort}`),
@@ -311,6 +320,8 @@ export class Orchestrator {
         const live = (await rpc.listChannels(toNode.pubkey))[0];
         if (live) {
           channelState = channelStateName(live);
+          localCkb = shannonHexToCkb(live.local_balance);
+          remoteCkb = shannonHexToCkb(live.remote_balance);
         }
       } catch {
         // node unreachable
@@ -320,6 +331,8 @@ export class Orchestrator {
         to: channel.to,
         capacityCkb: channel.capacityCkb,
         state: channelState,
+        localCkb,
+        remoteCkb,
       });
     }
 

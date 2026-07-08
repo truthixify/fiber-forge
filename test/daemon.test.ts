@@ -15,7 +15,14 @@ const view: NetworkView = {
     },
   ],
   channels: [
-    { from: "alice", to: "bob", capacityCkb: 1000, state: "ChannelReady" },
+    {
+      from: "alice",
+      to: "bob",
+      capacityCkb: 1000,
+      state: "ChannelReady",
+      localCkb: 600,
+      remoteCkb: 400,
+    },
   ],
 };
 
@@ -26,7 +33,7 @@ describe("daemon", () => {
     const port = (server.address() as AddressInfo).port;
     try {
       const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
-      expect(html).toContain("fiber-forge");
+      expect(html).toContain('window.__FORGE__={"net":"duo"}');
       const state = (await (
         await fetch(`http://127.0.0.1:${port}/api/state`)
       ).json()) as NetworkView;

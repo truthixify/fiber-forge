@@ -32,6 +32,38 @@ function orchestrator(): Orchestrator {
   return new Orchestrator(new DockerEngine(), assetsDir());
 }
 
+/** Open a URL in the default browser (best-effort, platform-aware). */
+async function openBrowser(url: string): Promise<void> {
+  const command =
+    process.platform === "darwin"
+      ? "open"
+      : process.platform === "win32"
+        ? "start"
+        : "xdg-open";
+  try {
+    const { spawn } = await import("node:child_process");
+    spawn(command, [url], { stdio: "ignore", detached: true }).unref();
+  } catch {
+    // no browser available; the URL is printed regardless
+  }
+}
+
+/** Serve the GUI for a network on a free port, open it, and keep the process alive. */
+async function launchGui(net: string): Promise<void> {
+  const { serveGui } = await import("./daemon");
+  const { findFreePort } = await import("./ports");
+  const port = await findFreePort(5178);
+  await serveGui(orchestrator(), net, port);
+  const url = `http://127.0.0.1:${port}`;
+  console.log(ui.hint("GUI", [url]));
+  console.log(
+    ui.muted(
+      `  Ctrl-C stops the GUI · the network keeps running · forge down ${net} to remove it\n`,
+    ),
+  );
+  await openBrowser(url);
+}
+
 function printJson(data: unknown): void {
   console.log(JSON.stringify(data, null, 2));
 }
@@ -155,10 +187,16 @@ export function buildCli(): Command {
       Number.parseInt(v, 10),
     )
     .option("--json", "print machine-readable JSON instead of the live UI")
+    .option("--no-gui", "do not open the web GUI when the network is ready")
     .action(
       async (
         target: string,
-        options: { ckbPort?: number; rpcBase?: number; json?: boolean },
+        options: {
+          ckbPort?: number;
+          rpcBase?: number;
+          json?: boolean;
+          gui?: boolean;
+        },
       ) => {
         const topology = await resolveTopology(target);
         const layoutOptions = {
@@ -186,6 +224,9 @@ export function buildCli(): Command {
           });
           progress.finish();
           printUpCard(layout, topology);
+          if (options.gui !== false) {
+            await launchGui(layout.net);
+          }
         } catch (error) {
           progress.failActive((error as Error).message);
           fail((error as Error).message, `forge down ${topology.name}`);
