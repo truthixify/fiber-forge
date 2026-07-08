@@ -89,12 +89,19 @@ export class FnnRpc {
   ): Promise<{ temporary_channel_id: string }> {
     const result = await this.transport.call("open_channel", [
       {
-        peer_pubkey: params.pubkey,
+        pubkey: params.pubkey,
         funding_amount: params.fundingAmount,
         public: params.isPublic ?? true,
       },
     ]);
     return result as { temporary_channel_id: string };
+  }
+
+  async listPeers(): Promise<{ pubkey: string; address: string }[]> {
+    const result = (await this.transport.call("list_peers", [])) as {
+      peers: { pubkey: string; address: string }[];
+    };
+    return result.peers;
   }
 
   async listChannels(pubkey?: string): Promise<Channel[]> {
@@ -138,4 +145,24 @@ export class FnnRpc {
 /** CKB capacity (whole CKB) to a shannons `0x`-hex string (1 CKB = 1e8 shannons). */
 export function ckbToShannonHex(ckb: number): string {
   return "0x" + (BigInt(ckb) * 100_000_000n).toString(16);
+}
+
+/** The tentacle PeerId from a node's announced addresses (the `/p2p/<id>` segment). */
+export function peerIdOf(info: NodeInfo): string | undefined {
+  for (const address of info.addresses) {
+    const marker = "/p2p/";
+    const at = address.indexOf(marker);
+    if (at >= 0) {
+      return address.slice(at + marker.length);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * A dialable multiaddr for a peer. Announced addresses carry `0.0.0.0`, so the orchestrator
+ * builds the address from the peer's known container IP and its announced PeerId.
+ */
+export function dialAddress(ip: string, peerId: string, port = 8228): string {
+  return `/ip4/${ip}/tcp/${port}/p2p/${peerId}`;
 }

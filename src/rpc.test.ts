@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   type Channel,
+  type NodeInfo,
   type RpcTransport,
   FnnRpc,
   ckbToShannonHex,
   channelStateName,
+  dialAddress,
   isChannelReady,
+  peerIdOf,
 } from "./rpc";
 
 class FakeTransport implements RpcTransport {
@@ -48,7 +51,7 @@ describe("FnnRpc", () => {
       fundingAmount: ckbToShannonHex(500),
     });
     expect(t.calls[0].params).toEqual([
-      { peer_pubkey: "0xpeer", funding_amount: "0xba43b7400", public: true },
+      { pubkey: "0xpeer", funding_amount: "0xba43b7400", public: true },
     ]);
     expect(res.temporary_channel_id).toBe("0xtmp");
   });
@@ -102,5 +105,27 @@ describe("ckbToShannonHex", () => {
   it("converts whole CKB to shannons hex", () => {
     expect(ckbToShannonHex(500)).toBe("0xba43b7400");
     expect(ckbToShannonHex(1)).toBe("0x5f5e100");
+  });
+});
+
+describe("peer address helpers", () => {
+  it("extracts the PeerId from announced addresses", () => {
+    const info: NodeInfo = {
+      pubkey: "0xab",
+      chain_hash: "0xcd",
+      node_name: null,
+      addresses: [
+        "/ip4/0.0.0.0/tcp/8228/p2p/QmPeer",
+        "/ip4/0.0.0.0/tcp/8228/ws/p2p/QmPeer",
+      ],
+    };
+    expect(peerIdOf(info)).toBe("QmPeer");
+    expect(peerIdOf({ ...info, addresses: [] })).toBeUndefined();
+  });
+
+  it("builds a dialable multiaddr from ip + peer id", () => {
+    expect(dialAddress("172.30.0.12", "QmPeer")).toBe(
+      "/ip4/172.30.0.12/tcp/8228/p2p/QmPeer",
+    );
   });
 });
