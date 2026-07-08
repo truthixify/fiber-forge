@@ -44,7 +44,8 @@ export interface NodeInfo {
 /** A channel as returned by `list_channels`; `state` may be a string or a `{state_name}` object. */
 export interface Channel {
   channel_id: string;
-  peer_id?: string;
+  /** The peer node's public key. */
+  pubkey?: string;
   state: string | { state_name: string };
   local_balance?: string;
   remote_balance?: string;
@@ -117,19 +118,26 @@ export class FnnRpc {
     await this.transport.call("shutdown_channel", [{ channel_id: channelId }]);
   }
 
+  /**
+   * Create an invoice. `amount` is a `0x`-hex shannons string; fiber-forge runs dev chains, whose
+   * nodes require the `Fibd` currency (the node rejects any other). Verified live.
+   */
   newInvoice(params: {
     amount: string;
     description?: string;
     currency?: string;
   }): Promise<{ invoice_address: string }> {
-    return this.transport.call("new_invoice", [params]) as Promise<{
-      invoice_address: string;
-    }>;
+    return this.transport.call("new_invoice", [
+      { currency: "Fibd", ...params },
+    ]) as Promise<{ invoice_address: string }>;
   }
 
-  sendPayment(invoice: string): Promise<{ payment_hash: string }> {
+  sendPayment(
+    invoice: string,
+  ): Promise<{ payment_hash: string; status: string }> {
     return this.transport.call("send_payment", [{ invoice }]) as Promise<{
       payment_hash: string;
+      status: string;
     }>;
   }
 
@@ -142,9 +150,25 @@ export class FnnRpc {
   }
 }
 
+/** Payment lifecycle states from `send_payment`/`get_payment` (verified live). */
+export type PaymentStatus = "Created" | "Inflight" | "Success" | "Failed";
+
+/** Whether a payment has reached a terminal state. */
+export function isPaymentSettled(status: string): boolean {
+  return status === "Success" || status === "Failed";
+}
+
 /** CKB capacity (whole CKB) to a shannons `0x`-hex string (1 CKB = 1e8 shannons). */
 export function ckbToShannonHex(ckb: number): string {
   return "0x" + (BigInt(ckb) * 100_000_000n).toString(16);
+}
+
+/** Shannons `0x`-hex (or undefined) to whole CKB, floored. */
+export function shannonHexToCkb(shannonHex?: string): number {
+  if (!shannonHex) {
+    return 0;
+  }
+  return Number(BigInt(shannonHex) / 100_000_000n);
 }
 
 /** The tentacle PeerId from a node's announced addresses (the `/p2p/<id>` segment). */

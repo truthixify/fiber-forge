@@ -6,7 +6,7 @@
  * proven live in `docs/dev-notes.md`.
  */
 
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -33,7 +33,9 @@ import {
   ckbToShannonHex,
   dialAddress,
   isChannelReady,
+  isPaymentSettled,
   peerIdOf,
+  shannonHexToCkb,
 } from "./rpc";
 import { type Topology } from "./topology";
 
@@ -99,14 +101,6 @@ export function nodeContainerSpec(
   };
 }
 
-export interface NodeStatus {
-  name: string;
-  container: string;
-  rpcHostPort: number;
-  status: string;
-  pubkey?: string;
-}
-
 /** The persisted layout of a running network (`~/.fiber-forge/<net>/layout.json`). */
 export interface NetworkState {
   net: string;
@@ -133,6 +127,45 @@ export interface NetworkView {
     status: string;
   }[];
   channels: { from: string; to: string; capacityCkb: number; state: string }[];
+}
+
+/** Rich status: node container states + pubkeys (from the persisted layout, works when stopped). */
+export interface StatusReport {
+  net: string;
+  nodes: {
+    name: string;
+    container: string;
+    rpcHostPort: number;
+    pubkey: string;
+    status: string;
+  }[];
+  channels: { from: string; to: string; capacityCkb: number }[];
+}
+
+/** A channel as seen from one node. */
+export interface ChannelRow {
+  node: string;
+  channelId: string;
+  peer: string;
+  state: string;
+  localCkb: number;
+  remoteCkb: number;
+}
+
+/** The outcome of a payment. */
+export interface PaymentReport {
+  from: string;
+  to: string;
+  amountCkb: number;
+  paymentHash: string;
+  status: string;
+}
+
+/** One row of `forge ls`. */
+export interface NetworkSummary {
+  net: string;
+  nodeCount: number;
+  running: boolean;
 }
 
 export class Orchestrator {
@@ -266,9 +299,7 @@ export class Orchestrator {
 
   /** A live graph view of a running network for the GUI, from the persisted layout + RPC. */
   async inspect(net: string): Promise<NetworkView> {
-    const state = JSON.parse(
-      await readFile(join(this.stateDir, net, "layout.json"), "utf8"),
-    ) as NetworkState;
+    const state = await this.readState(net);
 
     const nodes = [];
     for (const node of state.nodes) {
@@ -320,15 +351,238 @@ export class Orchestrator {
     }
   }
 
-  /** Machine-readable status of a running network. */
-  async status(net: string): Promise<{ net: string; nodes: NodeStatus[] }> {
-    const containers = await this.engine.listByLabel(FORGE_LABEL, net);
-    const nodes: NodeStatus[] = [];
-    for (const container of containers.filter((c) => c.includes("-node-"))) {
-      const status = await this.engine.status(container);
-      nodes.push({ name: container, container, rpcHostPort: 0, status });
+  /** Rich status from the persisted layout — real names, ports, pubkeys, and container states. */
+  async status(net: string): Promise<StatusReport> {
+    const state = await this.readState(net);
+    const nodes = [];
+    for (const node of state.nodes) {
+      nodes.push({
+        name: node.name,
+        container: node.container,
+        rpcHostPort: node.rpcHostPort,
+        pubkey: node.pubkey,
+        status: await this.engine.status(node.container),
+      });
     }
-    return { net, nodes };
+    return { net, nodes, channels: state.channels };
+  }
+
+  /** Every forge network on disk, with its node count and whether its ckb chain is running. */
+  async list(): Promise<NetworkSummary[]> {
+    let entries: string[];
+    try {
+      entries = await readdir(this.stateDir);
+    } catch {
+      return [];
+    }
+    const summaries: NetworkSummary[] = [];
+    for (const net of entries.sort()) {
+      try {
+        const state = await this.readState(net);
+        summaries.push({
+          net,
+          nodeCount: state.nodes.length,
+          running: (await this.engine.status(`forge-${net}-ckb`)) === "running",
+        });
+      } catch {
+        // not a network directory
+      }
+    }
+    return summaries;
+  }
+
+  /** Create an invoice on a node; returns the invoice address to pay. */
+  async createInvoice(
+    net: string,
+    node: string,
+    amountCkb: number,
+    description?: string,
+  ): Promise<string> {
+    const target = await this.nodeOf(net, node);
+    const { invoice_address } = await this.rpcFor(
+      target.rpcHostPort,
+    ).newInvoice({
+      amount: ckbToShannonHex(amountCkb),
+      description,
+    });
+    return invoice_address;
+  }
+
+  /** Pay `amountCkb` from one node to another (creates an invoice on the receiver, then pays it). */
+  async pay(
+    net: string,
+    from: string,
+    to: string,
+    amountCkb: number,
+    description?: string,
+  ): Promise<PaymentReport> {
+    const invoice = await this.createInvoice(net, to, amountCkb, description);
+    const status = await this.payInvoiceInternal(net, from, invoice);
+    return {
+      from,
+      to,
+      amountCkb,
+      paymentHash: status.paymentHash,
+      status: status.status,
+    };
+  }
+
+  /** Pay an existing invoice string from a node. */
+  async payInvoice(
+    net: string,
+    from: string,
+    invoice: string,
+  ): Promise<PaymentReport> {
+    const result = await this.payInvoiceInternal(net, from, invoice);
+    return {
+      from,
+      to: "",
+      amountCkb: 0,
+      paymentHash: result.paymentHash,
+      status: result.status,
+    };
+  }
+
+  /** Open a channel between two already-running nodes and wait until it is ready. */
+  async openChannelBetween(
+    net: string,
+    from: string,
+    to: string,
+    capacityCkb: number,
+    onProgress?: (message: string) => void,
+  ): Promise<void> {
+    const log = onProgress ?? (() => {});
+    const state = await this.readState(net);
+    const fromNode = this.requireNode(state, from);
+    const toNode = this.requireNode(state, to);
+    const fromRpc = this.rpcFor(fromNode.rpcHostPort);
+    const toRpc = this.rpcFor(toNode.rpcHostPort);
+    const chain = new DevChain(`http://127.0.0.1:${state.ckbHostPort}`);
+
+    const toPeerId = peerIdOf(await toRpc.nodeInfo());
+    if (!toPeerId) {
+      throw new Error(`node ${to} has no announced peer address`);
+    }
+    log(`connect ${from} -> ${to}`);
+    await fromRpc.connectPeer(dialAddress(toNode.ip, toPeerId, FNN_P2P_PORT));
+    await this.waitPeerConnected(fromRpc, toNode.pubkey);
+    log(`open channel ${from} -> ${to} (${capacityCkb} CKB)`);
+    await this.openChannel(fromRpc, {
+      pubkey: toNode.pubkey,
+      fundingAmount: ckbToShannonHex(capacityCkb),
+    });
+    await this.waitChannelReady(
+      fromRpc,
+      toNode.pubkey,
+      chain,
+      `${from}->${to}`,
+      log,
+    );
+  }
+
+  /** Cooperatively close a channel by id, from the node that owns it. */
+  async closeChannel(
+    net: string,
+    node: string,
+    channelId: string,
+  ): Promise<void> {
+    const target = await this.nodeOf(net, node);
+    await this.rpcFor(target.rpcHostPort).shutdownChannel(channelId);
+  }
+
+  /** List channels across the network (or one node), with live state and balances. */
+  async channels(net: string, node?: string): Promise<ChannelRow[]> {
+    const state = await this.readState(net);
+    const nodes = node ? [this.requireNode(state, node)] : state.nodes;
+    const byPubkey = new Map(state.nodes.map((n) => [n.pubkey, n.name]));
+    const rows: ChannelRow[] = [];
+    for (const n of nodes) {
+      let channels;
+      try {
+        channels = await this.rpcFor(n.rpcHostPort).listChannels();
+      } catch {
+        continue;
+      }
+      for (const channel of channels) {
+        rows.push({
+          node: n.name,
+          channelId: channel.channel_id,
+          peer: byPubkey.get(channel.pubkey ?? "") ?? "?",
+          state: channelStateName(channel),
+          localCkb: shannonHexToCkb(channel.local_balance),
+          remoteCkb: shannonHexToCkb(channel.remote_balance),
+        });
+      }
+    }
+    return rows;
+  }
+
+  /** Recent logs for a node (or the ckb chain when `node` is `"ckb"`). */
+  async logs(net: string, node: string, tailLines = 200): Promise<string> {
+    const state = await this.readState(net);
+    const container =
+      node === "ckb"
+        ? `forge-${net}-ckb`
+        : this.requireNode(state, node).container;
+    return this.engine.logs(container, tailLines);
+  }
+
+  private async payInvoiceInternal(
+    net: string,
+    from: string,
+    invoice: string,
+  ): Promise<{ paymentHash: string; status: string }> {
+    const fromNode = await this.nodeOf(net, from);
+    const rpc = this.rpcFor(fromNode.rpcHostPort);
+    const sent = await rpc.sendPayment(invoice);
+    const status = await this.waitPayment(rpc, sent.payment_hash);
+    return { paymentHash: sent.payment_hash, status };
+  }
+
+  private async waitPayment(
+    rpc: FnnRpc,
+    paymentHash: string,
+    timeoutMs = 60_000,
+  ): Promise<string> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const { status } = await rpc.getPayment(paymentHash);
+      if (isPaymentSettled(status)) {
+        return status;
+      }
+      if (Date.now() > deadline) {
+        return status;
+      }
+      await sleep(1000);
+    }
+  }
+
+  private async readState(net: string): Promise<NetworkState> {
+    return JSON.parse(
+      await readFile(join(this.stateDir, net, "layout.json"), "utf8"),
+    ) as NetworkState;
+  }
+
+  private requireNode(
+    state: NetworkState,
+    name: string,
+  ): NetworkState["nodes"][number] {
+    const node = state.nodes.find((n) => n.name === name);
+    if (!node) {
+      throw new Error(`network ${state.net} has no node "${name}"`);
+    }
+    return node;
+  }
+
+  private async nodeOf(
+    net: string,
+    name: string,
+  ): Promise<NetworkState["nodes"][number]> {
+    return this.requireNode(await this.readState(net), name);
+  }
+
+  private rpcFor(rpcHostPort: number): FnnRpc {
+    return new FnnRpc(new HttpTransport(`http://127.0.0.1:${rpcHostPort}`));
   }
 
   private async writeNodeDir(

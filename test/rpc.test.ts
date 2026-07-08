@@ -8,7 +8,9 @@ import {
   channelStateName,
   dialAddress,
   isChannelReady,
+  isPaymentSettled,
   peerIdOf,
+  shannonHexToCkb,
 } from "../src/rpc";
 
 class FakeTransport implements RpcTransport {
@@ -127,5 +129,20 @@ describe("peer address helpers", () => {
     expect(dialAddress("172.30.0.12", "QmPeer")).toBe(
       "/ip4/172.30.0.12/tcp/8228/p2p/QmPeer",
     );
+  });
+});
+
+describe("amount + payment helpers", () => {
+  it("converts shannons hex back to whole CKB", () => {
+    expect(shannonHexToCkb("0xba43b7400")).toBe(500);
+    expect(shannonHexToCkb("0x0")).toBe(0);
+    expect(shannonHexToCkb(undefined)).toBe(0);
+  });
+
+  it("recognizes settled payment states", () => {
+    expect(isPaymentSettled("Success")).toBe(true);
+    expect(isPaymentSettled("Failed")).toBe(true);
+    expect(isPaymentSettled("Inflight")).toBe(false);
+    expect(isPaymentSettled("Created")).toBe(false);
   });
 });
