@@ -226,7 +226,7 @@ export class DockerEngine implements ContainerEngine {
         stderr: true,
         tail: tailLines,
       })) as unknown as Buffer;
-      return buffer.toString("utf8");
+      return demuxDockerLogs(buffer);
     } catch (error) {
       if (isNotFound(error)) return "";
       throw error;
@@ -266,6 +266,36 @@ export class DockerEngine implements ContainerEngine {
       });
     });
   }
+}
+
+/**
+ * Decode Docker's multiplexed log stream into plain text. Non-TTY container logs arrive framed:
+ * each chunk is an 8-byte header (stream id + big-endian payload length) followed by the payload.
+ * Unframed (TTY) output is returned unchanged.
+ */
+function demuxDockerLogs(buffer: Buffer): string {
+  const framed =
+    buffer.length >= 8 &&
+    buffer[0] <= 2 &&
+    buffer[1] === 0 &&
+    buffer[2] === 0 &&
+    buffer[3] === 0;
+  if (!framed) {
+    return buffer.toString("utf8");
+  }
+  let out = "";
+  let offset = 0;
+  while (offset + 8 <= buffer.length) {
+    const size = buffer.readUInt32BE(offset + 4);
+    const start = offset + 8;
+    out += buffer.toString(
+      "utf8",
+      start,
+      Math.min(start + size, buffer.length),
+    );
+    offset = start + size;
+  }
+  return out;
 }
 
 function isNotFound(error: unknown): boolean {

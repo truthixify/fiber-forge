@@ -614,7 +614,18 @@ class Component extends DCLogic {
     this.setState({ nodeLogs: 'loading…' });
     fetch('/api/logs?net=' + encodeURIComponent(this._forgeNet()) + '&node=' + encodeURIComponent(n.name))
       .then(function (r) { return r.json(); })
-      .then(function (res) { var t = ((res && res.text) || '').replace(/\x1b\[[0-9;]*m/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, ''); self.setState({ nodeLogs: t.trim() || '(no output)' }); })
+      .then(function (res) {
+        var raw = ((res && res.text) || '').replace(/\x1b\[[0-9;]*m/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+        var out = [];
+        raw.split('\n').forEach(function (ln) {
+          var m = ln.match(/(\d\d:\d\d:\d\d)[.\d]*Z\s+(TRACE|DEBUG|INFO|WARN|ERROR)\s+([\w:]+)\s*:?\s*(.*)$/);
+          if (!m) return;
+          var mod = m[3].replace(/^fnn::/, '').replace(/:+$/, ''), msg = m[4].trim();
+          if (/watchtower|PeriodicCheck/.test(mod + msg) || !msg) return;
+          out.push(m[1] + '  ' + (m[2] + '     ').slice(0, 5) + '  ' + mod + '  ' + msg);
+        });
+        self.setState({ nodeLogs: out.length ? out.slice(-120).join('\n') : '(no recent activity)' });
+      })
       .catch(function () { self.setState({ nodeLogs: '(logs unavailable)' }); });
   }
   openInvoice = () => {
@@ -870,6 +881,9 @@ class Component extends DCLogic {
     var total = t.nodes.length + 1 + t.channels.length;
     // the real up() emits ~3 messages per node + ~3 per channel + a couple of framing ones
     var estMsgs = t.nodes.length * 3 + t.channels.length * 3 + 3;
+    // Stop the current network's poller so it stops overwriting the new topology we're forging.
+    clearInterval(this._forgePoll);
+    this._forgeNet_ = null;
     this.setState(Object.assign({}, t, { screen: 'forging', bootStep: 0, sel: null, chState: Object.fromEntries(t.channels.map(function (c) { return [c.id, 'pending']; })) }));
     clearInterval(this._boot);
     fetch('/api/up', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
@@ -1220,7 +1234,7 @@ class Component extends DCLogic {
       nodeChans, nodePeersList, nodeLogsText: S.nodeLogs || '(select LOGS to load)', nodeChanEmpty: nodeChans.length === 0, nodePeerEmpty: nodePeersList.length === 0,
       openInvoice: this.openInvoice, invoiceOpen: S.invoiceOpen, closeInvoice: this.closeInvoice, genInvoice: this.genInvoice, copyInvoice: this.copyInvoice, incInvoice: this.incInvoice, decInvoice: this.decInvoice,
       invoiceAmtDisp: this.fmt(S.invoiceAmt), invoiceAddr: S.invoiceAddr, invoiceHasAddr: !!S.invoiceAddr, invoiceBusy: S.invoiceBusy, invoiceNodeName: n ? n.name : '',
-      spark: [40, 70, 55, 90, 30, 65, 85, 45, 100, 60, 75, 50].map(hh => ({ h: hh + '%' })),
+      spark: n ? (nodeChans.length ? nodeChans.map(c => ({ h: Math.max(4, parseInt(c.localW, 10) || 0) + '%' })) : [{ h: '4%' }]) : [],
       chFrom: ch ? this.node(ch.from).name : '', chTo: ch ? this.node(ch.to).name : '', chCap: ch ? this.fmt(ch.cap) : '', chLocal: ch ? this.fmt(chLocal) : '', chRemote: ch ? this.fmt(ch.cap - chLocal) : '', chHash: ch ? ch.hash : '',
       payOpen: S.payOpen, closePay: this.closePay, incPay: this.incPay, decPay: this.decPay, confirmPay: this.confirmPay, payAmtDisp: this.fmt(S.payAmt),
       payFromName: pf ? pf.name : '', payToName: pt ? pt.name : '', payFromHue: pf ? pf.hue : 'var(--ember)', payToHue: pt ? pt.hue : 'var(--violet)', payHopsLabel: String(dispPath.length > 0 ? dispPath.length - 1 : 0), payRoute,
