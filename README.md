@@ -8,9 +8,12 @@ Built for the **"Gone in 60ms" Fiber Network Infrastructure Hackathon** — Cate
 
 ## Status
 
-**Working.** `forge up trio` boots a CKB dev chain and three Fiber nodes, funds them, connects
-them, and opens channels to `CHANNEL_READY` in well under a minute — verified live end to end
-(see the `e2e` test). The CLI (`up` / `down` / `status` / `gui`) and the web GUI are functional.
+**Working end to end.** `forge up trio` boots a CKB dev chain and three Fiber nodes, funds them,
+connects them, and opens channels to `CHANNEL_READY` in well under a minute; multi-hop payments,
+invoices, and live channel open/close are all verified against real nodes. The CLI is complete and
+colorful; the web GUI serves a live network graph. Nodes are named after philosophers, scientists,
+and historical figures — every network gets a fresh cast. The GUI design lives in
+[`docs/design.md`](docs/design.md).
 
 ## Usage
 
@@ -18,18 +21,31 @@ Requires a running Docker daemon (the tool pulls `nervos/ckb` and `nervos/fiber`
 
 ```sh
 npm install
-node bin/forge.mjs up trio          # 3 nodes, 2 channels → CHANNEL_READY
-node bin/forge.mjs gui trio         # serve the live graph at http://127.0.0.1:5178
-node bin/forge.mjs status trio      # container states
-node bin/forge.mjs down trio --purge
 
-# a custom network from a topology YAML:
+# lifecycle
+node bin/forge.mjs up trio                 # boot 3 nodes + 2 channels → CHANNEL_READY
+node bin/forge.mjs ls                       # list all networks
+node bin/forge.mjs status trio              # nodes + channels with live state
+node bin/forge.mjs gui trio                 # serve the live graph at http://127.0.0.1:5178
+node bin/forge.mjs down trio                # tear down (--keep data volume, --purge everything)
+
+# payments & channels (use the node names from `up`/`status`)
+node bin/forge.mjs pay trio feynman galileo 42     # multi-hop payment
+node bin/forge.mjs invoice trio lorentz 100        # create an invoice
+node bin/forge.mjs channel open trio feynman galileo 1000
+node bin/forge.mjs channel ls trio                 # channels with balances
+node bin/forge.mjs channel close trio feynman <id>
+node bin/forge.mjs logs trio feynman               # node logs (or 'ckb')
+
+# a custom network, and machine-readable output
 node bin/forge.mjs up ./my-topology.yml
+node bin/forge.mjs status trio --json | jq
 ```
 
 Presets: `duo` (2 nodes), `trio` (3), `hub` (5-node star), or **`shape:N`** for any count —
 `line:N` (chain), `ring:N` (loop), `star:N` (hub + N-1 spokes), with N from 2 to 10. A topology
-file declares `nodes`, `channels` (`from`/`to`/`capacity_ckb`), and `funding.per_node_ckb`.
+file declares `nodes`, `channels` (`from`/`to`/`capacity_ckb`), and `funding.per_node_ckb`. Every
+data command takes `--json`.
 
 Networks are independent: `forge up` auto-picks a free subnet and free host ports, so several can
 run at once (`trio` **and** `line:5`, …) without clashing. `--ckb-port` / `--rpc-base` pin them.

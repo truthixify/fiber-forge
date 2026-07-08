@@ -5,10 +5,13 @@ identical across the repos by design; each repo keeps its own copy so it stays s
 
 ## Node & transport
 - FNN JSON-RPC default endpoint: `http://127.0.0.1:8227`.
-- Pin to **v0.8.1 stable** (`nervos/fiber` Docker image / release binaries) for the build; note the
-  pin in the README. Do not chase v0.9 release candidates mid-build.
-- The OpenRPC JSON generator shipped in v0.8 — **before using any method or field not listed below,
-  verify its exact wire shape against that OpenRPC document. Never guess wire shapes.**
+- Pinned to **`nervos/fiber:0.9.0-rc7`** (the earliest published multi-arch image; no v0.8.1 image
+  exists — see `docs/dev-notes.md`). CKB is pinned to `nervos/ckb:v0.201.0`. The pins live in
+  `src/orchestrator.ts` (`DEFAULT_FNN_IMAGE` / `DEFAULT_CKB_IMAGE`).
+- **Verify every wire shape against a live node before using it — never guess.** The shapes below
+  were all confirmed live (e.g. `open_channel` takes `pubkey` not `peer_pubkey`; `new_invoice`
+  wants a `0x`-hex `amount` and the `Fibd` currency on a dev chain; `connect_peer` wants
+  `/ip4/<ip>/tcp/8228/p2p/<PeerId>`).
 
 ## Verified method set (build against these)
 `connect_peer`, `open_channel`, `list_channels`, `shutdown_channel`, `new_invoice`,
