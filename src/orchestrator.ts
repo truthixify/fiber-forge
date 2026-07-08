@@ -113,6 +113,7 @@ export interface NetworkState {
     ip: string;
     rpcHostPort: number;
     pubkey: string;
+    ckbAddress: string;
   }[];
   channels: { from: string; to: string; capacityCkb: number }[];
 }
@@ -237,10 +238,12 @@ export class Orchestrator {
       infoByName.set(node.name, { pubkey: info.pubkey, peerId });
     }
 
+    const addressByName = new Map<string, string>();
     for (const node of layout.nodes) {
       const address = await chain.addressOfPrivateKey(
         privateKeys.get(node.name)!,
       );
+      addressByName.set(node.name, address);
       log(`funding ${node.name} ${topology.funding.perNodeCkb} CKB`);
       await chain.fund(address, topology.funding.perNodeCkb);
     }
@@ -279,6 +282,7 @@ export class Orchestrator {
         ip: n.ip,
         rpcHostPort: n.rpcHostPort,
         pubkey: infoByName.get(n.name)!.pubkey,
+        ckbAddress: addressByName.get(n.name)!,
       })),
       channels: topology.channels.map((c) => ({
         from: c.from,
@@ -310,9 +314,7 @@ export class Orchestrator {
     for (const node of state.nodes) {
       let onchainCkb = 0;
       try {
-        onchainCkb = Number(
-          await chain.balanceOf(await chain.addressOfPubkey(node.pubkey)),
-        );
+        onchainCkb = Number(await chain.balanceOf(node.ckbAddress));
       } catch {
         // chain unreachable
       }
@@ -508,8 +510,7 @@ export class Orchestrator {
     const state = await this.readState(net);
     const target = this.requireNode(state, node);
     const chain = new DevChain(`http://127.0.0.1:${state.ckbHostPort}`);
-    const address = await chain.addressOfPubkey(target.pubkey);
-    const tx = await chain.fund(address, amountCkb);
+    const tx = await chain.fund(target.ckbAddress, amountCkb);
     await chain.generateBlocks(4);
     return tx;
   }
