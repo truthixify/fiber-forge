@@ -578,6 +578,7 @@ class Component extends DCLogic {
   effN() { const p = this.state.preset; return p === 'duo' ? 2 : p === 'trio' ? 3 : this.state.nodeCount; }
 
   startForge = () => {
+    if (window.__FORGE__) { this._forgeSpawn(); return; }
     clearInterval(this._boot);
     const t = this.build(this.state.preset, this.effN(), this.state.funding);
     this.setState({ screen: 'forging', bootStep: 0, sel: null, ...t, chState: Object.fromEntries(t.channels.map(c => [c.id, 'pending'])) });
@@ -597,7 +598,7 @@ class Component extends DCLogic {
   closePay = () => this.setState({ payOpen: false });
   incPay = () => this.setState(s => ({ payAmt: Math.min(900, s.payAmt + 50) }));
   decPay = () => this.setState(s => ({ payAmt: Math.max(50, s.payAmt - 50) }));
-  confirmPay = () => { const f = this.node(this.state.payFrom), t = this.node(this.state.payTo); this.setState({ payOpen: false, lastCmd: 'forge pay ' + this.state.name.replace('forge-', '') + ' ' + (f ? f.name : '') + ' ' + (t ? t.name : '') + ' ' + this.state.payAmt }); this.startPayment(); };
+  confirmPay = () => { const f = this.node(this.state.payFrom), t = this.node(this.state.payTo); this.setState({ payOpen: false, lastCmd: 'forge pay ' + this.state.name.replace('forge-', '') + ' ' + (f ? f.name : '') + ' ' + (t ? t.name : '') + ' ' + this.state.payAmt }); if (window.__FORGE__) this._forgeApi('/api/pay', { net: this._forgeNet(), from: f ? f.name : '', to: t ? t.name : '', amount: this.state.payAmt }); this.startPayment(); };
 
   startPayment = () => {
     if (this.state.paying) return;
@@ -645,6 +646,7 @@ class Component extends DCLogic {
   setFundAmt = (v) => this.setState({ fundAmt: v });
   confirmFund = () => {
     const { fundTarget, fundAmt } = this.state, tn = this.node(fundTarget);
+    if (window.__FORGE__) this._forgeApi('/api/fund', { net: this._forgeNet(), node: tn.name, amount: fundAmt });
     this.setState(st => ({ fundOpen: false, onchain: { ...st.onchain, [fundTarget]: st.onchain[fundTarget] + fundAmt }, fundFlash: { id: fundTarget, amt: fundAmt }, lastCmd: 'forge fund ' + st.name.replace('forge-', '') + ' ' + tn.name + ' ' + fundAmt, events: [{ t: this.now(), c: 'var(--gold)', msg: 'FUNDED ' + tn.name + ' +' + this.fmt(fundAmt) + ' CKB' }, ...st.events].slice(0, 2) }));
     clearTimeout(this._ff); this._ff = setTimeout(() => this.setState({ fundFlash: null }), 2200);
   };
@@ -664,51 +666,104 @@ class Component extends DCLogic {
     if (!this.state.capTo) { this.setState({ capOpen: false }); return; }
     const id = 'x' + (this._cc = (this._cc || 0) + 1), cap = this.state.capacity;
     const fn = this.node(this.state.capFrom), tn = this.node(this.state.capTo);
+    if (window.__FORGE__) this._forgeApi('/api/channel/open', { net: this._forgeNet(), from: fn.name, to: tn.name, capacity: cap });
     const ch = { id, from: this.state.capFrom, to: this.state.capTo, cap, hash: this.mkHash(90 + this._cc) };
     this.setState(st => ({ capOpen: false, sel: null, channels: [...st.channels, ch], chState: { ...st.chState, [id]: 'pending' }, balances: { ...st.balances, [id]: Math.round(cap / 2) }, lastCmd: 'forge channel open ' + st.name.replace('forge-', '') + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' NEGOTIATING' }, ...st.events].slice(0, 2) }));
     clearTimeout(this._ig);
     this._ig = setTimeout(() => { this.setState(st => ({ chState: { ...st.chState, [id]: 'ready' }, igniteId: id, events: [{ t: this.now(), c: 'var(--flux)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' → READY' }, ...st.events].slice(0, 2) })); setTimeout(() => this.setState({ igniteId: null }), 700); }, 1700);
   };
 
-  componentWillUnmount() { cancelAnimationFrame(this._raf); clearInterval(this._boot); window.removeEventListener('resize', this._onResize); window.removeEventListener('wheel', this._onWheel); window.removeEventListener('keydown', this._onKey); }
+  componentWillUnmount() { cancelAnimationFrame(this._raf); clearInterval(this._boot); clearInterval(this._forgePoll); window.removeEventListener('resize', this._onResize); window.removeEventListener('wheel', this._onWheel); window.removeEventListener('keydown', this._onKey); }
+
+  // ---------------- forge live bridge (central daemon) ----------------
+  _forgeNet() { return this._forgeNet_ || ''; }
+  _forgeApi(path, body) {
+    fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(function () {});
+  }
+  _forgeMap(v) {
+    var preset = (v.net.match(/^[a-z]+/) || ['line'])[0];
+    if (['duo', 'trio', 'line', 'ring', 'star', 'hub'].indexOf(preset) < 0) preset = 'line';
+    var g = this.build(preset, v.nodes.length, 10000);
+    var idOf = {};
+    v.nodes.forEach(function (nd, i) { idOf[nd.name] = 'n' + i; });
+    var nodes = v.nodes.map(function (nd, i) {
+      var pk = nd.pubkey || '';
+      var shortPk = pk.length > 13 ? pk.slice(0, 7) + '…' + pk.slice(-4) : pk;
+      return Object.assign({}, g.nodes[i] || {}, { id: 'n' + i, name: nd.name, port: nd.rpcHostPort, pubkey: shortPk, fullPubkey: pk, dead: nd.status !== 'running' });
+    });
+    var channels = v.channels.map(function (c, j) {
+      return Object.assign({}, g.channels[j] || {}, { id: 'c' + j, from: idOf[c.from], to: idOf[c.to], cap: c.capacityCkb });
+    });
+    var chState = {}, balances = {};
+    v.channels.forEach(function (c, j) {
+      chState['c' + j] = c.state === 'ChannelReady' ? 'ready' : (c.state === 'unknown' ? 'dead' : 'pending');
+      balances['c' + j] = c.localCkb != null ? c.localCkb : Math.round(c.capacityCkb / 2);
+    });
+    var onchain = {};
+    v.nodes.forEach(function (nd, i) { onchain['n' + i] = nd.onchainCkb != null ? nd.onchainCkb : 10000; });
+    return { nodes: nodes, channels: channels, chState: chState, balances: balances, onchain: onchain, core: g.core, name: 'forge-' + v.net };
+  }
+  _forgeSelect(net) {
+    var F = this;
+    this._forgeNet_ = net;
+    this._forgeFitted = false;
+    var load = function () {
+      fetch('/api/state?net=' + encodeURIComponent(net)).then(function (r) { return r.json(); }).then(function (v) {
+        if (v && v.nodes && v.nodes.length && F._forgeNet_ === net) {
+          var st = F._forgeMap(v); st.screen = 'floor';
+          F.setState(st, function () { if (!F._forgeFitted) { F._forgeFitted = true; if (F.fitView) F.fitView(); } });
+        }
+      }).catch(function () {});
+    };
+    load();
+    clearInterval(this._forgePoll);
+    this._forgePoll = setInterval(load, 2500);
+  }
+  _forgeCycle() {
+    var F = this;
+    fetch('/api/networks').then(function (r) { return r.json(); }).then(function (list) {
+      if (!list || !list.length) return;
+      var i = list.findIndex(function (n) { return n.net === F._forgeNet_; });
+      var next = list[(i + 1) % list.length];
+      if (next && next.net !== F._forgeNet_) F._forgeSelect(next.net);
+    }).catch(function () {});
+  }
+  _forgeInit() {
+    var F = this;
+    fetch('/api/networks').then(function (r) { return r.json(); }).then(function (list) {
+      F._forgeNets = list || [];
+      if (list && list.length) {
+        var running = list.filter(function (n) { return n.running; });
+        F._forgeSelect((running[0] || list[0]).net);
+      } else {
+        F.setState({ screen: 'empty' });
+      }
+    }).catch(function () {});
+  }
+  _forgeSpawn() {
+    var F = this;
+    var body = { preset: this.state.preset, nodes: this.effN(), funding: this.state.funding };
+    var t = this.build(this.state.preset, this.effN(), this.state.funding);
+    this.setState(Object.assign({}, t, { screen: 'forging', bootStep: 0, sel: null, chState: Object.fromEntries(t.channels.map(function (c) { return [c.id, 'pending']; })) }));
+    clearInterval(this._boot);
+    var total = t.nodes.length + 1 + t.channels.length;
+    this._boot = setInterval(function () { F.setState(function (st) { return { bootStep: Math.min(total, st.bootStep + 1) }; }); }, 600);
+    fetch('/api/up', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.jobId) throw new Error(res.error || 'spawn failed');
+        var poll = setInterval(function () {
+          fetch('/api/job?id=' + res.jobId).then(function (r) { return r.json(); }).then(function (job) {
+            if (job && job.status === 'done') { clearInterval(poll); clearInterval(F._boot); F._forgeSelect(res.net); }
+            else if (job && job.status === 'error') { clearInterval(poll); clearInterval(F._boot); F.setState({ screen: 'floor' }); }
+          }).catch(function () {});
+        }, 1500);
+      })
+      .catch(function () { clearInterval(F._boot); F.setState({ screen: 'floor' }); });
+  }
+
   componentDidMount() {
-    if (window.__FORGE__ && window.__FORGE__.net) {
-      var F = this;
-      var pm = window.__FORGE__.net.match(/^[a-z]+/);
-      var preset = pm ? pm[0] : 'line';
-      if (['duo','trio','line','ring','star','hub'].indexOf(preset) < 0) preset = 'line';
-      var mapLive = function (v) {
-        var n = v.nodes.length;
-        var g = F.build(preset, n, 10000);
-        var idOf = {};
-        v.nodes.forEach(function (nd, i) { idOf[nd.name] = 'n' + i; });
-        var nodes = v.nodes.map(function (nd, i) {
-          var pk = nd.pubkey || '';
-          var shortPk = pk.length > 13 ? pk.slice(0, 7) + '…' + pk.slice(-4) : pk;
-          return Object.assign({}, g.nodes[i] || {}, { id: 'n' + i, name: nd.name, port: nd.rpcHostPort, pubkey: shortPk, fullPubkey: pk, dead: nd.status !== 'running' });
-        });
-        var channels = v.channels.map(function (c, j) {
-          return Object.assign({}, g.channels[j] || {}, { id: 'c' + j, from: idOf[c.from], to: idOf[c.to], cap: c.capacityCkb });
-        });
-        var chState = {}, balances = {};
-        v.channels.forEach(function (c, j) {
-          chState['c' + j] = c.state === 'ChannelReady' ? 'ready' : (c.state === 'unknown' ? 'dead' : 'pending');
-          balances['c' + j] = c.localCkb != null ? c.localCkb : Math.round(c.capacityCkb / 2);
-        });
-        var onchain = {};
-        v.nodes.forEach(function (nd, i) { onchain['n' + i] = nd.onchainCkb != null ? nd.onchainCkb : 10000; });
-        return { screen: 'floor', nodes: nodes, channels: channels, chState: chState, balances: balances, onchain: onchain, core: g.core, name: 'forge-' + v.net };
-      };
-      var tick = function () {
-        fetch('/api/state').then(function (r) { return r.json(); }).then(function (v) {
-          if (v && v.nodes && v.nodes.length) F.setState(mapLive(v), function () {
-            if (!F._forgeFitted) { F._forgeFitted = true; if (F.fitView) F.fitView(); }
-          });
-        }).catch(function () {});
-      };
-      tick();
-      F._forgePoll = setInterval(tick, 2500);
-    }
+    if (window.__FORGE__) this._forgeInit();
 
     if (!this._view) this._view = this.computeFit();
     this.applyView(); this.setZoomPct();
@@ -730,7 +785,7 @@ class Component extends DCLogic {
   zoomIn = () => { const r = this._floorEl.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 1.25); };
   zoomOut = () => { const r = this._floorEl.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 0.8); };
   handleWheel(e) { if (!e.target || !e.target.closest || !e.target.closest('[data-floor]')) return; e.preventDefault(); const r = this._floorEl.getBoundingClientRect(); this.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0016)); }
-  handleKey(e) { if (!(e.metaKey || e.ctrlKey)) return; if (e.key === '0') { e.preventDefault(); this.fitView(); } else if (e.key === '1') { e.preventDefault(); this.reset100(); } }
+  handleKey(e) { if (window.__FORGE__ && this.state.screen === 'floor' && (e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); this._forgeCycle(); return; } if (!(e.metaKey || e.ctrlKey)) return; if (e.key === '0') { e.preventDefault(); this.fitView(); } else if (e.key === '1') { e.preventDefault(); this.reset100(); } }
   onPointerDown = (e) => { if (e.target.closest && (e.target.closest('[data-node]') || e.target.closest('[data-conduit]'))) return; this._pan = { x: e.clientX, y: e.clientY, vx: this._view.x, vy: this._view.y, moved: false }; try { this._floorEl.setPointerCapture(e.pointerId); } catch (_) {} this.applyView(); };
   onPointerMove = (e) => { if (!this._pan) return; const dx = e.clientX - this._pan.x, dy = e.clientY - this._pan.y; if (Math.abs(dx) + Math.abs(dy) > 3) this._pan.moved = true; this._view.x = this._pan.vx + dx; this._view.y = this._pan.vy + dy; this.applyView(); };
   onPointerUp = (e) => { const moved = this._pan && this._pan.moved; this._pan = null; try { this._floorEl.releasePointerCapture(e.pointerId); } catch (_) {} this.applyView(); if (!moved && this.state.sel) this.clearSel(); };
