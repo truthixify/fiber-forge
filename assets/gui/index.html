@@ -683,7 +683,9 @@ class Component extends DCLogic {
         var idOf = {};
         v.nodes.forEach(function (nd, i) { idOf[nd.name] = 'n' + i; });
         var nodes = v.nodes.map(function (nd, i) {
-          return Object.assign({}, g.nodes[i] || {}, { id: 'n' + i, name: nd.name, port: nd.rpcHostPort, pubkey: nd.pubkey, dead: nd.status !== 'running' });
+          var pk = nd.pubkey || '';
+          var shortPk = pk.length > 13 ? pk.slice(0, 7) + '…' + pk.slice(-4) : pk;
+          return Object.assign({}, g.nodes[i] || {}, { id: 'n' + i, name: nd.name, port: nd.rpcHostPort, pubkey: shortPk, fullPubkey: pk, dead: nd.status !== 'running' });
         });
         var channels = v.channels.map(function (c, j) {
           return Object.assign({}, g.channels[j] || {}, { id: 'c' + j, from: idOf[c.from], to: idOf[c.to], cap: c.capacityCkb });
