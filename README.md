@@ -34,7 +34,15 @@ node bin/forge.mjs invoice trio lorentz 100        # create an invoice
 node bin/forge.mjs channel open trio feynman galileo 1000
 node bin/forge.mjs channel ls trio                 # channels with balances
 node bin/forge.mjs channel close trio feynman <id>
-node bin/forge.mjs logs trio feynman               # node logs (or 'ckb')
+node bin/forge.mjs logs trio feynman --level warn  # node logs (or 'ckb'), filtered by level
+
+# scenario scripts — a little traffic generator (see examples/payments.yml)
+node bin/forge.mjs run trio ./examples/payments.yml
+
+# UDT asset channels (dev simple_udt, baked into the devnet genesis)
+node bin/forge.mjs udt issue trio feynman 10000    # mint 10000 UDT to a node
+node bin/forge.mjs channel open trio feynman galileo 5000 --udt
+node bin/forge.mjs pay trio feynman galileo 100 --udt
 
 # a custom network, and machine-readable output
 node bin/forge.mjs up ./my-topology.yml
@@ -55,9 +63,11 @@ run at once (`trio` **and** `line:5`, …) without clashing. `--ckb-port` / `--r
 then: creates the docker network → boots the CKB dev chain (contracts baked into genesis) →
 starts each fnn node with a generated, fnn-encrypted CKB key → waits for RPC → funds every node
 from the genesis deployer via `@ckb-ccc/core` (with the devnet secp256k1 cell dep) → connects
-peers → opens each channel → drives blocks until `CHANNEL_READY`. The layout is persisted so the
-GUI daemon can render a network's live state. Module map: `topology` · `keys` · `rpc` · `engine`
-· `config` · `ckb` · `orchestrator` · `presets` · `cli` · `daemon`.
+peers → opens each channel → drives blocks until `CHANNEL_READY`. Nodes are also configured to
+whitelist the devnet UDT, so `--udt` channels and payments work. The layout is persisted so the
+GUI daemon can render a network's live state; it pushes updates over a WebSocket (`/ws`) and falls
+back to polling. Module map: `topology` · `keys` · `rpc` · `engine` · `config` · `ckb` ·
+`orchestrator` · `scenario` · `presets` · `cli` · `daemon`.
 
 ## Quickstart (development)
 
