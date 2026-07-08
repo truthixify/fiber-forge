@@ -48,17 +48,17 @@ async function openBrowser(url: string): Promise<void> {
   }
 }
 
-/** Serve the GUI for a network on a free port, open it, and keep the process alive. */
-async function launchGui(net: string): Promise<void> {
+/** Serve the GUI on a free port, open it, and keep the process alive. */
+async function launchGui(note?: string): Promise<void> {
   const { serveGui } = await import("./daemon");
   const { findFreePort } = await import("./ports");
   const port = await findFreePort(5178);
-  await serveGui(orchestrator(), net, port);
+  await serveGui(orchestrator(), port);
   const url = `http://127.0.0.1:${port}`;
   console.log(ui.hint("GUI", [url]));
   console.log(
     ui.muted(
-      `  Ctrl-C stops the GUI · the network keeps running · forge down ${net} to remove it\n`,
+      `  Ctrl-C stops the GUI · your networks keep running${note ? ` · ${note}` : ""}\n`,
     ),
   );
   await openBrowser(url);
@@ -225,7 +225,7 @@ export function buildCli(): Command {
           progress.finish();
           printUpCard(layout, topology);
           if (options.gui !== false) {
-            await launchGui(layout.net);
+            await launchGui(`forge down ${layout.net} to remove it`);
           }
         } catch (error) {
           progress.failActive((error as Error).message);
@@ -501,14 +501,18 @@ export function buildCli(): Command {
 
   program
     .command("gui")
-    .argument("<net>", "network name")
+    .description("serve the web GUI for all networks")
     .option("--port <n>", "http port", (v) => Number.parseInt(v, 10), 5178)
-    .action(async (net: string, options: { port: number }) => {
+    .action(async (options: { port: number }) => {
       const { serveGui } = await import("./daemon");
-      await serveGui(orchestrator(), net, options.port);
+      const { findFreePort } = await import("./ports");
+      const port = await findFreePort(options.port);
+      await serveGui(orchestrator(), port);
+      const url = `http://127.0.0.1:${port}`;
       console.log(
-        `\n  ${ui.accent("fiber-forge")}  ${ui.text(net)}  ${ui.muted("→")}  ${ui.flux(`http://127.0.0.1:${options.port}`)}\n`,
+        `\n  ${ui.accent("fiber-forge")}  ${ui.muted("→")}  ${ui.flux(url)}\n`,
       );
+      await openBrowser(url);
     });
 
   return program;

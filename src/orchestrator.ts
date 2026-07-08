@@ -484,6 +484,17 @@ export class Orchestrator {
     await this.rpcFor(target.rpcHostPort).shutdownChannel(channelId);
   }
 
+  /** Top up a running node's on-chain wallet from the deployer; returns the funding tx hash. */
+  async fund(net: string, node: string, amountCkb: number): Promise<string> {
+    const state = await this.readState(net);
+    const target = this.requireNode(state, node);
+    const chain = new DevChain(`http://127.0.0.1:${state.ckbHostPort}`);
+    const address = await chain.addressOfPubkey(target.pubkey);
+    const tx = await chain.fund(address, amountCkb);
+    await chain.generateBlocks(4);
+    return tx;
+  }
+
   /** List channels across the network (or one node), with live state and balances. */
   async channels(net: string, node?: string): Promise<ChannelRow[]> {
     const state = await this.readState(net);

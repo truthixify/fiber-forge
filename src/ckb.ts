@@ -74,6 +74,17 @@ export class DevChain {
     ).getRecommendedAddress();
   }
 
+  /** The secp256k1 CKB address for a public key (a node's wallet, derived from its `node_info`). */
+  async addressOfPubkey(pubkeyHex: string): Promise<string> {
+    const args = ccc.hashCkb(pubkeyHex).slice(0, 42);
+    const script = await ccc.Script.fromKnownScript(
+      this.client,
+      ccc.KnownScript.Secp256k1Blake160,
+      args,
+    );
+    return ccc.Address.fromScript(script, this.client).toString();
+  }
+
   /** Transfer `ckb` whole CKB from the deployer to `address`; returns the funding tx hash. */
   async fund(address: string, ckb: number): Promise<string> {
     await this.ensureDevScripts();
