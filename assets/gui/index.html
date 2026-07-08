@@ -303,9 +303,9 @@
       </div>
       <div style="padding:20px;">
         <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:18px;">
-          <div style="flex:1;background:var(--inset);padding:12px 14px;"><span class="mc" style="display:block;margin-bottom:5px;">FROM</span><span style="font-size:15px;font-weight:600;color:{{ payFromHue }};">{{ payFromName }}</span></div>
+          <div onClick="{{ cyclePayFrom }}" title="click to change sender" style="flex:1;background:var(--inset);padding:12px 14px;cursor:pointer;"><span class="mc" style="display:block;margin-bottom:5px;">FROM ▸</span><span style="font-size:15px;font-weight:600;color:{{ payFromHue }};">{{ payFromName }}</span></div>
           <div style="flex:none;background:var(--inset);padding:12px 10px;display:flex;align-items:center;color:var(--faint);">→</div>
-          <div style="flex:1;background:var(--inset);padding:12px 14px;"><span class="mc" style="display:block;margin-bottom:5px;">TO</span><span style="font-size:15px;font-weight:600;color:{{ payToHue }};">{{ payToName }}</span></div>
+          <div onClick="{{ cyclePayTo }}" title="click to change recipient" style="flex:1;background:var(--inset);padding:12px 14px;cursor:pointer;"><span class="mc" style="display:block;margin-bottom:5px;">TO ▸</span><span style="font-size:15px;font-weight:600;color:{{ payToHue }};">{{ payToName }}</span></div>
         </div>
         <span class="mc" style="display:block;margin-bottom:8px;">AMOUNT · CKB</span>
         <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:16px;">
@@ -585,6 +585,8 @@ class Component extends DCLogic {
   closePay = () => this.setState({ payOpen: false });
   incPay = () => this.setState(s => ({ payAmt: Math.min(900, s.payAmt + 50) }));
   decPay = () => this.setState(s => ({ payAmt: Math.max(50, s.payAmt - 50) }));
+  cyclePayFrom = () => { this.setState(s => { const ids = s.nodes.map(n => n.id); const i = ids.indexOf(s.payFrom); for (let k = 1; k <= ids.length; k++) { const id = ids[(i + k) % ids.length]; if (id !== s.payTo) return { payFrom: id }; } return {}; }); };
+  cyclePayTo = () => { this.setState(s => { const ids = s.nodes.map(n => n.id); const i = ids.indexOf(s.payTo); for (let k = 1; k <= ids.length; k++) { const id = ids[(i + k) % ids.length]; if (id !== s.payFrom) return { payTo: id }; } return {}; }); };
   confirmPay = () => { const f = this.node(this.state.payFrom), t = this.node(this.state.payTo); this.setState({ payOpen: false, lastCmd: 'forge pay ' + this.state.name.replace('forge-', '') + ' ' + (f ? f.name : '') + ' ' + (t ? t.name : '') + ' ' + this.state.payAmt }); if (window.__FORGE__) this._forgeApi('/api/pay', { net: this._forgeNet(), from: f ? f.name : '', to: t ? t.name : '', amount: this.state.payAmt }); this.startPayment(); };
 
   startPayment = () => {
@@ -705,7 +707,10 @@ class Component extends DCLogic {
     });
     var onchain = {};
     v.nodes.forEach(function (nd, i) { onchain['n' + i] = nd.onchainCkb != null ? nd.onchainCkb : 10000; });
-    return { nodes: nodes, channels: channels, chState: chState, balances: balances, onchain: onchain, core: g.core, name: 'forge-' + v.net, block: v.block || 0 };
+    var ids = nodes.map(function (n) { return n.id; });
+    var pf = ids.indexOf(this.state.payFrom) >= 0 ? this.state.payFrom : (nodes[0] ? nodes[0].id : null);
+    var pt = (ids.indexOf(this.state.payTo) >= 0 && this.state.payTo !== pf) ? this.state.payTo : ids.filter(function (id) { return id !== pf; })[0] || pf;
+    return { nodes: nodes, channels: channels, chState: chState, balances: balances, onchain: onchain, core: g.core, name: 'forge-' + v.net, block: v.block || 0, payFrom: pf, payTo: pt };
   }
   _forgeSelect(net) {
     var F = this;
@@ -1081,7 +1086,7 @@ class Component extends DCLogic {
       vitals: [{ k: 'CAPACITY', val: this.fmt(totalCap), c: 'var(--flux)' }, { k: 'ON-CHAIN', val: this.fmt(totalOnchain), c: 'var(--gold)' }, { k: 'BLOCK', val: '#' + (S.block || 0), c: 'var(--text)' }],
       vNodes: String(N), vChannels: String(readyChans.length),
       events: S.events, lastCmd: S.lastCmd,
-      enterWizard: this.enterWizard, openPay: this.openPay, openFund: this.openFund, openCap: this.openCap, clearSel: this.clearSel, goFloor: this.goFloor, confirmCloseChannel: this.confirmCloseChannel, forgeCycle: () => this._forgeCycle(),
+      enterWizard: this.enterWizard, openPay: this.openPay, openFund: this.openFund, openCap: this.openCap, clearSel: this.clearSel, goFloor: this.goFloor, confirmCloseChannel: this.confirmCloseChannel, forgeCycle: () => this._forgeCycle(), cyclePayFrom: this.cyclePayFrom, cyclePayTo: this.cyclePayTo,
       zoomPct: String(S.zoomPct), zoomIn: this.zoomIn, zoomOut: this.zoomOut, zoomFit: this.fitView,
       bootSteps, bootLabel, bootPctW: Math.round(bs / total * 100) + '%',
       isNode: isFloor && !!n, isChannel: isFloor && !!ch,
