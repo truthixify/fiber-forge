@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { DockerEngine } from "./engine";
 import { Orchestrator } from "./orchestrator";
-import { preset, presetNames } from "./presets";
+import { preset, presetHelp } from "./presets";
 import { type Topology, parseTopology } from "./topology";
 
 /** The bundled assets directory (a sibling of `src`). */
@@ -39,10 +39,7 @@ export function buildCli(): Command {
 
   program
     .command("up")
-    .argument(
-      "<preset|file>",
-      `a preset (${presetNames().join(", ")}) or a topology YAML file`,
-    )
+    .argument("<preset|file>", `${presetHelp()}, or a topology YAML file`)
     .option("--ckb-port <n>", "host port for the ckb rpc", (v) =>
       Number.parseInt(v, 10),
     )
