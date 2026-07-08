@@ -19,10 +19,12 @@ import {
   type NetworkLayout,
   type NodeLayout,
   fnnConfigYaml,
+  pickSubnetBase,
   planLayout,
 } from "./config";
 import { type ContainerEngine, type ContainerSpec } from "./engine";
 import { encryptKey, generatePrivateKey } from "./keys";
+import { findFreePort, findFreePortBlock } from "./ports";
 import {
   FnnRpc,
   HttpTransport,
@@ -145,7 +147,23 @@ export class Orchestrator {
     topology: Topology,
     options: UpOptions = {},
   ): Promise<NetworkLayout> {
-    const layout = planLayout(topology, options.layout);
+    const layoutOptions: LayoutOptions = { ...(options.layout ?? {}) };
+    if (!layoutOptions.subnetBase) {
+      layoutOptions.subnetBase = pickSubnetBase(
+        topology.name,
+        await this.engine.usedSubnets(),
+      );
+    }
+    if (layoutOptions.ckbHostPort === undefined) {
+      layoutOptions.ckbHostPort = await findFreePort(8114);
+    }
+    if (layoutOptions.rpcHostPortBase === undefined) {
+      layoutOptions.rpcHostPortBase = await findFreePortBlock(
+        8300,
+        topology.nodes.length,
+      );
+    }
+    const layout = planLayout(topology, layoutOptions);
     const log = options.onProgress ?? (() => {});
     const netDir = join(this.stateDir, layout.net);
 

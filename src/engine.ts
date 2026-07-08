@@ -47,6 +47,8 @@ export interface ContainerEngine {
   logs(name: string, tailLines: number): Promise<string>;
   /** Names of containers carrying `label=value`. */
   listByLabel(label: string, value: string): Promise<string[]>;
+  /** The subnets (CIDR) of every existing network, so a new one can avoid overlaps. */
+  usedSubnets(): Promise<string[]>;
 }
 
 /** An in-memory engine for unit tests and dry runs; records every spec and models status. */
@@ -102,6 +104,10 @@ export class FakeEngine implements ContainerEngine {
     return [...this.containers.values()]
       .filter((c) => c.spec.labels?.[label] === value)
       .map((c) => c.spec.name);
+  }
+
+  async usedSubnets(): Promise<string[]> {
+    return [...this.networks.values()];
   }
 }
 
@@ -219,6 +225,15 @@ export class DockerEngine implements ContainerEngine {
       filters: { label: [`${label}=${value}`] },
     });
     return list.flatMap((c) => c.Names.map((n) => n.replace(/^\//, "")));
+  }
+
+  async usedSubnets(): Promise<string[]> {
+    const networks = await this.docker.listNetworks();
+    return networks.flatMap((network) =>
+      (network.IPAM?.Config ?? [])
+        .map((config) => config.Subnet)
+        .filter((subnet): subnet is string => Boolean(subnet)),
+    );
   }
 
   private async ensureImage(image: string): Promise<void> {

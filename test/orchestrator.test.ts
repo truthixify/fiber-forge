@@ -17,12 +17,12 @@ const duo: Topology = {
 };
 
 describe("container specs", () => {
-  const layout = planLayout(duo);
+  const layout = planLayout(duo, { subnetBase: "10.5.7" });
 
   it("builds the ckb spec with the entrypoint, static ip, and mounted assets", () => {
     const spec = ckbContainerSpec(layout, "/abs/assets");
     expect(spec.name).toBe("forge-duo-ckb");
-    expect(spec.ip).toBe("172.30.0.2");
+    expect(spec.ip).toBe("10.5.7.2");
     expect(spec.user).toBe("0");
     expect(spec.entrypoint).toEqual(["bash", "/assets/ckb-entrypoint.sh"]);
     expect(spec.volumes).toContainEqual({
@@ -36,7 +36,7 @@ describe("container specs", () => {
   it("builds a node spec with the announce env, private-ip RPC, and mapped port", () => {
     const spec = nodeContainerSpec(layout, layout.nodes[0], "/state/node-1");
     expect(spec.name).toBe("forge-duo-node-1");
-    expect(spec.ip).toBe("172.30.0.11");
+    expect(spec.ip).toBe("10.5.7.11");
     expect(spec.env?.FIBER_SECRET_KEY_PASSWORD).toBe("forge-duo-alice");
     expect(spec.env?.FIBER_ANNOUNCE_PRIVATE_ADDR).toBe("true");
     expect(spec.env?.FIBER_LISTENING_ADDR).toBe("/ip4/0.0.0.0/tcp/8228");

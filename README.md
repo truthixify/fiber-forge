@@ -27,8 +27,12 @@ node bin/forge.mjs down trio --purge
 node bin/forge.mjs up ./my-topology.yml
 ```
 
-Presets: `duo` (2 nodes / 1 channel), `trio` (3 / 2), `hub` (1×4 star). A topology file declares
-`nodes`, `channels` (`from`/`to`/`capacity_ckb`), and `funding.per_node_ckb`.
+Presets: `duo` (2 nodes), `trio` (3), `hub` (5-node star), or **`shape:N`** for any count —
+`line:N` (chain), `ring:N` (loop), `star:N` (hub + N-1 spokes), with N from 2 to 10. A topology
+file declares `nodes`, `channels` (`from`/`to`/`capacity_ckb`), and `funding.per_node_ckb`.
+
+Networks are independent: `forge up` auto-picks a free subnet and free host ports, so several can
+run at once (`trio` **and** `line:5`, …) without clashing. `--ckb-port` / `--rpc-base` pin them.
 
 ## How it works
 
