@@ -131,6 +131,7 @@ export interface NetworkView {
     pubkey: string;
     status: string;
     onchainCkb: number;
+    udtBalance: number;
   }[];
   channels: {
     from: string;
@@ -140,6 +141,7 @@ export interface NetworkView {
     localCkb: number;
     remoteCkb: number;
     channelId: string;
+    udt: boolean;
   }[];
 }
 
@@ -344,8 +346,10 @@ export class Orchestrator {
     const nodes = [];
     for (const node of state.nodes) {
       let onchainCkb = 0;
+      let udtBalance = 0;
       try {
         onchainCkb = Number(await chain.balanceOf(node.ckbAddress));
+        udtBalance = Number(await chain.udtBalanceOf(node.ckbAddress)) / 1e8;
       } catch {
         // chain unreachable
       }
@@ -356,6 +360,7 @@ export class Orchestrator {
         pubkey: node.pubkey,
         status: await this.engine.status(node.container),
         onchainCkb,
+        udtBalance,
       });
     }
 
@@ -384,6 +389,7 @@ export class Orchestrator {
           localCkb,
           remoteCkb,
           channelId: channel.channel_id,
+          udt: Boolean(channel.funding_udt_type_script),
         });
       }
     }

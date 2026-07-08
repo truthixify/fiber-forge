@@ -15,6 +15,7 @@ const view: NetworkView = {
       pubkey: "0xabcd",
       status: "running",
       onchainCkb: 9800,
+      udtBalance: 500,
     },
   ],
   channels: [
@@ -26,6 +27,7 @@ const view: NetworkView = {
       localCkb: 600,
       remoteCkb: 400,
       channelId: "0xchan",
+      udt: false,
     },
   ],
 };
@@ -45,6 +47,7 @@ const backend: Backend = {
   closeChannel: async () => {},
   fund: async () => "0x",
   createInvoice: async () => "fibd1invoice",
+  issueUdt: async () => "0xudttx",
   logs: async () => "log line",
   down: async () => {},
   up: async () => ({}) as unknown as NetworkLayout,

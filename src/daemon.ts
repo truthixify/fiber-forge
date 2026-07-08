@@ -36,6 +36,7 @@ export interface Backend {
     to: string,
     amountCkb: number,
     description?: string,
+    udt?: boolean,
   ): Promise<PaymentReport>;
   openChannelBetween(
     net: string,
@@ -43,7 +44,9 @@ export interface Backend {
     to: string,
     capacityCkb: number,
     onProgress?: (message: string) => void,
+    udt?: boolean,
   ): Promise<void>;
+  issueUdt(net: string, node: string, amountUdt: number): Promise<string>;
   closeChannel(net: string, node: string, channelId: string): Promise<void>;
   fund(net: string, node: string, amountCkb: number): Promise<string>;
   createInvoice(
@@ -51,6 +54,7 @@ export interface Backend {
     node: string,
     amountCkb: number,
     description?: string,
+    udt?: boolean,
   ): Promise<string>;
   logs(net: string, node: string): Promise<string>;
   down(
@@ -205,6 +209,8 @@ export function createDaemon(backend: Backend): Server {
               str(body.from),
               str(body.to),
               num(body.amount),
+              undefined,
+              Boolean(body.udt),
             ),
           );
           return;
@@ -215,8 +221,19 @@ export function createDaemon(backend: Backend): Server {
             str(body.from),
             str(body.to),
             num(body.capacity),
+            undefined,
+            Boolean(body.udt),
           );
           sendJson(response, 200, { ok: true });
+          return;
+        }
+        if (path === "/api/udt/issue") {
+          const tx = await backend.issueUdt(
+            str(body.net),
+            str(body.node),
+            num(body.amount),
+          );
+          sendJson(response, 200, { tx });
           return;
         }
         if (path === "/api/channel/close") {
@@ -242,6 +259,8 @@ export function createDaemon(backend: Backend): Server {
             str(body.net),
             str(body.node),
             num(body.amount),
+            undefined,
+            Boolean(body.udt),
           );
           sendJson(response, 200, { invoice });
           return;
