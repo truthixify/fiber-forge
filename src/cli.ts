@@ -495,9 +495,18 @@ export function buildCli(): Command {
     .argument("<net>", "network name")
     .argument("<node>", "node name, or 'ckb' for the chain")
     .option("--tail <n>", "number of lines", (v) => Number.parseInt(v, 10), 200)
-    .action(async (net: string, node: string, options: { tail: number }) => {
-      process.stdout.write(await orchestrator().logs(net, node, options.tail));
-    });
+    .option("--level <level>", "minimum level: trace|debug|info|warn|error")
+    .action(
+      async (
+        net: string,
+        node: string,
+        options: { tail: number; level?: string },
+      ) => {
+        process.stdout.write(
+          await orchestrator().logs(net, node, options.tail, options.level),
+        );
+      },
+    );
 
   program
     .command("gui")

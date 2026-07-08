@@ -277,7 +277,12 @@
           </sc-if>
         </sc-if>
         <sc-if value="{{ tabLogs }}" hint-placeholder-val="{{ false }}">
-          <pre style="white-space:pre-wrap;word-break:break-word;font-family:'Geist Mono',monospace;font-size:11px;line-height:1.5;color:var(--muted);background:var(--inset);border:1px solid var(--hairline);padding:12px;margin:0;max-height:560px;overflow:auto;">{{ nodeLogsText }}</pre>
+          <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:10px;">
+            <sc-for list="{{ logLevels }}" as="lv" hint-placeholder-count="4">
+              <button onClick="{{ lv.set }}" style="flex:1;background:{{ lv.bg }};color:{{ lv.fg }};border:none;padding:7px 0;cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.1em;">{{ lv.l }}</button>
+            </sc-for>
+          </div>
+          <pre style="white-space:pre-wrap;word-break:break-word;font-family:'Geist Mono',monospace;font-size:11px;line-height:1.5;color:var(--muted);background:var(--inset);border:1px solid var(--hairline);padding:12px;margin:0;max-height:520px;overflow:auto;">{{ nodeLogsText }}</pre>
         </sc-if>
       </div>
     </div>
@@ -537,7 +542,7 @@ class Component extends DCLogic {
     fundFlash: null, igniteId: null, zoomPct: 100,
     nodes: [], channels: [], chState: {}, balances: {}, onchain: {}, core: { x: 720, y: 440 },
     name: 'forge-trio', payFrom: null, payTo: null,
-    nodeTab: 'overview', invoiceOpen: false, invoiceAmt: 100, invoiceAddr: '', invoiceBusy: false, nodeLogs: '', copyFlash: null,
+    nodeTab: 'overview', invoiceOpen: false, invoiceAmt: 100, invoiceAddr: '', invoiceBusy: false, nodeLogs: '', nodeLogEntries: [], logLevel: 'ALL', copyFlash: null,
   };
 
   constructor(props) {
@@ -622,12 +627,13 @@ class Component extends DCLogic {
           if (!m) return;
           var mod = m[3].replace(/^fnn::/, '').replace(/:+$/, ''), msg = m[4].trim();
           if (/watchtower|PeriodicCheck/.test(mod + msg) || !msg) return;
-          out.push(m[1] + '  ' + (m[2] + '     ').slice(0, 5) + '  ' + mod + '  ' + msg);
+          out.push({ lvl: m[2], text: m[1] + '  ' + (m[2] + '     ').slice(0, 5) + '  ' + mod + '  ' + msg });
         });
-        self.setState({ nodeLogs: out.length ? out.slice(-120).join('\n') : '(no recent activity)' });
+        self.setState({ nodeLogEntries: out.slice(-160), nodeLogs: out.length ? '' : '(no recent activity)' });
       })
-      .catch(function () { self.setState({ nodeLogs: '(logs unavailable)' }); });
+      .catch(function () { self.setState({ nodeLogEntries: [], nodeLogs: '(logs unavailable)' }); });
   }
+  setLogLevel = (l) => this.setState({ logLevel: l });
   openInvoice = () => {
     const n = this.node(this.state.sel && this.state.sel.id);
     if (!n) return;
@@ -859,7 +865,7 @@ class Component extends DCLogic {
     };
     load();
     clearInterval(this._forgePoll);
-    this._forgePoll = setInterval(load, 2500);
+    this._forgePoll = setInterval(load, 1800);
   }
   _forgeCycle() {
     var F = this;
@@ -1189,6 +1195,11 @@ class Component extends DCLogic {
     const nodePeersList = n ? Array.from(new Set(nodeChans.map(c => c.peer))).map(name => { const pn = S.nodes.find(x => x.name === name); return { name, hue: pn ? pn.hue : 'var(--muted)', port: pn ? (':' + pn.port) : '' }; }) : [];
     const tabStyle = (t) => ({ go: () => this.setNodeTab(t), bd: S.nodeTab === t ? '2px solid var(--ember)' : '2px solid transparent', fg: S.nodeTab === t ? 'var(--bone)' : 'var(--muted)' });
     const tOv = tabStyle('overview'), tPe = tabStyle('peers'), tCh = tabStyle('channels'), tLo = tabStyle('logs');
+    const LVL_RANK = { TRACE: 0, DEBUG: 1, INFO: 2, WARN: 3, ERROR: 4 };
+    const minRank = LVL_RANK[S.logLevel] != null ? LVL_RANK[S.logLevel] : 0;
+    const logShown = (S.nodeLogEntries || []).filter(e => (LVL_RANK[e.lvl] || 0) >= minRank);
+    const nodeLogsText = S.nodeLogs ? S.nodeLogs : (logShown.length ? logShown.map(e => e.text).join('\n') : '(no ' + (S.logLevel === 'ALL' ? 'recent activity' : S.logLevel + ' entries') + ')');
+    const logLevels = ['ALL', 'INFO', 'WARN', 'ERROR'].map(l => ({ l, set: () => this.setLogLevel(l), bg: S.logLevel === l ? 'var(--panel-2)' : 'var(--panel)', fg: S.logLevel === l ? 'var(--ember)' : 'var(--muted)' }));
 
     const N = S.nodes.length, C = S.channels.length, total = N + 1 + C, bs = S.bootStep;
     const nd = Math.max(0, Math.min(N, bs - 1)), cd = Math.max(0, Math.min(C, bs - 1 - N));
@@ -1243,7 +1254,7 @@ class Component extends DCLogic {
       nOnchain: n ? this.fmt(S.onchain[n.id]) : '', nInChannel: n ? this.fmt(nInch) : '', nChannels: n ? String(this.degree(n.id)) : '',
       tabOverview: S.nodeTab === 'overview', tabPeers: S.nodeTab === 'peers', tabChannels: S.nodeTab === 'channels', tabLogs: S.nodeTab === 'logs',
       tabOvGo: tOv.go, tabOvBd: tOv.bd, tabOvFg: tOv.fg, tabPeGo: tPe.go, tabPeBd: tPe.bd, tabPeFg: tPe.fg, tabChGo: tCh.go, tabChBd: tCh.bd, tabChFg: tCh.fg, tabLoGo: tLo.go, tabLoBd: tLo.bd, tabLoFg: tLo.fg,
-      nodeChans, nodePeersList, nodeLogsText: S.nodeLogs || '(select LOGS to load)', nodeChanEmpty: nodeChans.length === 0, nodePeerEmpty: nodePeersList.length === 0,
+      nodeChans, nodePeersList, nodeLogsText, logLevels, nodeChanEmpty: nodeChans.length === 0, nodePeerEmpty: nodePeersList.length === 0,
       openInvoice: this.openInvoice, invoiceOpen: S.invoiceOpen, closeInvoice: this.closeInvoice, genInvoice: this.genInvoice, copyInvoice: this.copyInvoice, incInvoice: this.incInvoice, decInvoice: this.decInvoice,
       invoiceAmtDisp: this.fmt(S.invoiceAmt), invoiceAddr: S.invoiceAddr, invoiceHasAddr: !!S.invoiceAddr, invoiceBusy: S.invoiceBusy, invoiceNodeName: n ? n.name : '',
       spark: n ? (nodeChans.length ? nodeChans.map(c => ({ h: Math.max(4, parseInt(c.localW, 10) || 0) + '%' })) : [{ h: '4%' }]) : [],

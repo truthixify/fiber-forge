@@ -167,6 +167,28 @@ export interface NetworkSummary {
   running: boolean;
 }
 
+const LOG_LEVEL_RANK: Record<string, number> = {
+  trace: 0,
+  debug: 1,
+  info: 2,
+  warn: 3,
+  error: 4,
+};
+
+/** Keep only log lines whose level is at or above `level` (fnn logs `... LEVEL module: msg`). */
+export function filterLogsByLevel(raw: string, level: string): string {
+  const min = LOG_LEVEL_RANK[level.toLowerCase()] ?? 0;
+  return raw
+    .split("\n")
+    .filter((line) => {
+      const match = line.match(/\b(TRACE|DEBUG|INFO|WARN|ERROR)\b/);
+      return match
+        ? (LOG_LEVEL_RANK[match[1].toLowerCase()] ?? 0) >= min
+        : false;
+    })
+    .join("\n");
+}
+
 export class Orchestrator {
   constructor(
     private readonly engine: ContainerEngine,
@@ -543,13 +565,19 @@ export class Orchestrator {
   }
 
   /** Recent logs for a node (or the ckb chain when `node` is `"ckb"`). */
-  async logs(net: string, node: string, tailLines = 200): Promise<string> {
+  async logs(
+    net: string,
+    node: string,
+    tailLines = 200,
+    level?: string,
+  ): Promise<string> {
     const state = await this.readState(net);
     const container =
       node === "ckb"
         ? `forge-${net}-ckb`
         : this.requireNode(state, node).container;
-    return this.engine.logs(container, tailLines);
+    const raw = await this.engine.logs(container, tailLines);
+    return level ? filterLogsByLevel(raw, level) : raw;
   }
 
   private async payInvoiceInternal(
