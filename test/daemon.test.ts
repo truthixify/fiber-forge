@@ -44,6 +44,8 @@ const backend: Backend = {
   openChannelBetween: async () => {},
   closeChannel: async () => {},
   fund: async () => "0x",
+  createInvoice: async () => "fibd1invoice",
+  logs: async () => "log line",
   down: async () => {},
   up: async () => ({}) as unknown as NetworkLayout,
 };

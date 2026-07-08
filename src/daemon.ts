@@ -45,6 +45,13 @@ export interface Backend {
   ): Promise<void>;
   closeChannel(net: string, node: string, channelId: string): Promise<void>;
   fund(net: string, node: string, amountCkb: number): Promise<string>;
+  createInvoice(
+    net: string,
+    node: string,
+    amountCkb: number,
+    description?: string,
+  ): Promise<string>;
+  logs(net: string, node: string): Promise<string>;
   down(
     net: string,
     options: { purge?: boolean; keep?: boolean },
@@ -165,6 +172,18 @@ export function createDaemon(backend: Backend): Server {
         sendJson(response, 200, await backend.channels(net));
         return;
       }
+      if (method === "GET" && path === "/api/logs") {
+        const net = parsed.searchParams.get("net");
+        const node = parsed.searchParams.get("node");
+        if (!net || !node) {
+          sendJson(response, 400, {
+            error: "net and node query parameters required",
+          });
+          return;
+        }
+        sendJson(response, 200, { text: await backend.logs(net, node) });
+        return;
+      }
       if (method === "GET" && path === "/api/job") {
         const job = jobs.get(parsed.searchParams.get("id") ?? "");
         if (!job) {
@@ -215,6 +234,15 @@ export function createDaemon(backend: Backend): Server {
             num(body.amount),
           );
           sendJson(response, 200, { tx });
+          return;
+        }
+        if (path === "/api/invoice") {
+          const invoice = await backend.createInvoice(
+            str(body.net),
+            str(body.node),
+            num(body.amount),
+          );
+          sendJson(response, 200, { invoice });
           return;
         }
         if (path === "/api/down") {

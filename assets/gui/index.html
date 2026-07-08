@@ -205,12 +205,13 @@
         </div>
       </div>
       <div style="display:flex;gap:1px;background:var(--hairline);border-bottom:1px solid var(--hairline);">
-        <div style="flex:1;background:var(--panel);padding:9px 0;text-align:center;border-bottom:2px solid var(--ember);"><span class="mc" style="color:var(--bone);">OVERVIEW</span></div>
-        <div style="flex:1;background:var(--panel);padding:9px 0;text-align:center;"><span class="mc">PEERS</span></div>
-        <div style="flex:1;background:var(--panel);padding:9px 0;text-align:center;"><span class="mc">CHANNELS</span></div>
-        <div style="flex:1;background:var(--panel);padding:9px 0;text-align:center;"><span class="mc">LOGS</span></div>
+        <div onClick="{{ tabOvGo }}" style="flex:1;background:var(--panel);padding:9px 0;text-align:center;cursor:pointer;border-bottom:{{ tabOvBd }};"><span class="mc" style="color:{{ tabOvFg }};">OVERVIEW</span></div>
+        <div onClick="{{ tabPeGo }}" style="flex:1;background:var(--panel);padding:9px 0;text-align:center;cursor:pointer;border-bottom:{{ tabPeBd }};"><span class="mc" style="color:{{ tabPeFg }};">PEERS</span></div>
+        <div onClick="{{ tabChGo }}" style="flex:1;background:var(--panel);padding:9px 0;text-align:center;cursor:pointer;border-bottom:{{ tabChBd }};"><span class="mc" style="color:{{ tabChFg }};">CHANNELS</span></div>
+        <div onClick="{{ tabLoGo }}" style="flex:1;background:var(--panel);padding:9px 0;text-align:center;cursor:pointer;border-bottom:{{ tabLoBd }};"><span class="mc" style="color:{{ tabLoFg }};">LOGS</span></div>
       </div>
       <div style="flex:1;overflow-y:auto;padding:18px;">
+        <sc-if value="{{ tabOverview }}" hint-placeholder-val="{{ true }}">
         <div style="position:relative;padding:18px 16px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:16px;">
           <span style="position:absolute;top:-1px;left:-1px;width:14px;height:14px;border-top:2px solid var(--ember);border-left:2px solid var(--ember);"></span>
           <span style="position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid var(--ember);border-right:2px solid var(--ember);"></span>
@@ -241,9 +242,43 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);">
           <button onClick="{{ openFund }}" style="background:var(--ember);color:#1a0b06;border:none;padding:12px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">FUND +</button>
           <button onClick="{{ openCap }}" style="background:var(--panel-2);color:var(--bone);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">OPEN CHANNEL →</button>
-          <button style="background:var(--panel-2);color:var(--text);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">INVOICE</button>
+          <button onClick="{{ openInvoice }}" style="background:var(--panel-2);color:var(--text);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">INVOICE</button>
           <button onClick="{{ openPay }}" style="background:var(--panel-2);color:var(--text);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">PAY FROM</button>
         </div>
+        </sc-if>
+        <sc-if value="{{ tabPeers }}" hint-placeholder-val="{{ false }}">
+          <sc-for list="{{ nodePeersList }}" as="p" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;gap:10px;padding:13px 14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:8px;">
+              <span style="width:8px;height:8px;border-radius:50%;background:{{ p.hue }};"></span>
+              <span class="num" style="font-size:14px;color:var(--bone);flex:1;">{{ p.name }}</span>
+              <span class="mc" style="color:var(--muted);">{{ p.port }}</span>
+            </div>
+          </sc-for>
+          <sc-if value="{{ nodePeerEmpty }}" hint-placeholder-val="{{ false }}">
+            <div class="mc" style="color:var(--faint);text-align:center;padding:28px;">NO PEERS CONNECTED</div>
+          </sc-if>
+        </sc-if>
+        <sc-if value="{{ tabChannels }}" hint-placeholder-val="{{ false }}">
+          <sc-for list="{{ nodeChans }}" as="c" hint-placeholder-count="2">
+            <div style="padding:13px 14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:8px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">
+                <span class="num" style="font-size:14px;color:var(--bone);">⇄ {{ c.peer }}</span>
+                <span class="mc" style="color:var(--flux);">{{ c.state }}</span>
+              </div>
+              <div style="height:5px;background:var(--panel-2);margin-bottom:7px;"><div style="height:100%;width:{{ c.localW }};background:linear-gradient(90deg,var(--ember-deep),var(--ember));"></div></div>
+              <div style="display:flex;justify-content:space-between;">
+                <span class="mc" style="color:var(--ember);">{{ c.local }} LOCAL</span>
+                <span class="mc" style="color:var(--muted);">{{ c.remote }} REMOTE</span>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ nodeChanEmpty }}" hint-placeholder-val="{{ false }}">
+            <div class="mc" style="color:var(--faint);text-align:center;padding:28px;">NO OPEN CHANNELS</div>
+          </sc-if>
+        </sc-if>
+        <sc-if value="{{ tabLogs }}" hint-placeholder-val="{{ false }}">
+          <pre style="white-space:pre-wrap;word-break:break-word;font-family:'Geist Mono',monospace;font-size:11px;line-height:1.5;color:var(--muted);background:var(--inset);border:1px solid var(--hairline);padding:12px;margin:0;max-height:560px;overflow:auto;">{{ nodeLogsText }}</pre>
+        </sc-if>
       </div>
     </div>
   </sc-if>
@@ -318,6 +353,30 @@
           {{ payRoute }}
         </div>
         <button onClick="{{ confirmPay }}" style="width:100%;background:var(--ember);color:#1a0b06;border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;">SEND SPARK ⚡</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ INVOICE SHEET ============ -->
+  <sc-if value="{{ invoiceOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:rgba(6,8,11,.55);z-index:11;" onClick="{{ closeInvoice }}"></div>
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:440px;background:var(--panel);border:1px solid var(--border);z-index:12;animation:sheetIn .22s cubic-bezier(.2,.8,.2,1);">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--hairline);display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--gold);">◈</span><span class="mc" style="color:var(--bone);font-size:12px;">RECEIVE · {{ invoiceNodeName }}</span></div>
+        <button onClick="{{ closeInvoice }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
+      </div>
+      <div style="padding:20px;">
+        <span class="mc" style="display:block;margin-bottom:8px;">AMOUNT · CKB</span>
+        <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:16px;">
+          <button onClick="{{ decInvoice }}" style="background:var(--panel-2);color:var(--bone);border:none;width:46px;cursor:pointer;font-size:18px;">−</button>
+          <div style="flex:1;background:var(--inset);padding:14px;text-align:center;"><span class="num" style="font-size:26px;font-weight:700;color:var(--bone);">{{ invoiceAmtDisp }}</span></div>
+          <button onClick="{{ incInvoice }}" style="background:var(--panel-2);color:var(--bone);border:none;width:46px;cursor:pointer;font-size:18px;">+</button>
+        </div>
+        <sc-if value="{{ invoiceHasAddr }}" hint-placeholder-val="{{ false }}">
+          <span class="mc" style="display:block;margin-bottom:8px;">INVOICE · TAP TO COPY</span>
+          <div onClick="{{ copyInvoice }}" title="click to copy" style="background:var(--inset);border:1px solid var(--hairline);padding:12px 14px;margin-bottom:16px;cursor:pointer;word-break:break-all;font-family:'Geist Mono',monospace;font-size:11px;color:var(--flux);">{{ invoiceAddr }}</div>
+        </sc-if>
+        <button onClick="{{ genInvoice }}" style="width:100%;background:var(--gold);color:#1a1206;border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;">GENERATE INVOICE ◈</button>
       </div>
     </div>
   </sc-if>
@@ -478,6 +537,7 @@ class Component extends DCLogic {
     fundFlash: null, igniteId: null, zoomPct: 100,
     nodes: [], channels: [], chState: {}, balances: {}, onchain: {}, core: { x: 720, y: 440 },
     name: 'forge-trio', payFrom: null, payTo: null,
+    nodeTab: 'overview', invoiceOpen: false, invoiceAmt: 100, invoiceAddr: '', invoiceBusy: false, nodeLogs: '',
   };
 
   constructor(props) {
@@ -544,8 +604,39 @@ class Component extends DCLogic {
   pathNodes(u, v) { return this._pathNodes(this.state.nodes, this.state.channels, u, v); }
 
   // ---------------- selection / scene ----------------
-  select(type, id) { this.setState({ sel: { type, id } }); }
+  select(type, id) { this.setState({ sel: { type, id }, nodeTab: 'overview' }); }
   clearSel = () => this.setState({ sel: null });
+  setNodeTab = (t) => { this.setState({ nodeTab: t }); if (t === 'logs') this._forgeLoadLogs(); };
+  _forgeLoadLogs() {
+    const n = this.node(this.state.sel && this.state.sel.id);
+    if (!window.__FORGE__ || !n) { this.setState({ nodeLogs: '' }); return; }
+    const self = this;
+    this.setState({ nodeLogs: 'loading…' });
+    fetch('/api/logs?net=' + encodeURIComponent(this._forgeNet()) + '&node=' + encodeURIComponent(n.name))
+      .then(function (r) { return r.json(); })
+      .then(function (res) { var t = ((res && res.text) || '').replace(/\x1b\[[0-9;]*m/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, ''); self.setState({ nodeLogs: t.trim() || '(no output)' }); })
+      .catch(function () { self.setState({ nodeLogs: '(logs unavailable)' }); });
+  }
+  openInvoice = () => {
+    const n = this.node(this.state.sel && this.state.sel.id);
+    if (!n) return;
+    this.setState({ invoiceOpen: true, invoiceAddr: '', invoiceBusy: false });
+  };
+  closeInvoice = () => this.setState({ invoiceOpen: false });
+  incInvoice = () => this.setState(s => ({ invoiceAmt: Math.min(5000, s.invoiceAmt + 50), invoiceAddr: '' }));
+  decInvoice = () => this.setState(s => ({ invoiceAmt: Math.max(50, s.invoiceAmt - 50), invoiceAddr: '' }));
+  genInvoice = () => {
+    const n = this.node(this.state.sel && this.state.sel.id);
+    if (!n) return;
+    if (!window.__FORGE__) { this.setState({ invoiceAddr: 'fibd10' + Math.abs((n.name + this.state.invoiceAmt).length * 7).toString(16) + 'demoinvoice' }); return; }
+    const self = this;
+    this.setState({ invoiceBusy: true });
+    fetch('/api/invoice', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ net: this._forgeNet(), node: n.name, amount: this.state.invoiceAmt }) })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { self.setState({ invoiceBusy: false, invoiceAddr: res && res.invoice ? res.invoice : ('error: ' + ((res && res.error) || 'failed')) }); })
+      .catch(function () { self.setState({ invoiceBusy: false, invoiceAddr: 'error creating invoice' }); });
+  };
+  copyInvoice = () => { try { navigator.clipboard.writeText(this.state.invoiceAddr); } catch (e) {} };
   setMode = (id) => this.setState({ mode: id });
   goEmpty = () => { clearInterval(this._boot); this.setState({ screen: 'empty', sel: null, payOpen: false, fundOpen: false, capOpen: false }); };
   goWizard = () => { clearInterval(this._boot); this.setState({ screen: 'wizard', wizardStep: 1, sel: null }); };
@@ -1067,6 +1158,15 @@ class Component extends DCLogic {
     const chLocal = ch ? (S.balances[ch.id] != null ? S.balances[ch.id] : ch.cap / 2) : 0;
     let nInch = 0;
     if (n) S.channels.forEach(c => { if (c.from === n.id) nInch += (S.balances[c.id] || 0); else if (c.to === n.id) nInch += (c.cap - (S.balances[c.id] || 0)); });
+    const nodeChans = n ? S.channels.filter(c => c.from === n.id || c.to === n.id).map(c => {
+      const peer = this.node(c.from === n.id ? c.to : c.from);
+      const bal = S.balances[c.id] != null ? S.balances[c.id] : c.cap / 2;
+      const local = c.from === n.id ? bal : c.cap - bal;
+      return { peer: peer ? peer.name : '?', hue: peer ? peer.hue : 'var(--muted)', local: this.fmt(Math.round(local)), remote: this.fmt(Math.round(c.cap - local)), state: (S.chState[c.id] || 'ready').toUpperCase(), localW: Math.round(local / c.cap * 100) + '%' };
+    }) : [];
+    const nodePeersList = n ? Array.from(new Set(nodeChans.map(c => c.peer))).map(name => { const pn = S.nodes.find(x => x.name === name); return { name, hue: pn ? pn.hue : 'var(--muted)', port: pn ? (':' + pn.port) : '' }; }) : [];
+    const tabStyle = (t) => ({ go: () => this.setNodeTab(t), bd: S.nodeTab === t ? '2px solid var(--ember)' : '2px solid transparent', fg: S.nodeTab === t ? 'var(--bone)' : 'var(--muted)' });
+    const tOv = tabStyle('overview'), tPe = tabStyle('peers'), tCh = tabStyle('channels'), tLo = tabStyle('logs');
 
     const N = S.nodes.length, C = S.channels.length, total = N + 1 + C, bs = S.bootStep;
     const nd = Math.max(0, Math.min(N, bs - 1)), cd = Math.max(0, Math.min(C, bs - 1 - N));
@@ -1115,6 +1215,11 @@ class Component extends DCLogic {
       isNode: isFloor && !!n, isChannel: isFloor && !!ch,
       nName: n ? n.name : '', nPubkey: n ? n.pubkey : '', nPort: n ? String(n.port) : '', nP2p: n ? String(n.p2p) : '',
       nOnchain: n ? this.fmt(S.onchain[n.id]) : '', nInChannel: n ? this.fmt(nInch) : '', nChannels: n ? String(this.degree(n.id)) : '',
+      tabOverview: S.nodeTab === 'overview', tabPeers: S.nodeTab === 'peers', tabChannels: S.nodeTab === 'channels', tabLogs: S.nodeTab === 'logs',
+      tabOvGo: tOv.go, tabOvBd: tOv.bd, tabOvFg: tOv.fg, tabPeGo: tPe.go, tabPeBd: tPe.bd, tabPeFg: tPe.fg, tabChGo: tCh.go, tabChBd: tCh.bd, tabChFg: tCh.fg, tabLoGo: tLo.go, tabLoBd: tLo.bd, tabLoFg: tLo.fg,
+      nodeChans, nodePeersList, nodeLogsText: S.nodeLogs || '(select LOGS to load)', nodeChanEmpty: nodeChans.length === 0, nodePeerEmpty: nodePeersList.length === 0,
+      openInvoice: this.openInvoice, invoiceOpen: S.invoiceOpen, closeInvoice: this.closeInvoice, genInvoice: this.genInvoice, copyInvoice: this.copyInvoice, incInvoice: this.incInvoice, decInvoice: this.decInvoice,
+      invoiceAmtDisp: this.fmt(S.invoiceAmt), invoiceAddr: S.invoiceAddr, invoiceHasAddr: !!S.invoiceAddr, invoiceBusy: S.invoiceBusy, invoiceNodeName: n ? n.name : '',
       spark: [40, 70, 55, 90, 30, 65, 85, 45, 100, 60, 75, 50].map(hh => ({ h: hh + '%' })),
       chFrom: ch ? this.node(ch.from).name : '', chTo: ch ? this.node(ch.to).name : '', chCap: ch ? this.fmt(ch.cap) : '', chLocal: ch ? this.fmt(chLocal) : '', chRemote: ch ? this.fmt(ch.cap - chLocal) : '', chHash: ch ? ch.hash : '',
       payOpen: S.payOpen, closePay: this.closePay, incPay: this.incPay, decPay: this.decPay, confirmPay: this.confirmPay, payAmtDisp: this.fmt(S.payAmt),
