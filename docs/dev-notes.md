@@ -39,3 +39,27 @@ orchestrator is built against; kept here so the reasoning is not lost.
 The orchestrator, funding, RPC client, and topology are built against injectable interfaces and
 unit-tested with fakes (no live node), keeping `make ci` green. The real Docker path and the
 CKB-dev-chain-to-`CHANNEL_READY` flow are the E2E, run on a Docker host (available here).
+
+## Verified live boot (spike passed)
+
+Booted the full devnet on real Docker — `node_info` responds on a devnet chain. The facts the
+orchestrator must implement, all confirmed empirically:
+
+- **Containers run as root** (`docker run -u 0`): a fresh named `/data` volume mounts root-owned,
+  and CKB/fnn (image uid 1000) otherwise can't write it.
+- **fnn RPC must bind a PRIVATE IP.** `rpc/mod.rs:260` treats `is_private()` (172.16/12, 10/8,
+  192.168/16) or loopback as private; `0.0.0.0` is "public" and requires a biscuit key. So the
+  orchestrator creates the docker network with a subnet (`--subnet 172.30.0.0/16`), assigns each
+  container a static IP, and sets `rpc.listening_addr: <static-private-ip>:8227`. `docker -p`
+  still maps a host port to it.
+- **fnn needs a pre-existing encrypted CKB key** at `<base>/ckb/key` (it does not generate one).
+  Format: `[version=0x00][salt:16][nonce:12][AES-256-GCM ciphertext]`, AES key =
+  `scrypt(password, salt, N=2^17, r=8, p=1, 32)`, plaintext = the **32 raw private-key bytes**
+  (`utils/encrypt_decrypt_file.rs`). fnn derives its own fiber network key from
+  `FIBER_SECRET_KEY_PASSWORD`. The orchestrator generates a random CKB key per node and writes
+  this exact format — no dependency on the repo's test keys (those use passwords `passwordN`).
+- **fnn config (devnet):** `fiber.chain: dev.toml` (mount `dev.toml` + `contracts/` into the base
+  dir), `ckb.rpc_url: http://<ckb-container>:8114` (container DNS resolves on a custom network),
+  `services: [fiber, rpc, ckb]`, `auto_announce_node` + `announce_private_addr: true`.
+- **node_info** returns `{ pubkey, chain_hash, addresses, features, node_name,
+  open_channel_auto_accept_min_ckb_funding_amount, ... }`.
