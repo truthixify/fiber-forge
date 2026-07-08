@@ -128,13 +128,17 @@ export function createDaemon(backend: Backend): Server {
         const html = raw.includes("<head>")
           ? raw.replace("<head>", `<head>${inject}`)
           : inject + raw;
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.writeHead(200, {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store",
+        });
         response.end(html);
         return;
       }
       if (method === "GET" && path === "/support.js") {
         response.writeHead(200, {
           "content-type": "text/javascript; charset=utf-8",
+          "cache-control": "no-store",
         });
         response.end(await readFile(join(guiDir, "support.js"), "utf8"));
         return;
