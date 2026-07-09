@@ -94,16 +94,24 @@ FORGE_E2E=1 npx vitest run test/e2e.test.ts   # the live forge-up-to-CHANNEL_REA
 
 Run `make ci` before every push.
 
-## Releasing
+## Roadmap
 
-Publishing to npm is automated. Bump `version` in `package.json`, then push a matching tag:
+fiber-forge already spins up multi-node networks and drives CKB and UDT payments end to end. Where
+it's headed next:
 
-```sh
-git tag v0.1.2 && git push origin v0.1.2
-```
-
-The `publish` workflow runs `make ci` and `npm publish` (requires an `NPM_TOKEN` repository secret
-with publish rights).
+- **Richer assets** — xUDT with RCE rules, an RUSD / stablecoin preset, and multiple named assets
+  per node, not just the dev `simple_udt`.
+- **Resilience demos** — kill and restart nodes from the GUI, simulate stuck HTLCs, and visualize
+  force-close and on-chain settlement (the watchtower story).
+- **Routing lab** — multi-path payments, per-hop fee and route inspection, and a live view of the
+  gossip graph and probing.
+- **Scenario library** — named, shareable topology + traffic bundles with expected-outcome
+  assertions, so a scenario doubles as a reproducible regression test.
+- **Cross-chain** — `cch` (Fiber ↔ Lightning) hub demos and BTC bridging visualizations.
+- **Reproducibility** — snapshot a network and its channel state to hand someone a bug or demo
+  they can replay, plus support for remote / shared devnets.
+- **Distribution** — a reusable GitHub Action for headless CI, and a `--version` flag to pin the
+  fnn image as new releases land.
 
 ## License
 
