@@ -9,8 +9,8 @@ orchestrator is built against; kept here so the reasoning is not lost.
   recent tags. **No `v0.8.1` image exists** (Docker publishing postdates it). Published tags are
   `0.9.0-rc1 … 0.9.0-rc7`, multi-arch with `-arm64` / `-amd64` variants. **Default image:
   `nervos/fiber:0.9.0-rc7`** (configurable). This is a deliberate, necessary deviation from the
-  spec's `docs/fiber-integration.md` "pin v0.8.1" — there is no v0.8.1 image to pin. The image tag
-  is a config value; the roadmap already anticipates a version flag.
+  original "pin v0.8.1" guidance — there is no v0.8.1 image to pin. The image tag is a config
+  value; the roadmap already anticipates a version flag.
 - **CKB image:** `nervos/ckb` is on Docker Hub (`v0.201.0`, `latest`).
 - Host here is arm64; the multi-arch `0.9.0-rc7` tag resolves to arm64 automatically.
 

@@ -1,7 +1,3 @@
-> Shared conventions for this initiative (stack defaults, repo skeleton, Fiber ground
-> rules, money-safety, submission checklist) live in this repo's `CLAUDE.md` and
-> `docs/fiber-integration.md`.
-
 # fiber-forge — build spec
 
 > One-click local Fiber networks: a CLI + web GUI that spins up a CKB devnet and N Fiber nodes,
@@ -22,14 +18,17 @@ tool: `forge up trio` → three connected nodes with funded channels and a live 
 1. `forge` CLI (npm package): create/destroy/inspect local networks from presets or a topology file.
 2. Web GUI served by `forge up`: live network graph, click-to-open channels, click-to-pay,
    per-node detail (balances, channels, logs), connection info for app integration.
-3. Topology presets: `duo`, `trio` (A—B—C multi-hop), `hub` (1×4 hub-and-spoke); topology file
-   schema (YAML) for custom networks.
+3. Topologies: named presets `duo`, `trio` (A—B—C multi-hop), and `hub` (5-node star); parametric
+   shapes `line:N` (chain), `ring:N` (loop), and `star:N` (hub + N−1 spokes) for any `N` from 2 to
+   10; plus a topology file schema (YAML) for fully custom networks. Several networks run at once,
+   each on its own subnet and host ports.
 4. Docs: quickstart, topology schema reference, "point your app at a forge node" guide.
 
 ## 3. Scope
 
-**MVP:** CKB-denominated channels; the three presets + custom YAML; graph GUI with open/pay/close
-actions and log streaming; deterministic teardown; works on macOS + Linux (amd64 + arm64).
+**MVP:** CKB-denominated channels; the named presets (`duo`/`trio`/`hub`), parametric `shape:N`
+topologies (`line`/`ring`/`star`), and custom YAML; graph GUI with open/pay/close actions and log
+streaming; deterministic teardown; works on macOS + Linux (amd64 + arm64).
 **Stretch:** UDT asset preset (deploy an xUDT on the devnet, whitelist it in node configs,
 open a UDT channel); scenario scripts (`forge run payments.yml` traffic generator); headless CI
 mode (`forge up --no-ui --json`).
@@ -115,8 +114,8 @@ funding:
 
 ## 9. Acceptance criteria
 
-- AC-1 On a clean machine with Docker: `npx fiber-forge up trio` → GUI open → multi-hop payment
-  succeeds, in under 90 seconds total.
+- AC-1 On a clean machine with Docker: `npx @truthixify/fiber-forge up trio` → GUI open →
+  multi-hop payment succeeds, in under 90 seconds total.
 - AC-2 The E2E script passes in CI (Linux runner) headlessly.
 - AC-3 Kill any single fnn container: GUI shows the node unhealthy within 2s; `forge up`
   after `down --keep` restores the network with channel state intact.

@@ -94,11 +94,17 @@ FORGE_E2E=1 npx vitest run test/e2e.test.ts   # the live forge-up-to-CHANNEL_REA
 
 Run `make ci` before every push.
 
-## Docs
+## Releasing
 
-- [`docs/spec.md`](docs/spec.md) — the authoritative specification. Read it first.
-- [`docs/fiber-integration.md`](docs/fiber-integration.md) — the shared Fiber (FNN) RPC reference.
+Publishing to npm is automated. Bump `version` in `package.json`, then push a matching tag:
+
+```sh
+git tag v0.1.2 && git push origin v0.1.2
+```
+
+The `publish` workflow runs `make ci` and `npm publish` (requires an `NPM_TOKEN` repository secret
+with publish rights).
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+MIT.

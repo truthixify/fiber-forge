@@ -1,8 +1,7 @@
 # CLAUDE.md — working agreement
 
 **Before writing any code, read `docs/spec.md` in full — it is the source of truth.**
-`docs/fiber-integration.md` is the shared Fiber RPC reference; `README.md` states what this
-project is. Stack: **TypeScript / Node** (ESM).
+`README.md` states what this project is. Stack: **TypeScript / Node** (ESM).
 
 ## Working agreement (non-negotiable)
 - **The spec governs.** If a requirement is ambiguous, underspecified, or contradictory, stop and
