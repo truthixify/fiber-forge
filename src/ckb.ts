@@ -201,8 +201,17 @@ export class DevChain {
     };
   }
 
-  /** Mint `amount` base units of the dev UDT into `address` (signed by the deployer/owner). */
-  async issueUdt(address: string, amount: bigint): Promise<string> {
+  /**
+   * Mint `amount` base units of the dev UDT into `address` (signed by the deployer/owner), and
+   * return the tx hash once it is committed. Right after `up`, the deployer's cells are still
+   * settling from node funding, so an issuance can be accepted then evicted — each attempt rebuilds
+   * against freshly-selected inputs, mines, and verifies commitment, retrying on conflict.
+   */
+  async issueUdt(
+    address: string,
+    amount: bigint,
+    attempts = 6,
+  ): Promise<string> {
     const dep = await this.udtDep();
     const signer = new ccc.SignerCkbPrivateKey(
       this.client,
@@ -214,21 +223,49 @@ export class DevChain {
       args: await this.udtOwnerLockHash(),
     });
     const to = await ccc.Address.fromString(address, this.client);
-    const tx = ccc.Transaction.from({
-      outputs: [
-        { lock: to.script, type: udtType, capacity: ccc.fixedPointFrom(200) },
-      ],
-      outputsData: [ccc.hexFrom(ccc.numLeToBytes(amount, 16))],
-    });
-    tx.cellDeps.push(
-      ccc.CellDep.from({
-        outPoint: { txHash: dep.txHash, index: dep.index },
-        depType: "code",
-      }),
-    );
-    await tx.completeInputsByCapacity(signer);
-    await tx.completeFeeBy(signer, 1000);
-    return signer.sendTransaction(tx);
+    let lastError: unknown = new Error("udt issuance did not commit");
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const tx = ccc.Transaction.from({
+          outputs: [
+            {
+              lock: to.script,
+              type: udtType,
+              capacity: ccc.fixedPointFrom(200),
+            },
+          ],
+          outputsData: [ccc.hexFrom(ccc.numLeToBytes(amount, 16))],
+        });
+        tx.cellDeps.push(
+          ccc.CellDep.from({
+            outPoint: { txHash: dep.txHash, index: dep.index },
+            depType: "code",
+          }),
+        );
+        await tx.completeInputsByCapacity(signer);
+        await tx.completeFeeBy(signer, 1000);
+        const hash = await signer.sendTransaction(tx);
+        // CKB commits in two steps (propose, then commit a block later); mine until it lands.
+        let status: string | undefined;
+        for (let block = 0; block < 8; block += 1) {
+          await this.generateBlocks(1);
+          status = (await this.client.getTransaction(hash))?.status;
+          if (status === "committed" || status === "rejected") {
+            break;
+          }
+        }
+        if (status === "committed") {
+          return hash;
+        }
+        lastError = new Error(
+          `udt issuance tx ${hash} did not commit (status: ${status ?? "unknown"})`,
+        );
+      } catch (error) {
+        lastError = error;
+      }
+      await sleep(800);
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
   /** Total dev-UDT base units held by `address`. */

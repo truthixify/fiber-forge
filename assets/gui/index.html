@@ -366,7 +366,7 @@
           <span class="mc" style="display:block;margin-bottom:8px;">ROUTE · {{ payHopsLabel }} HOPS</span>
           {{ payRoute }}
         </div>
-        <button onClick="{{ confirmPay }}" style="width:100%;background:var(--ember);color:#1a0b06;border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;">SEND SPARK ⚡</button>
+        <button onClick="{{ confirmPay }}" style="width:100%;background:{{ sendBg }};color:{{ sendFg }};border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;">{{ sendLabel }}</button>
       </div>
     </div>
   </sc-if>
@@ -753,6 +753,8 @@ class Component extends DCLogic {
   cyclePayTo = () => { this.setState(s => { const ids = s.nodes.map(n => n.id); const i = ids.indexOf(s.payTo); for (let k = 1; k <= ids.length; k++) { const id = ids[(i + k) % ids.length]; if (id !== s.payFrom) return { payTo: id }; } return {}; }); };
   confirmPay = () => {
     const f = this.node(this.state.payFrom), t = this.node(this.state.payTo);
+    const routeChans = this.state.channels.filter(c => !!c.udt === !!this.state.payUdt);
+    if (this._pathNodes(this.state.nodes, routeChans, this.state.payFrom, this.state.payTo).length <= 1) return;
     const fn = f ? f.name : '', tn = t ? t.name : '', amt = this.state.payAmt, unit = this.state.payUdt ? 'UDT' : 'CKB';
     this.setState({ payOpen: false, lastCmd: 'forge pay ' + (window.__FORGE__ ? this._forgeNet() : this.state.name.replace('forge-', '')) + ' ' + fn + ' ' + tn + ' ' + amt + (this.state.payUdt ? ' --udt' : '') });
     if (window.__FORGE__) {
@@ -1288,9 +1290,16 @@ class Component extends DCLogic {
     const reviewCh = S.preset === 'duo' ? 1 : S.preset === 'trio' ? 2 : S.preset === 'line' ? eN - 1 : S.preset === 'ring' ? eN : eN - 1;
 
     const pf = this.node(S.payFrom), pt = this.node(S.payTo);
-    const dispPath = (pf && pt) ? this.pathNodes(S.payFrom, S.payTo) : [];
+    // A payment can only route over channels of its own asset, so filter before pathfinding.
+    const payChans = S.channels.filter(c => !!c.udt === !!S.payUdt);
+    const dispPath = (pf && pt) ? this._pathNodes(S.nodes, payChans, S.payFrom, S.payTo) : [];
+    const payHasRoute = dispPath.length > 1;
     const routeItems = [];
-    dispPath.forEach((id, i) => { const nd2 = this.node(id); routeItems.push(h('span', { key: id, style: { color: nd2 ? nd2.hue : 'var(--text)', fontWeight: 600 } }, nd2 ? nd2.name : '')); if (i < dispPath.length - 1) routeItems.push(h('span', { key: 'a' + i, style: { color: 'var(--faint)' } }, '→')); });
+    if (payHasRoute) {
+      dispPath.forEach((id, i) => { const nd2 = this.node(id); routeItems.push(h('span', { key: id, style: { color: nd2 ? nd2.hue : 'var(--text)', fontWeight: 600 } }, nd2 ? nd2.name : '')); if (i < dispPath.length - 1) routeItems.push(h('span', { key: 'a' + i, style: { color: 'var(--faint)' } }, '→')); });
+    } else {
+      routeItems.push(h('span', { key: 'noroute', style: { color: 'var(--alarm)', fontFamily: 'Geist Mono,monospace', fontSize: 12 } }, 'no ' + (S.payUdt ? 'UDT' : 'CKB') + ' route — open a ' + (S.payUdt ? 'UDT ' : '') + 'channel first'));
+    }
     const payRoute = h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontFamily: 'Geist Mono,monospace', fontSize: 12 } }, routeItems);
 
     const capF = this.node(S.capFrom), capT = this.node(S.capTo);
@@ -1327,7 +1336,8 @@ class Component extends DCLogic {
       spark: n ? (nodeChans.length ? nodeChans.map(c => ({ h: Math.max(4, parseInt(c.localW, 10) || 0) + '%' })) : [{ h: '4%' }]) : [],
       chFrom: ch ? this.node(ch.from).name : '', chTo: ch ? this.node(ch.to).name : '', chCap: ch ? this.fmt(ch.cap) : '', chLocal: ch ? this.fmt(chLocal) : '', chRemote: ch ? this.fmt(ch.cap - chLocal) : '', chHash: ch ? ch.hash : '',
       payOpen: S.payOpen, closePay: this.closePay, incPay: this.incPay, decPay: this.decPay, confirmPay: this.confirmPay, payAmtDisp: this.fmt(S.payAmt),
-      payFromName: pf ? pf.name : '', payToName: pt ? pt.name : '', payFromHue: pf ? pf.hue : 'var(--ember)', payToHue: pt ? pt.hue : 'var(--violet)', payHopsLabel: String(dispPath.length > 0 ? dispPath.length - 1 : 0), payRoute,
+      payFromName: pf ? pf.name : '', payToName: pt ? pt.name : '', payFromHue: pf ? pf.hue : 'var(--ember)', payToHue: pt ? pt.hue : 'var(--violet)', payHopsLabel: String(payHasRoute ? dispPath.length - 1 : 0), payRoute,
+      sendBg: payHasRoute ? 'var(--ember)' : 'var(--panel-2)', sendFg: payHasRoute ? '#1a0b06' : 'var(--faint)', sendLabel: payHasRoute ? 'SEND SPARK ⚡' : 'NO ROUTE',
       fundOpen: S.fundOpen, closeFund: this.closeFund, confirmFund: this.confirmFund, fundTargetName: this.node(S.fundTarget) ? this.node(S.fundTarget).name : '', fundAmtDisp: this.fmt(S.fundAmt), fundPresets: [fundPreset(1000), fundPreset(10000), fundPreset(100000)],
       capOpen: S.capOpen, closeCap: this.closeCap, confirmCap: this.confirmCap, setCapRange: this.setCapRange, capacity: S.capacity, capDisp: this.fmt(S.capacity), capPair: (capF ? capF.name : '') + ' ⇄ ' + (capT ? capT.name : '—'),
       closeWizard: this.closeWizard, wizNext: this.wizNext, wizBack: this.wizBack, forgeIt: this.forgeIt,

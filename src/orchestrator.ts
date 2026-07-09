@@ -498,12 +498,10 @@ export class Orchestrator {
     const state = await this.readState(net);
     const target = this.requireNode(state, node);
     const chain = new DevChain(`http://127.0.0.1:${state.ckbHostPort}`);
-    const tx = await chain.issueUdt(
+    return chain.issueUdt(
       target.ckbAddress,
       BigInt(Math.round(amountUdt * 1e8)),
     );
-    await chain.generateBlocks(4);
-    return tx;
   }
 
   /** Pay an existing invoice string from a node. */
