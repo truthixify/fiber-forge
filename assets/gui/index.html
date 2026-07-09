@@ -250,7 +250,6 @@
           <button onClick="{{ openCap }}" style="background:var(--panel-2);color:var(--bone);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">OPEN CHANNEL →</button>
           <button onClick="{{ openInvoice }}" style="background:var(--panel-2);color:var(--text);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">INVOICE</button>
           <button onClick="{{ openPay }}" style="background:var(--panel-2);color:var(--text);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">PAY FROM</button>
-          <button onClick="{{ openIssue }}" style="grid-column:1/-1;background:var(--panel-2);color:var(--flux);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">◈ ISSUE UDT</button>
         </div>
         </sc-if>
         <sc-if value="{{ tabPeers }}" hint-placeholder-val="{{ false }}">
@@ -356,7 +355,11 @@
           <div style="flex:none;background:var(--inset);padding:12px 10px;display:flex;align-items:center;color:var(--faint);">→</div>
           <div onClick="{{ cyclePayTo }}" title="click to change recipient" style="flex:1;background:var(--inset);padding:12px 14px;cursor:pointer;"><span class="mc" style="display:block;margin-bottom:5px;">TO ▸</span><span style="font-size:15px;font-weight:600;color:{{ payToHue }};">{{ payToName }}</span></div>
         </div>
-        <span onClick="{{ togglePayUdt }}" title="switch CKB / UDT" class="mc" style="display:block;margin-bottom:8px;cursor:pointer;">AMOUNT · {{ payUnit }} ⇄</span>
+        <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:14px;">
+          <div onClick="{{ payAssetCkb }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ payCkbBg }};color:{{ payCkbFg }};">CKB</div>
+          <div onClick="{{ payAssetUdt }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ payUdtBg }};color:{{ payUdtFg }};">◈ UDT</div>
+        </div>
+        <span class="mc" style="display:block;margin-bottom:8px;">AMOUNT · {{ payUnit }}</span>
         <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:16px;">
           <button onClick="{{ decPay }}" style="background:var(--panel-2);color:var(--bone);border:none;width:46px;cursor:pointer;font-size:18px;">−</button>
           <div style="flex:1;background:var(--inset);padding:14px;text-align:center;"><span class="num" style="font-size:26px;font-weight:700;color:var(--bone);">{{ payAmtDisp }}</span></div>
@@ -380,7 +383,11 @@
         <button onClick="{{ closeInvoice }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
       </div>
       <div style="padding:20px;">
-        <span onClick="{{ toggleInvoiceUdt }}" title="switch CKB / UDT" class="mc" style="display:block;margin-bottom:8px;cursor:pointer;">AMOUNT · {{ invoiceUnit }} ⇄</span>
+        <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:14px;">
+          <div onClick="{{ invAssetCkb }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ invCkbBg }};color:{{ invCkbFg }};">CKB</div>
+          <div onClick="{{ invAssetUdt }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ invUdtBg }};color:{{ invUdtFg }};">◈ UDT</div>
+        </div>
+        <span class="mc" style="display:block;margin-bottom:8px;">AMOUNT · {{ invoiceUnit }}</span>
         <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:16px;">
           <button onClick="{{ decInvoice }}" style="background:var(--panel-2);color:var(--bone);border:none;width:46px;cursor:pointer;font-size:18px;">−</button>
           <div style="flex:1;background:var(--inset);padding:14px;text-align:center;"><span class="num" style="font-size:26px;font-weight:700;color:var(--bone);">{{ invoiceAmtDisp }}</span></div>
@@ -395,26 +402,6 @@
     </div>
   </sc-if>
 
-  <!-- ============ ISSUE UDT SHEET ============ -->
-  <sc-if value="{{ issueOpen }}" hint-placeholder-val="{{ false }}">
-    <div style="position:absolute;inset:0;background:rgba(6,8,11,.55);z-index:11;" onClick="{{ closeIssue }}"></div>
-    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:420px;background:var(--panel);border:1px solid var(--border);z-index:12;animation:sheetIn .22s cubic-bezier(.2,.8,.2,1);">
-      <div style="padding:16px 20px;border-bottom:1px solid var(--hairline);display:flex;justify-content:space-between;align-items:center;">
-        <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--flux);">◈</span><span class="mc" style="color:var(--bone);font-size:12px;">ISSUE UDT · {{ issueNodeName }}</span></div>
-        <button onClick="{{ closeIssue }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
-      </div>
-      <div style="padding:20px;">
-        <span class="mc" style="display:block;margin-bottom:8px;">AMOUNT · UDT</span>
-        <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:18px;">
-          <button onClick="{{ decIssue }}" style="background:var(--panel-2);color:var(--bone);border:none;width:46px;cursor:pointer;font-size:18px;">−</button>
-          <div style="flex:1;background:var(--inset);padding:14px;text-align:center;"><span class="num" style="font-size:26px;font-weight:700;color:var(--bone);">{{ issueAmtDisp }}</span></div>
-          <button onClick="{{ incIssue }}" style="background:var(--panel-2);color:var(--bone);border:none;width:46px;cursor:pointer;font-size:18px;">+</button>
-        </div>
-        <button onClick="{{ confirmIssue }}" style="width:100%;background:var(--flux);color:#04201c;border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;">MINT UDT ◈</button>
-      </div>
-    </div>
-  </sc-if>
-
   <!-- ============ FUND SHEET ============ -->
   <sc-if value="{{ fundOpen }}" hint-placeholder-val="{{ false }}">
     <div style="position:absolute;inset:0;background:rgba(6,8,11,.55);z-index:11;" onClick="{{ closeFund }}"></div>
@@ -424,7 +411,11 @@
         <button onClick="{{ closeFund }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
       </div>
       <div style="padding:20px;">
-        <span class="mc" style="display:block;margin-bottom:8px;">AMOUNT FROM TREASURY · CKB</span>
+        <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:14px;">
+          <div onClick="{{ fundAssetCkb }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ fundCkbBg }};color:{{ fundCkbFg }};">CKB</div>
+          <div onClick="{{ fundAssetUdt }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ fundUdtBg }};color:{{ fundUdtFg }};">◈ UDT</div>
+        </div>
+        <span class="mc" style="display:block;margin-bottom:8px;">AMOUNT FROM TREASURY · {{ fundUnit }}</span>
         <div style="text-align:center;padding:14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:12px;">
           <span class="num" style="font-size:30px;font-weight:700;color:var(--gold);">{{ fundAmtDisp }}</span>
         </div>
@@ -447,8 +438,12 @@
         <button onClick="{{ closeCap }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
       </div>
       <div style="padding:20px;">
+        <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:14px;">
+          <div onClick="{{ capAssetCkb }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ capCkbBg }};color:{{ capCkbFg }};">CKB</div>
+          <div onClick="{{ capAssetUdt }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ capUdtBg }};color:{{ capUdtFg }};">◈ UDT</div>
+        </div>
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
-          <span onClick="{{ toggleCapUdt }}" title="switch CKB / UDT" class="mc" style="cursor:pointer;">CAPACITY · {{ capUnit }} ⇄</span><span class="num" style="font-size:22px;font-weight:700;color:var(--bone);">{{ capDisp }} <span style="font-size:12px;color:var(--muted);">{{ capUnit }}</span></span>
+          <span class="mc">CAPACITY · {{ capUnit }}</span><span class="num" style="font-size:22px;font-weight:700;color:var(--bone);">{{ capDisp }} <span style="font-size:12px;color:var(--muted);">{{ capUnit }}</span></span>
         </div>
         <input type="range" min="200" max="5000" step="100" value="{{ capacity }}" onInput="{{ setCapRange }}" style="width:100%;margin-bottom:18px;">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:18px;">
@@ -572,7 +567,7 @@ class Component extends DCLogic {
     nodes: [], channels: [], chState: {}, balances: {}, onchain: {}, udt: {}, core: { x: 720, y: 440 },
     name: 'forge-trio', payFrom: null, payTo: null,
     nodeTab: 'overview', invoiceOpen: false, invoiceAmt: 100, invoiceAddr: '', invoiceBusy: false, nodeLogs: '', nodeLogEntries: [], logLevel: 'ALL', copyFlash: null,
-    payUdt: false, capUdt: false, invoiceUdt: false, issueOpen: false, issueAmt: 1000, issueBusy: false,
+    payUdt: false, capUdt: false, invoiceUdt: false, fundUdt: false,
   };
 
   constructor(props) {
@@ -692,24 +687,14 @@ class Component extends DCLogic {
   copyPubkey = () => { const n = this.node(this.state.sel && this.state.sel.id); if (n) this._copy(n.fullPubkey || n.pubkey || '', 'pubkey'); };
   copyRpc = () => { const n = this.node(this.state.sel && this.state.sel.id); if (n) this._copy('http://127.0.0.1:' + n.port, 'rpc'); };
   copyInvoice = () => this._copy(this.state.invoiceAddr, 'invoice');
-  togglePayUdt = () => this.setState(s => ({ payUdt: !s.payUdt }));
-  toggleCapUdt = () => this.setState(s => ({ capUdt: !s.capUdt }));
-  toggleInvoiceUdt = () => this.setState(s => ({ invoiceUdt: !s.invoiceUdt, invoiceAddr: '' }));
-  openIssue = () => { const n = this.node(this.state.sel && this.state.sel.id); if (n) this.setState({ issueOpen: true, issueBusy: false }); };
-  closeIssue = () => this.setState({ issueOpen: false });
-  incIssue = () => this.setState(s => ({ issueAmt: Math.min(1000000, s.issueAmt + 500) }));
-  decIssue = () => this.setState(s => ({ issueAmt: Math.max(100, s.issueAmt - 500) }));
-  confirmIssue = () => {
-    const n = this.node(this.state.sel && this.state.sel.id);
-    if (!n) return;
-    const self = this, amt = this.state.issueAmt, name = n.name;
-    if (!window.__FORGE__) { this.setState({ issueOpen: false }); return; }
-    this.setState({ issueBusy: true });
-    fetch('/api/udt/issue', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ net: this._forgeNet(), node: name, amount: amt }) })
-      .then(function (r) { return r.json(); })
-      .then(function () { self.setState(function (st) { return { issueOpen: false, issueBusy: false, lastCmd: 'forge udt issue ' + self._forgeNet() + ' ' + name + ' ' + amt, events: [{ t: self.now(), c: 'var(--gold)', msg: 'UDT ISSUE ' + name + ' +' + amt + ' UDT' }, ...st.events].slice(0, 8) }; }); })
-      .catch(function () { self.setState({ issueBusy: false }); });
-  };
+  payAssetCkb = () => this.setState({ payUdt: false });
+  payAssetUdt = () => this.setState({ payUdt: true });
+  capAssetCkb = () => this.setState({ capUdt: false });
+  capAssetUdt = () => this.setState({ capUdt: true });
+  invAssetCkb = () => this.setState({ invoiceUdt: false, invoiceAddr: '' });
+  invAssetUdt = () => this.setState({ invoiceUdt: true, invoiceAddr: '' });
+  fundAssetCkb = () => this.setState({ fundUdt: false });
+  fundAssetUdt = () => this.setState({ fundUdt: true });
   setMode = (id) => this.setState({ mode: id });
   goEmpty = () => { clearInterval(this._boot); this.setState({ screen: 'empty', sel: null, payOpen: false, fundOpen: false, capOpen: false }); };
   goWizard = () => { clearInterval(this._boot); this.setState({ screen: 'wizard', wizardStep: 1, sel: null }); };
@@ -819,9 +804,14 @@ class Component extends DCLogic {
   closeFund = () => this.setState({ fundOpen: false });
   setFundAmt = (v) => this.setState({ fundAmt: v });
   confirmFund = () => {
-    const { fundTarget, fundAmt } = this.state, tn = this.node(fundTarget);
-    if (window.__FORGE__) this._forgeApi('/api/fund', { net: this._forgeNet(), node: tn.name, amount: fundAmt });
-    this.setState(st => ({ fundOpen: false, onchain: { ...st.onchain, [fundTarget]: st.onchain[fundTarget] + fundAmt }, fundFlash: { id: fundTarget, amt: fundAmt }, lastCmd: 'forge fund ' + st.name.replace('forge-', '') + ' ' + tn.name + ' ' + fundAmt, events: [{ t: this.now(), c: 'var(--gold)', msg: 'FUNDED ' + tn.name + ' +' + this.fmt(fundAmt) + ' CKB' }, ...st.events].slice(0, 2) }));
+    const { fundTarget, fundAmt, fundUdt } = this.state, tn = this.node(fundTarget), unit = fundUdt ? 'UDT' : 'CKB';
+    if (window.__FORGE__) this._forgeApi(fundUdt ? '/api/udt/issue' : '/api/fund', { net: this._forgeNet(), node: tn.name, amount: fundAmt });
+    this.setState(st => {
+      const patch = fundUdt
+        ? { udt: { ...st.udt, [fundTarget]: (st.udt[fundTarget] || 0) + fundAmt } }
+        : { onchain: { ...st.onchain, [fundTarget]: (st.onchain[fundTarget] || 0) + fundAmt } };
+      return Object.assign(patch, { fundOpen: false, fundFlash: { id: fundTarget, amt: fundAmt }, lastCmd: (fundUdt ? 'forge udt issue ' : 'forge fund ') + st.name.replace('forge-', '') + ' ' + tn.name + ' ' + fundAmt, events: [{ t: this.now(), c: 'var(--gold)', msg: (fundUdt ? 'ISSUED ' : 'FUNDED ') + tn.name + ' +' + this.fmt(fundAmt) + ' ' + unit }, ...st.events].slice(0, 2) });
+    });
     clearTimeout(this._ff); this._ff = setTimeout(() => this.setState({ fundFlash: null }), 2200);
   };
 
@@ -1301,6 +1291,7 @@ class Component extends DCLogic {
       routeItems.push(h('span', { key: 'noroute', style: { color: 'var(--alarm)', fontFamily: 'Geist Mono,monospace', fontSize: 12 } }, 'no ' + (S.payUdt ? 'UDT' : 'CKB') + ' route — open a ' + (S.payUdt ? 'UDT ' : '') + 'channel first'));
     }
     const payRoute = h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontFamily: 'Geist Mono,monospace', fontSize: 12 } }, routeItems);
+    const sw = (active) => ({ bg: active ? 'var(--panel-2)' : 'var(--panel)', fg: active ? 'var(--bone)' : 'var(--faint)' });
 
     const capF = this.node(S.capFrom), capT = this.node(S.capTo);
 
@@ -1324,10 +1315,10 @@ class Component extends DCLogic {
       copyInvoiceLabel: S.copyFlash === 'invoice' ? '✓ COPIED TO CLIPBOARD' : 'INVOICE · TAP TO COPY', copyInvoiceColor: S.copyFlash === 'invoice' ? 'var(--flux)' : 'var(--muted)',
       nOnchain: n ? this.fmt(S.onchain[n.id]) : '', nInChannel: n ? this.fmt(nInch) : '', nChannels: n ? String(this.degree(n.id)) : '',
       nUdt: n ? this.fmt(S.udt[n.id] || 0) : '', nHasUdt: n ? (S.udt[n.id] || 0) > 0 : false,
-      openIssue: this.openIssue, issueOpen: S.issueOpen, closeIssue: this.closeIssue, confirmIssue: this.confirmIssue, incIssue: this.incIssue, decIssue: this.decIssue, issueAmtDisp: this.fmt(S.issueAmt), issueBusy: S.issueBusy, issueNodeName: n ? n.name : '',
-      payUdt: S.payUdt, togglePayUdt: this.togglePayUdt, payUnit: S.payUdt ? 'UDT' : 'CKB',
-      capUdt: S.capUdt, toggleCapUdt: this.toggleCapUdt, capUnit: S.capUdt ? 'UDT' : 'CKB',
-      invoiceUdt: S.invoiceUdt, toggleInvoiceUdt: this.toggleInvoiceUdt, invoiceUnit: S.invoiceUdt ? 'UDT' : 'CKB',
+      payUnit: S.payUdt ? 'UDT' : 'CKB', payAssetCkb: this.payAssetCkb, payAssetUdt: this.payAssetUdt, payCkbBg: sw(!S.payUdt).bg, payCkbFg: sw(!S.payUdt).fg, payUdtBg: sw(S.payUdt).bg, payUdtFg: sw(S.payUdt).fg,
+      capUnit: S.capUdt ? 'UDT' : 'CKB', capAssetCkb: this.capAssetCkb, capAssetUdt: this.capAssetUdt, capCkbBg: sw(!S.capUdt).bg, capCkbFg: sw(!S.capUdt).fg, capUdtBg: sw(S.capUdt).bg, capUdtFg: sw(S.capUdt).fg,
+      invoiceUnit: S.invoiceUdt ? 'UDT' : 'CKB', invAssetCkb: this.invAssetCkb, invAssetUdt: this.invAssetUdt, invCkbBg: sw(!S.invoiceUdt).bg, invCkbFg: sw(!S.invoiceUdt).fg, invUdtBg: sw(S.invoiceUdt).bg, invUdtFg: sw(S.invoiceUdt).fg,
+      fundUnit: S.fundUdt ? 'UDT' : 'CKB', fundAssetCkb: this.fundAssetCkb, fundAssetUdt: this.fundAssetUdt, fundCkbBg: sw(!S.fundUdt).bg, fundCkbFg: sw(!S.fundUdt).fg, fundUdtBg: sw(S.fundUdt).bg, fundUdtFg: sw(S.fundUdt).fg,
       tabOverview: S.nodeTab === 'overview', tabPeers: S.nodeTab === 'peers', tabChannels: S.nodeTab === 'channels', tabLogs: S.nodeTab === 'logs',
       tabOvGo: tOv.go, tabOvBd: tOv.bd, tabOvFg: tOv.fg, tabPeGo: tPe.go, tabPeBd: tPe.bd, tabPeFg: tPe.fg, tabChGo: tCh.go, tabChBd: tCh.bd, tabChFg: tCh.fg, tabLoGo: tLo.go, tabLoBd: tLo.bd, tabLoFg: tLo.fg,
       nodeChans, nodePeersList, nodeLogsText, logLevels, nodeChanEmpty: nodeChans.length === 0, nodePeerEmpty: nodePeersList.length === 0,
