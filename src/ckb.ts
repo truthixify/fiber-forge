@@ -250,7 +250,9 @@ export class DevChain {
       args: await this.udtOwnerLockHash(),
     });
     const start = await this.udtBalanceOf(address);
-    let lastError: unknown = new Error(`udt issuance to ${address} did not land`);
+    let lastError: unknown = new Error(
+      `udt issuance to ${address} did not land`,
+    );
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
         await this.generateBlocks(2);
@@ -258,7 +260,11 @@ export class DevChain {
         const to = await ccc.Address.fromString(address, client);
         const tx = ccc.Transaction.from({
           outputs: [
-            { lock: to.script, type: udtType, capacity: ccc.fixedPointFrom(200) },
+            {
+              lock: to.script,
+              type: udtType,
+              capacity: ccc.fixedPointFrom(200),
+            },
           ],
           outputsData: [ccc.hexFrom(ccc.numLeToBytes(amount, 16))],
         });
