@@ -1,23 +1,42 @@
 {
   "name": "fiber-forge",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "One-click local Fiber networks with a visual channel GUI",
   "license": "MIT",
+  "keywords": [
+    "fiber",
+    "ckb",
+    "nervos",
+    "payment-channels",
+    "lightning",
+    "devnet",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/truthixify/fiber-forge.git"
+  },
+  "homepage": "https://github.com/truthixify/fiber-forge#readme",
+  "bugs": {
+    "url": "https://github.com/truthixify/fiber-forge/issues"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "lint": "tsc --noEmit",
     "fmt": "prettier --write .",
-    "fmt:check": "prettier --check ."
+    "fmt:check": "prettier --check .",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "@types/dockerode": "^4.0.1",
     "@types/node": "^22",
     "@types/ws": "^8.18.1",
     "prettier": "^3.3",
-    "tsx": "^4.23.0",
     "typescript": "^5.6",
     "vitest": "^2.1"
   },
@@ -29,6 +48,7 @@
     "dockerode": "^5.0.1",
     "log-update": "^8.0.0",
     "picocolors": "^1.1.1",
+    "tsx": "^4.23.0",
     "ws": "^8.21.0",
     "yaml": "^2.9.0"
   },
