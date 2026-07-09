@@ -1,6 +1,6 @@
 {
   "name": "@truthixify/fiber-forge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "One-click local Fiber networks with a visual channel GUI",
   "license": "MIT",
@@ -23,6 +23,9 @@
   "homepage": "https://github.com/truthixify/fiber-forge#readme",
   "bugs": {
     "url": "https://github.com/truthixify/fiber-forge/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
