@@ -518,9 +518,20 @@
                 <button onClick="{{ f.set }}" style="flex:1;background:{{ f.bg }};color:{{ f.fg }};border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;">{{ f.label }}</button>
               </sc-for>
             </div>
-            <div style="display:flex;justify-content:space-between;padding:12px 14px;background:var(--inset);border:1px solid var(--hairline);">
+            <div style="display:flex;justify-content:space-between;padding:12px 14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:18px;">
               <span class="mc">TREASURY DRAW</span><span class="num" style="font-size:13px;color:var(--gold);">{{ treasuryDraw }} CKB</span>
             </div>
+            <span class="mc" style="display:block;margin-bottom:6px;color:var(--faint);">◈ INITIAL UDT LIQUIDITY PER NODE</span>
+            <div style="text-align:center;padding:14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:10px;">
+              <span class="num" style="font-size:28px;font-weight:700;color:var(--flux);">{{ udtFundingDisp }}</span>
+              <span class="mc" style="display:block;margin-top:4px;color:var(--flux);">UDT</span>
+            </div>
+            <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:8px;">
+              <sc-for list="{{ udtFundingPresets }}" as="f" hint-placeholder-count="3">
+                <button onClick="{{ f.set }}" style="flex:1;background:{{ f.bg }};color:{{ f.fg }};border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;">{{ f.label }}</button>
+              </sc-for>
+            </div>
+            <span class="mc" style="display:block;color:var(--faint);font-size:9px;">with UDT, a matching UDT channel opens alongside each CKB channel</span>
           </div>
         </sc-if>
 
@@ -532,6 +543,7 @@
               <div style="display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--hairline);"><span class="mc">NODES</span><span class="num" style="font-size:14px;color:var(--flux);">{{ reviewNodes }}</span></div>
               <div style="display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--hairline);"><span class="mc">CHANNELS</span><span class="num" style="font-size:14px;color:var(--flux);">{{ reviewChannels }}</span></div>
               <div style="display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--hairline);"><span class="mc">FUNDING / NODE</span><span class="num" style="font-size:14px;color:var(--gold);">{{ fundingDisp }} CKB</span></div>
+              <div style="display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--hairline);"><span class="mc">UDT / NODE</span><span class="num" style="font-size:14px;color:var(--flux);">{{ reviewUdt }}</span></div>
               <div style="display:flex;justify-content:space-between;padding:13px 0;"><span class="mc">TOTAL TREASURY</span><span class="num" style="font-size:14px;color:var(--ember);">{{ treasuryDraw }} CKB</span></div>
             </div>
             <div style="margin-top:16px;padding:12px 14px;background:var(--inset);border:1px solid var(--hairline);display:flex;align-items:center;gap:8px;">
@@ -567,7 +579,7 @@ class Component extends DCLogic {
     payMin: 0, block: 0, lastCmd: 'forge up',
     events: [],
     paying: false, relayId: null, showResult: false, payAmt: 250,
-    wizardStep: 1, preset: 'trio', nodeCount: 3, funding: 10000,
+    wizardStep: 1, preset: 'trio', nodeCount: 3, funding: 10000, udtFunding: 0,
     bootStep: 99,
     payOpen: false, fundOpen: false, fundTarget: null, fundAmt: 10000,
     capOpen: false, capacity: 1000, capFrom: null, capTo: null,
@@ -716,6 +728,7 @@ class Component extends DCLogic {
   incN = () => this.setState(s => ({ nodeCount: Math.min(10, s.nodeCount + 1) }));
   decN = () => this.setState(s => ({ nodeCount: Math.max(2, s.nodeCount - 1) }));
   setFunding = (v) => this.setState({ funding: v });
+  setUdtFunding = (v) => this.setState({ udtFunding: v });
   wizNext = () => this.setState(s => ({ wizardStep: Math.min(3, s.wizardStep + 1) }));
   wizBack = () => this.setState(s => (s.wizardStep === 1 ? { screen: 'empty' } : { wizardStep: s.wizardStep - 1 }));
   forgeIt = () => this.startForge();
@@ -979,11 +992,13 @@ class Component extends DCLogic {
   }
   _forgeSpawn() {
     var F = this;
-    var body = { preset: this.state.preset, nodes: this.effN(), funding: this.state.funding };
+    var udtFunding = this.state.udtFunding || 0;
+    var body = { preset: this.state.preset, nodes: this.effN(), funding: this.state.funding, udtFunding: udtFunding };
     var t = this.build(this.state.preset, this.effN(), this.state.funding);
     var total = t.nodes.length + 1 + t.channels.length;
-    // the real up() emits ~3 messages per node + ~3 per channel + a couple of framing ones
-    var estMsgs = t.nodes.length * 3 + t.channels.length * 3 + 3;
+    // the real up() emits ~3 messages per node + ~3 per channel + a couple of framing ones;
+    // with UDT it also issues to each node and opens a mirrored UDT channel per channel.
+    var estMsgs = t.nodes.length * 3 + t.channels.length * 3 + 3 + (udtFunding > 0 ? (t.nodes.length + t.channels.length * 3) : 0);
     // Stop the current network's poller + socket so nothing overwrites the topology we're forging.
     clearInterval(this._forgePoll);
     try { if (this._forgeWs) { this._forgeWs.onclose = null; this._forgeWs.close(); } } catch (e) {}
@@ -1302,8 +1317,9 @@ class Component extends DCLogic {
       bstep('NETWORK', bs >= 1, bs === 0), bstep('CKB', bs >= 1, false),
       bstep('NODES ' + nd + '/' + N, nd === N, nd > 0 && nd < N),
       bstep('CHANNELS ' + cd + '/' + C, C > 0 && cd === C, cd >= 0 && bs > N && cd < C),
-      bstep('READY', bs >= total, false),
     ];
+    if (S.udtFunding > 0) bootSteps.push(bstep('UDT + UDT CHANNELS', bs >= total, cd >= C && bs < total));
+    bootSteps.push(bstep('READY', bs >= total, false));
     let bootLabel = 'NETWORK READY';
     if (bs === 0) bootLabel = 'IGNITING FORGE-CORE';
     else if (bs <= N) bootLabel = 'BOOTING ' + (S.nodes[bs - 1] ? S.nodes[bs - 1].name : '');
@@ -1313,6 +1329,7 @@ class Component extends DCLogic {
     const presets = presetDefs.map(([id, label, desc]) => { const on = S.preset === id; return { set: () => this.setPreset(id), glyph: this.glyph(id), label, desc, accent: on ? 'var(--ember)' : 'transparent', bg: on ? 'var(--panel-2)' : 'var(--panel)', name: on ? 'var(--ember)' : 'var(--bone)' }; });
     const fundPreset = (v) => ({ label: v >= 1000 ? (v / 1000) + 'k' : String(v), set: () => this.setFundAmt(v), bg: S.fundAmt === v ? 'var(--gold)' : 'var(--panel-2)', fg: S.fundAmt === v ? '#1a1206' : 'var(--text)' });
     const fundingPreset = (v) => ({ label: (v / 1000) + 'k', set: () => this.setFunding(v), bg: S.funding === v ? 'var(--gold)' : 'var(--panel-2)', fg: S.funding === v ? '#1a1206' : 'var(--text)' });
+    const udtFundingPreset = (v) => ({ label: v === 0 ? 'NONE' : (v / 1000) + 'k', set: () => this.setUdtFunding(v), bg: S.udtFunding === v ? 'var(--flux)' : 'var(--panel-2)', fg: S.udtFunding === v ? '#04201c' : 'var(--text)' });
     const wizStep = (i, label) => ({ label, bg: S.wizardStep === i ? 'var(--panel-2)' : 'var(--panel)', fg: S.wizardStep === i ? 'var(--ember)' : 'var(--faint)' });
     const showN = ['line', 'ring', 'star', 'hub'].includes(S.preset);
     const presetName = { duo: 'Duo', trio: 'Trio', hub: 'Hub', line: 'Line', ring: 'Ring', star: 'Star' }[S.preset];
@@ -1377,6 +1394,7 @@ class Component extends DCLogic {
       wizStep1: S.wizardStep === 1, wizStep2: S.wizardStep === 2, wizStep3: S.wizardStep === 3, wizNotLast: S.wizardStep < 3, wizLast: S.wizardStep === 3,
       presets, showNStepper: showN, nodeCount: String(S.nodeCount), incN: this.incN, decN: this.decN,
       fundingPresets: [fundingPreset(1000), fundingPreset(10000), fundingPreset(50000)], fundingDisp: this.fmt(S.funding), treasuryDraw: this.fmt(S.funding * eN),
+      udtFundingPresets: [udtFundingPreset(0), udtFundingPreset(10000), udtFundingPreset(50000)], udtFundingDisp: this.fmt(S.udtFunding), udtFundingOn: S.udtFunding > 0, reviewUdt: S.udtFunding > 0 ? (this.fmt(S.udtFunding) + ' UDT') : 'none',
       reviewName: presetName, reviewNodes: String(eN), reviewChannels: String(reviewCh), reviewCmd,
     };
   }
