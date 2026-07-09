@@ -136,13 +136,6 @@
       </sc-for>
     </div>
 
-    <div style="position:absolute;top:78px;left:50%;transform:translateX(-50%);display:flex;gap:1px;background:var(--border);border:1px solid var(--border);">
-      <sc-for list="{{ modes }}" as="m" hint-placeholder-count="5">
-        <button onClick="{{ m.set }}" style="background:{{ m.bg }};color:{{ m.fg }};border:none;padding:7px 15px;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;transition:all .14s;">
-          <span class="num" style="opacity:.55;">{{ m.key }}</span>{{ m.label }}
-        </button>
-      </sc-for>
-    </div>
 
     <div style="position:absolute;top:20px;right:20px;display:flex;gap:1px;background:var(--border);border:1px solid var(--border);">
       <div style="background:var(--panel);color:var(--muted);padding:10px 14px;display:flex;align-items:center;"><span class="mc">⌘K</span></div>
@@ -520,6 +513,7 @@
             </div>
             <div style="display:flex;justify-content:space-between;padding:12px 14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:18px;">
               <span class="mc">TREASURY DRAW</span><span class="num" style="font-size:13px;color:var(--gold);">{{ treasuryDraw }} CKB</span>
+              <sc-if value="{{ udtFundingOn }}" hint-placeholder-val="{{ false }}"><span class="num" style="font-size:13px;color:var(--flux);margin-left:10px;">+ {{ treasuryUdt }}</span></sc-if>
             </div>
             <span class="mc" style="display:block;margin-bottom:6px;color:var(--faint);">◈ INITIAL UDT LIQUIDITY PER NODE</span>
             <div style="text-align:center;padding:14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:10px;">
@@ -544,7 +538,10 @@
               <div style="display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--hairline);"><span class="mc">CHANNELS</span><span class="num" style="font-size:14px;color:var(--flux);">{{ reviewChannels }}</span></div>
               <div style="display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--hairline);"><span class="mc">FUNDING / NODE</span><span class="num" style="font-size:14px;color:var(--gold);">{{ fundingDisp }} CKB</span></div>
               <div style="display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--hairline);"><span class="mc">UDT / NODE</span><span class="num" style="font-size:14px;color:var(--flux);">{{ reviewUdt }}</span></div>
-              <div style="display:flex;justify-content:space-between;padding:13px 0;"><span class="mc">TOTAL TREASURY</span><span class="num" style="font-size:14px;color:var(--ember);">{{ treasuryDraw }} CKB</span></div>
+              <div style="display:flex;justify-content:space-between;padding:13px 0;{{ udtTotalBorder }}"><span class="mc">TOTAL TREASURY</span><span class="num" style="font-size:14px;color:var(--ember);">{{ treasuryDraw }} CKB</span></div>
+              <sc-if value="{{ udtFundingOn }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;justify-content:space-between;padding:13px 0;"><span class="mc">TOTAL UDT</span><span class="num" style="font-size:14px;color:var(--flux);">{{ treasuryUdt }}</span></div>
+              </sc-if>
             </div>
             <div style="margin-top:16px;padding:12px 14px;background:var(--inset);border:1px solid var(--hairline);display:flex;align-items:center;gap:8px;">
               <span style="color:var(--flux);">≡</span><span class="num" style="font-size:11px;color:var(--muted);">forge up {{ reviewCmd }}</span>
@@ -1394,7 +1391,7 @@ class Component extends DCLogic {
       wizStep1: S.wizardStep === 1, wizStep2: S.wizardStep === 2, wizStep3: S.wizardStep === 3, wizNotLast: S.wizardStep < 3, wizLast: S.wizardStep === 3,
       presets, showNStepper: showN, nodeCount: String(S.nodeCount), incN: this.incN, decN: this.decN,
       fundingPresets: [fundingPreset(1000), fundingPreset(10000), fundingPreset(50000)], fundingDisp: this.fmt(S.funding), treasuryDraw: this.fmt(S.funding * eN),
-      udtFundingPresets: [udtFundingPreset(0), udtFundingPreset(10000), udtFundingPreset(50000)], udtFundingDisp: this.fmt(S.udtFunding), udtFundingOn: S.udtFunding > 0, reviewUdt: S.udtFunding > 0 ? (this.fmt(S.udtFunding) + ' UDT') : 'none',
+      udtFundingPresets: [udtFundingPreset(0), udtFundingPreset(10000), udtFundingPreset(50000)], udtFundingDisp: this.fmt(S.udtFunding), udtFundingOn: S.udtFunding > 0, reviewUdt: S.udtFunding > 0 ? (this.fmt(S.udtFunding) + ' UDT') : 'none', treasuryUdt: this.fmt(S.udtFunding * eN) + ' UDT', udtTotalBorder: S.udtFunding > 0 ? 'border-bottom:1px solid var(--hairline);' : '',
       reviewName: presetName, reviewNodes: String(eN), reviewChannels: String(reviewCh), reviewCmd,
     };
   }
