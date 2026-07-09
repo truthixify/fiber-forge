@@ -307,7 +307,7 @@
           <span class="mc">CHANNEL</span>
           <button onClick="{{ clearSel }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;">✕</button>
         </div>
-        <div style="font-size:22px;font-weight:700;color:var(--bone);letter-spacing:-.01em;">{{ chFrom }} <span style="color:var(--faint);">⇄</span> {{ chTo }}</div>
+        <div style="font-size:22px;font-weight:700;color:var(--bone);letter-spacing:-.01em;">{{ chFrom }} <span style="color:var(--faint);">⇄</span> {{ chTo }}<sc-if value="{{ chIsUdt }}" hint-placeholder-val="{{ false }}"><span class="mc" style="color:var(--flux);border:1px solid var(--flux);border-radius:3px;padding:2px 6px;margin-left:8px;font-size:10px;vertical-align:middle;">◈ UDT</span></sc-if></div>
         <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
           <span style="width:7px;height:7px;background:var(--flux);box-shadow:0 0 8px var(--flux);"></span>
           <span class="mc" style="color:var(--flux);">CHANNELREADY</span>
@@ -316,13 +316,13 @@
       </div>
       <div style="flex:1;overflow-y:auto;padding:18px;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
-          <span class="mc">CAPACITY</span><span class="num" style="font-size:18px;color:var(--bone);">{{ chCap }} CKB</span>
+          <span class="mc">CAPACITY</span><span class="num" style="font-size:18px;color:var(--bone);">{{ chCap }} {{ chUnit }}</span>
         </div>
         <div style="margin:10px 0 6px;">{{ liquidityBar }}</div>
         <div style="display:flex;justify-content:space-between;margin-bottom:22px;">
-          <span class="num" style="font-size:13px;color:var(--ember);">{{ chLocal }} CKB</span>
+          <span class="num" style="font-size:13px;color:var(--ember);">{{ chLocal }} {{ chUnit }}</span>
           <span class="mc" style="color:var(--faint);">◆ SPLIT</span>
-          <span class="num" style="font-size:13px;color:var(--flux);">{{ chRemote }} CKB</span>
+          <span class="num" style="font-size:13px;color:var(--flux);">{{ chRemote }} {{ chUnit }}</span>
         </div>
         <div style="margin-bottom:18px;">
           <span class="mc" style="display:block;margin-bottom:10px;">STATE</span>
@@ -1250,7 +1250,7 @@ class Component extends DCLogic {
         h('div', { style: { position: 'relative', padding: '8px 14px', background: 'var(--panel)', border: '1px solid var(--flux)', boxShadow: '0 0 26px rgba(45,224,199,.4)' } },
           h('span', { style: { position: 'absolute', top: -1, left: -1, width: 12, height: 12, borderTop: '2px solid var(--flux)', borderLeft: '2px solid var(--flux)' } }),
           h('span', { style: { position: 'absolute', bottom: -1, right: -1, width: 12, height: 12, borderBottom: '2px solid var(--flux)', borderRight: '2px solid var(--flux)' } }),
-          h('span', { className: 'num', style: { fontSize: 22, fontWeight: 700, color: 'var(--flux)' } }, '+' + this.state.payAmt + ' CKB'))));
+          h('span', { className: 'num', style: { fontSize: 22, fontWeight: 700, color: 'var(--flux)' } }, '+' + this.state.payAmt + (this.state.payUdt ? ' UDT' : ' CKB')))));
     }
 
     return this.wrapFloor(kids);
@@ -1365,7 +1365,7 @@ class Component extends DCLogic {
       openInvoice: this.openInvoice, invoiceOpen: S.invoiceOpen, closeInvoice: this.closeInvoice, genInvoice: this.genInvoice, copyInvoice: this.copyInvoice, incInvoice: this.incInvoice, decInvoice: this.decInvoice,
       invoiceAmtDisp: this.fmt(S.invoiceAmt), invoiceAddr: S.invoiceAddr, invoiceHasAddr: !!S.invoiceAddr, invoiceBusy: S.invoiceBusy, invoiceNodeName: n ? n.name : '',
       spark: n ? (nodeChans.length ? nodeChans.map(c => ({ h: Math.max(4, parseInt(c.localW, 10) || 0) + '%' })) : [{ h: '4%' }]) : [],
-      chFrom: ch ? this.node(ch.from).name : '', chTo: ch ? this.node(ch.to).name : '', chCap: ch ? this.fmt(ch.cap) : '', chLocal: ch ? this.fmt(chLocal) : '', chRemote: ch ? this.fmt(ch.cap - chLocal) : '', chHash: ch ? ch.hash : '',
+      chFrom: ch ? this.node(ch.from).name : '', chTo: ch ? this.node(ch.to).name : '', chCap: ch ? this.fmt(ch.cap) : '', chLocal: ch ? this.fmt(chLocal) : '', chRemote: ch ? this.fmt(ch.cap - chLocal) : '', chHash: ch ? ch.hash : '', chUnit: ch && ch.udt ? 'UDT' : 'CKB', chIsUdt: !!(ch && ch.udt),
       payOpen: S.payOpen, closePay: this.closePay, incPay: this.incPay, decPay: this.decPay, confirmPay: this.confirmPay, payAmtDisp: this.fmt(S.payAmt),
       payFromName: pf ? pf.name : '', payToName: pt ? pt.name : '', payFromHue: pf ? pf.hue : 'var(--ember)', payToHue: pt ? pt.hue : 'var(--violet)', payHopsLabel: String(payHasRoute ? dispPath.length - 1 : 0), payRoute,
       sendBg: payHasRoute ? 'var(--ember)' : 'var(--panel-2)', sendFg: payHasRoute ? '#1a0b06' : 'var(--faint)', sendLabel: payHasRoute ? 'SEND SPARK ⚡' : 'NO ROUTE',
