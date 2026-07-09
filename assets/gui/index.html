@@ -278,6 +278,9 @@
                 <span class="mc" style="color:var(--ember);">{{ c.local }} LOCAL · {{ c.unit }}</span>
                 <span class="mc" style="color:var(--muted);">{{ c.remote }} REMOTE</span>
               </div>
+              <sc-if value="{{ c.canClose }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ c.close }}" style="width:100%;margin-top:10px;background:transparent;color:var(--alarm);border:1px solid var(--alarm);padding:8px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.08em;">⚠ CLOSE CHANNEL</button>
+              </sc-if>
             </div>
           </sc-for>
           <sc-if value="{{ nodeChanEmpty }}" hint-placeholder-val="{{ false }}">
@@ -439,6 +442,11 @@
       </div>
       <div style="padding:20px;">
         <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:14px;">
+          <div onClick="{{ cycleCapFrom }}" title="click to change source" style="flex:1;background:var(--inset);padding:12px 14px;cursor:pointer;"><span class="mc" style="display:block;margin-bottom:5px;">FROM ▸</span><span style="font-size:15px;font-weight:600;color:{{ capFromHue }};">{{ capFromName }}</span></div>
+          <div style="flex:none;background:var(--inset);padding:12px 10px;display:flex;align-items:center;color:var(--faint);">⇄</div>
+          <div onClick="{{ cycleCapTo }}" title="click to change target" style="flex:1;background:var(--inset);padding:12px 14px;cursor:pointer;"><span class="mc" style="display:block;margin-bottom:5px;">TO ▸</span><span style="font-size:15px;font-weight:600;color:{{ capToHue }};">{{ capToName }}</span></div>
+        </div>
+        <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:14px;">
           <div onClick="{{ capAssetCkb }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ capCkbBg }};color:{{ capCkbFg }};">CKB</div>
           <div onClick="{{ capAssetUdt }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ capUdtBg }};color:{{ capUdtFg }};">◈ UDT</div>
         </div>
@@ -551,7 +559,7 @@
 class Component extends DCLogic {
   NAMES = ['feynman', 'lorentz', 'galileo', 'curie', 'tesla', 'bohr', 'newton', 'darwin', 'hypatia', 'turing', 'kepler', 'euler'];
   HUES = ['var(--ember)', 'var(--flux)', 'var(--violet)', 'var(--signal)', 'var(--gold)', 'var(--ember-hot)', 'var(--flux-deep)', 'var(--amber)', 'var(--ember)', 'var(--flux)', 'var(--violet)', 'var(--signal)'];
-  CW = 192; CH = 110; FW = 1440; FH = 900;
+  CW = 192; CH = 128; FW = 1440; FH = 900;
   _paths = {};
 
   state = {
@@ -567,7 +575,7 @@ class Component extends DCLogic {
     nodes: [], channels: [], chState: {}, balances: {}, onchain: {}, udt: {}, core: { x: 720, y: 440 },
     name: 'forge-trio', payFrom: null, payTo: null,
     nodeTab: 'overview', invoiceOpen: false, invoiceAmt: 100, invoiceAddr: '', invoiceBusy: false, nodeLogs: '', nodeLogEntries: [], logLevel: 'ALL', copyFlash: null,
-    payUdt: false, capUdt: false, invoiceUdt: false, fundUdt: false,
+    payUdt: false, capUdt: false, invoiceUdt: false, fundUdt: false, pendingOpens: [],
   };
 
   constructor(props) {
@@ -810,7 +818,7 @@ class Component extends DCLogic {
       const patch = fundUdt
         ? { udt: { ...st.udt, [fundTarget]: (st.udt[fundTarget] || 0) + fundAmt } }
         : { onchain: { ...st.onchain, [fundTarget]: (st.onchain[fundTarget] || 0) + fundAmt } };
-      return Object.assign(patch, { fundOpen: false, fundFlash: { id: fundTarget, amt: fundAmt }, lastCmd: (fundUdt ? 'forge udt issue ' : 'forge fund ') + st.name.replace('forge-', '') + ' ' + tn.name + ' ' + fundAmt, events: [{ t: this.now(), c: 'var(--gold)', msg: (fundUdt ? 'ISSUED ' : 'FUNDED ') + tn.name + ' +' + this.fmt(fundAmt) + ' ' + unit }, ...st.events].slice(0, 2) });
+      return Object.assign(patch, { fundOpen: false, fundFlash: { id: fundTarget, amt: fundAmt, udt: fundUdt }, lastCmd: (fundUdt ? 'forge udt issue ' : 'forge fund ') + st.name.replace('forge-', '') + ' ' + tn.name + ' ' + fundAmt, events: [{ t: this.now(), c: 'var(--gold)', msg: (fundUdt ? 'ISSUED ' : 'FUNDED ') + tn.name + ' +' + this.fmt(fundAmt) + ' ' + unit }, ...st.events].slice(0, 2) });
     });
     clearTimeout(this._ff); this._ff = setTimeout(() => this.setState({ fundFlash: null }), 2200);
   };
@@ -823,16 +831,22 @@ class Component extends DCLogic {
     cands.sort((a, b) => Math.hypot(b.x - f.x, b.y - f.y) - Math.hypot(a.x - f.x, a.y - f.y));
     return cands[0].id;
   }
-  openCap = () => { const fromId = (this.state.sel && this.state.sel.type === 'node') ? this.state.sel.id : this.state.nodes[0].id; this.setState({ capOpen: true, capacity: 1000, capFrom: fromId, capTo: this.capTarget(fromId) }); };
+  openCap = () => { const fromId = (this.state.sel && this.state.sel.type === 'node') ? this.state.sel.id : this.state.nodes[0].id; const to = this.capTarget(fromId) || (this.state.nodes.find(n => n.id !== fromId) || {}).id; this.setState({ capOpen: true, capacity: 1000, capFrom: fromId, capTo: to }); };
   closeCap = () => this.setState({ capOpen: false });
   setCapRange = (e) => this.setState({ capacity: parseInt(e.target.value, 10) });
+  cycleCapFrom = () => { this.setState(s => { const ids = s.nodes.map(n => n.id); const i = ids.indexOf(s.capFrom); const nf = ids[(i + 1) % ids.length]; const ct = (s.capTo === nf) ? (ids.filter(id => id !== nf)[0] || nf) : s.capTo; return { capFrom: nf, capTo: ct }; }); };
+  cycleCapTo = () => { this.setState(s => { const ids = s.nodes.map(n => n.id); const i = ids.indexOf(s.capTo); for (let k = 1; k <= ids.length; k++) { const id = ids[(i + k) % ids.length]; if (id !== s.capFrom) return { capTo: id }; } return {}; }); };
   confirmCap = () => {
     if (!this.state.capTo) { this.setState({ capOpen: false }); return; }
     const cap = this.state.capacity;
     const fn = this.node(this.state.capFrom), tn = this.node(this.state.capTo);
     if (window.__FORGE__) {
-      this._forgeApi('/api/channel/open', { net: this._forgeNet(), from: fn.name, to: tn.name, capacity: cap, udt: this.state.capUdt });
-      this.setState(st => ({ capOpen: false, sel: null, lastCmd: 'forge channel open ' + this._forgeNet() + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' OPENING' }, ...st.events].slice(0, 8) }));
+      const from = this.state.capFrom, to = this.state.capTo, udt = this.state.capUdt;
+      this._forgeApi('/api/channel/open', { net: this._forgeNet(), from: fn.name, to: tn.name, capacity: cap, udt: udt });
+      this.setState(st => {
+        const pid = 'pending-live';
+        return { capOpen: false, sel: null, pendingOpens: [...(st.pendingOpens || []), { from: from, to: to, cap: cap, udt: udt }], channels: [...st.channels.filter(c => c.id !== pid), { id: pid, from: from, to: to, cap: cap, channelId: null, udt: udt, pending: true }], chState: { ...st.chState, [pid]: 'pending' }, balances: { ...st.balances, [pid]: Math.round(cap / 2) }, lastCmd: 'forge channel open ' + this._forgeNet() + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' OPENING' }, ...st.events].slice(0, 8) };
+      });
       return;
     }
     const id = 'x' + (this._cc = (this._cc || 0) + 1);
@@ -852,6 +866,11 @@ class Component extends DCLogic {
     } else {
       this.setState({ sel: null });
     }
+  };
+  _closeChan = (channelId, nodeName) => {
+    if (!channelId || !window.__FORGE__) return;
+    this._forgeApi('/api/channel/close', { net: this._forgeNet(), node: nodeName, channelId: channelId });
+    this.setState(st => ({ events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + nodeName + ' closing' }, ...st.events].slice(0, 8) }));
   };
 
   componentWillUnmount() { cancelAnimationFrame(this._raf); clearInterval(this._boot); clearInterval(this._forgePoll); window.removeEventListener('resize', this._onResize); window.removeEventListener('wheel', this._onWheel); window.removeEventListener('keydown', this._onKey); }
@@ -885,7 +904,12 @@ class Component extends DCLogic {
     var ids = nodes.map(function (n) { return n.id; });
     var pf = ids.indexOf(this.state.payFrom) >= 0 ? this.state.payFrom : (nodes[0] ? nodes[0].id : null);
     var pt = (ids.indexOf(this.state.payTo) >= 0 && this.state.payTo !== pf) ? this.state.payTo : ids.filter(function (id) { return id !== pf; })[0] || pf;
-    return { nodes: nodes, channels: channels, chState: chState, balances: balances, onchain: onchain, udt: udt, core: g.core, name: 'forge-' + v.net, block: v.block || 0, payFrom: pf, payTo: pt };
+    // Keep still-opening channels on the graph (as pending conduits) until the real one appears.
+    var pend = (this.state.pendingOpens || []).filter(function (po) {
+      return !channels.some(function (c) { return (!!c.udt === !!po.udt) && ((c.from === po.from && c.to === po.to) || (c.from === po.to && c.to === po.from)); });
+    });
+    pend.forEach(function (po, k) { var id = 'pending' + k; channels.push({ id: id, from: po.from, to: po.to, cap: po.cap, channelId: null, udt: po.udt, pending: true }); chState[id] = 'pending'; balances[id] = Math.round(po.cap / 2); });
+    return { nodes: nodes, channels: channels, chState: chState, balances: balances, onchain: onchain, udt: udt, core: g.core, name: 'forge-' + v.net, block: v.block || 0, payFrom: pf, payTo: pt, pendingOpens: pend };
   }
   _forgeSelect(net) {
     var F = this;
@@ -1104,7 +1128,7 @@ class Component extends DCLogic {
     const h = React.createElement, s = this.sz(), st = this.nodeState(n.id), sel = this.state.sel;
     const isSel = sel && sel.type === 'node' && sel.id === n.id;
     const relay = this.state.paying && this.state.relayId === n.id;
-    const onchain = this.state.onchain[n.id], deg = this.degree(n.id);
+    const onchain = this.state.onchain[n.id], udtBal = this.state.udt[n.id] || 0, deg = this.degree(n.id);
     const cfg = st === 'running' ? { dot: n.hue, band: n.hue, char: '●', txt: 'RUNNING', gray: false, pulse: true }
       : st === 'boot' ? { dot: 'var(--amber)', band: 'var(--amber)', char: '◍', txt: 'BOOTING', gray: false, pulse: true }
       : { dot: 'var(--faint)', band: 'var(--faint)', char: '○', txt: 'COLD', gray: true, pulse: false };
@@ -1126,7 +1150,10 @@ class Component extends DCLogic {
               h('span', { className: 'num', style: { fontSize: 12, color: 'var(--gold)' } }, this.fmt(onchain)),
               h('span', { className: 'mc', style: { fontSize: 9 } }, 'CKB')),
             h('div', { style: { height: 5, background: 'var(--inset)', border: '1px solid var(--hairline)' } },
-              h('div', { style: { height: '100%', width: (gaugeFrac * 100) + '%', background: 'linear-gradient(90deg,var(--gold),var(--ember))', transition: 'width .6s cubic-bezier(.2,.8,.2,1)' } })))),
+              h('div', { style: { height: '100%', width: (gaugeFrac * 100) + '%', background: 'linear-gradient(90deg,var(--gold),var(--ember))', transition: 'width .6s cubic-bezier(.2,.8,.2,1)' } })),
+            udtBal > 0 && h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 5 } },
+              h('span', { className: 'num', style: { fontSize: 12, color: 'var(--flux)' } }, this.fmt(udtBal)),
+              h('span', { className: 'mc', style: { fontSize: 9, color: 'var(--flux)' } }, 'UDT')))),
         h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '4px 10px', borderTop: '1px solid var(--hairline)' } },
           h('span', { className: 'mc' }, 'CH ×' + deg),
           h('span', { className: 'mc' }, 'CAP ' + this.fmt(deg * 1000)))));
@@ -1203,7 +1230,7 @@ class Component extends DCLogic {
     if (this.state.fundFlash) {
       const fn = this.node(this.state.fundFlash.id);
       if (fn) kids.push(h('div', { key: 'ff', style: { position: 'absolute', left: fn.x + 30, top: fn.y - 66, animation: 'flare .4s cubic-bezier(.2,.8,.2,1)', zIndex: 8, padding: '6px 12px', background: 'var(--panel)', border: '1px solid var(--gold)', boxShadow: '0 0 20px rgba(245,196,81,.4)' } },
-        h('span', { className: 'num', style: { fontSize: 18, fontWeight: 700, color: 'var(--gold)' } }, '+' + this.fmt(this.state.fundFlash.amt) + ' CKB')));
+        h('span', { className: 'num', style: { fontSize: 18, fontWeight: 700, color: this.state.fundFlash.udt ? 'var(--flux)' : 'var(--gold)' } }, '+' + this.fmt(this.state.fundFlash.amt) + (this.state.fundFlash.udt ? ' UDT' : ' CKB'))));
     }
     if (this.state.showResult) {
       const g = this.node(this.state.payTo);
@@ -1244,7 +1271,8 @@ class Component extends DCLogic {
       const peer = this.node(c.from === n.id ? c.to : c.from);
       const bal = S.balances[c.id] != null ? S.balances[c.id] : c.cap / 2;
       const local = c.from === n.id ? bal : c.cap - bal;
-      return { peer: peer ? peer.name : '?', hue: peer ? peer.hue : 'var(--muted)', local: this.fmt(Math.round(local)), remote: this.fmt(Math.round(c.cap - local)), state: (S.chState[c.id] || 'ready').toUpperCase(), localW: Math.round(local / c.cap * 100) + '%', unit: c.udt ? 'UDT' : 'CKB', badge: c.udt ? 'UDT' : '', badgeShow: !!c.udt };
+      const canClose = !!c.channelId && !c.pending;
+      return { peer: peer ? peer.name : '?', hue: peer ? peer.hue : 'var(--muted)', local: this.fmt(Math.round(local)), remote: this.fmt(Math.round(c.cap - local)), state: (S.chState[c.id] || 'ready').toUpperCase(), localW: Math.round(local / c.cap * 100) + '%', unit: c.udt ? 'UDT' : 'CKB', badge: c.udt ? 'UDT' : '', badgeShow: !!c.udt, canClose: canClose, close: () => this._closeChan(c.channelId, n.name) };
     }) : [];
     const nodePeersList = n ? Array.from(new Set(nodeChans.map(c => c.peer))).map(name => { const pn = S.nodes.find(x => x.name === name); return { name, hue: pn ? pn.hue : 'var(--muted)', port: pn ? (':' + pn.port) : '' }; }) : [];
     const tabStyle = (t) => ({ go: () => this.setNodeTab(t), bd: S.nodeTab === t ? '2px solid var(--ember)' : '2px solid transparent', fg: S.nodeTab === t ? 'var(--bone)' : 'var(--muted)' });
@@ -1331,6 +1359,7 @@ class Component extends DCLogic {
       sendBg: payHasRoute ? 'var(--ember)' : 'var(--panel-2)', sendFg: payHasRoute ? '#1a0b06' : 'var(--faint)', sendLabel: payHasRoute ? 'SEND SPARK ⚡' : 'NO ROUTE',
       fundOpen: S.fundOpen, closeFund: this.closeFund, confirmFund: this.confirmFund, fundTargetName: this.node(S.fundTarget) ? this.node(S.fundTarget).name : '', fundAmtDisp: this.fmt(S.fundAmt), fundPresets: [fundPreset(1000), fundPreset(10000), fundPreset(100000)],
       capOpen: S.capOpen, closeCap: this.closeCap, confirmCap: this.confirmCap, setCapRange: this.setCapRange, capacity: S.capacity, capDisp: this.fmt(S.capacity), capPair: (capF ? capF.name : '') + ' ⇄ ' + (capT ? capT.name : '—'),
+      cycleCapFrom: this.cycleCapFrom, cycleCapTo: this.cycleCapTo, capFromName: capF ? capF.name : '—', capToName: capT ? capT.name : '—', capFromHue: capF ? capF.hue : 'var(--ember)', capToHue: capT ? capT.hue : 'var(--violet)',
       closeWizard: this.closeWizard, wizNext: this.wizNext, wizBack: this.wizBack, forgeIt: this.forgeIt,
       wizSteps: [wizStep(1, '1 · TOPOLOGY'), wizStep(2, '2 · FUNDING'), wizStep(3, '3 · REVIEW')],
       wizStep1: S.wizardStep === 1, wizStep2: S.wizardStep === 2, wizStep3: S.wizardStep === 3, wizNotLast: S.wizardStep < 3, wizLast: S.wizardStep === 3,
