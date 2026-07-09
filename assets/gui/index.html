@@ -841,11 +841,14 @@ class Component extends DCLogic {
     const cap = this.state.capacity;
     const fn = this.node(this.state.capFrom), tn = this.node(this.state.capTo);
     if (window.__FORGE__) {
-      const from = this.state.capFrom, to = this.state.capTo, udt = this.state.capUdt;
+      const from = this.state.capFrom, to = this.state.capTo, udt = this.state.capUdt, po = { from: from, to: to, cap: cap, udt: udt }, self = this, label = fn.name + '⇄' + tn.name;
       this._forgeApi('/api/channel/open', { net: this._forgeNet(), from: fn.name, to: tn.name, capacity: cap, udt: udt });
+      // A channel can stall (e.g. the opener has no spendable cell); drop the OPENING conduit after
+      // 100s if it never reconciles into a real channel, so it isn't stuck on the graph forever.
+      setTimeout(function () { self.setState(function (st) { return (st.pendingOpens || []).indexOf(po) < 0 ? {} : { pendingOpens: st.pendingOpens.filter(function (x) { return x !== po; }), events: [{ t: self.now(), c: 'var(--alarm)', msg: 'CHANNEL ' + label + ' OPEN TIMED OUT — check node funds' }, ...st.events].slice(0, 8) }; }); }, 100000);
       this.setState(st => {
         const pid = 'pending-live';
-        return { capOpen: false, sel: null, pendingOpens: [...(st.pendingOpens || []), { from: from, to: to, cap: cap, udt: udt }], channels: [...st.channels.filter(c => c.id !== pid), { id: pid, from: from, to: to, cap: cap, channelId: null, udt: udt, pending: true }], chState: { ...st.chState, [pid]: 'pending' }, balances: { ...st.balances, [pid]: Math.round(cap / 2) }, lastCmd: 'forge channel open ' + this._forgeNet() + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' OPENING' }, ...st.events].slice(0, 8) };
+        return { capOpen: false, sel: null, pendingOpens: [...(st.pendingOpens || []), po], channels: [...st.channels.filter(c => c.id !== pid), { id: pid, from: from, to: to, cap: cap, channelId: null, udt: udt, pending: true }], chState: { ...st.chState, [pid]: 'pending' }, balances: { ...st.balances, [pid]: Math.round(cap / 2) }, lastCmd: 'forge channel open ' + this._forgeNet() + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' OPENING' }, ...st.events].slice(0, 8) };
       });
       return;
     }

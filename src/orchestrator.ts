@@ -537,6 +537,9 @@ export class Orchestrator {
     const toRpc = this.rpcFor(toNode.rpcHostPort);
     const chain = new DevChain(`http://127.0.0.1:${state.ckbHostPort}`);
     const udtTypeScript = udt ? await chain.udtScript() : undefined;
+    // Confirm any in-flight funding/issuance txs first, so the opener has a spendable cell to fund
+    // this channel (otherwise fnn fails with "capacity not enough" and stalls at AwaitingTxSignatures).
+    await chain.generateBlocks(3);
 
     const toPeerId = peerIdOf(await toRpc.nodeInfo());
     if (!toPeerId) {
