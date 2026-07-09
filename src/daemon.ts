@@ -63,7 +63,10 @@ export interface Backend {
   ): Promise<void>;
   up(
     topology: Topology,
-    options: { onProgress?: (message: string) => void },
+    options: {
+      onProgress?: (message: string) => void;
+      udtPerNode?: number;
+    },
   ): Promise<NetworkLayout>;
 }
 
@@ -285,6 +288,7 @@ export function createDaemon(backend: Backend): Server {
           backend
             .up(topology, {
               onProgress: (message) => job.progress.push(message),
+              udtPerNode: num(body.udtFunding) || undefined,
             })
             .then(() => {
               job.status = "done";

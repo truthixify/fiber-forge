@@ -54,6 +54,8 @@ export interface UpOptions {
   ckbImage?: string;
   layout?: LayoutOptions;
   onProgress?: (message: string) => void;
+  /** If set, issue this many whole UDT to every node and mirror each channel as a UDT channel. */
+  udtPerNode?: number;
 }
 
 /** The CKB dev-chain container spec (contracts baked into genesis via the mounted assets). */
@@ -295,6 +297,7 @@ export class Orchestrator {
       log(
         `open channel ${channel.from} -> ${channel.to} (${channel.capacityCkb} CKB)`,
       );
+      const priorReady = await this.readyChannelCount(from, to.pubkey);
       await this.openChannel(from, {
         pubkey: to.pubkey,
         fundingAmount: ckbToShannonHex(channel.capacityCkb),
@@ -305,7 +308,41 @@ export class Orchestrator {
         chain,
         `${channel.from}->${channel.to}`,
         log,
+        priorReady + 1,
       );
+    }
+
+    if (options.udtPerNode && options.udtPerNode > 0) {
+      const amountUdt = options.udtPerNode;
+      for (const node of layout.nodes) {
+        log(`issuing ${amountUdt} UDT to ${node.name}`);
+        await chain.issueUdt(
+          addressByName.get(node.name)!,
+          BigInt(Math.round(amountUdt * 1e8)),
+        );
+      }
+      const udtTypeScript = await chain.udtScript();
+      for (const channel of topology.channels) {
+        const from = rpcByName.get(channel.from)!;
+        const to = infoByName.get(channel.to)!;
+        log(
+          `open UDT channel ${channel.from} -> ${channel.to} (${channel.capacityCkb} UDT)`,
+        );
+        const priorReady = await this.readyChannelCount(from, to.pubkey);
+        await this.openChannel(from, {
+          pubkey: to.pubkey,
+          fundingAmount: ckbToShannonHex(channel.capacityCkb),
+          udtTypeScript,
+        });
+        await this.waitChannelReady(
+          from,
+          to.pubkey,
+          chain,
+          `${channel.from}->${channel.to} (UDT)`,
+          log,
+          priorReady + 1,
+        );
+      }
     }
 
     const state: NetworkState = {
@@ -586,6 +623,7 @@ export class Orchestrator {
     await fromRpc.connectPeer(dialAddress(toNode.ip, toPeerId, FNN_P2P_PORT));
     await this.waitPeerConnected(fromRpc, toNode.pubkey);
     log(`open channel ${from} -> ${to} (${capacity} ${udt ? "UDT" : "CKB"})`);
+    const priorReady = await this.readyChannelCount(fromRpc, toNode.pubkey);
     await this.openChannel(fromRpc, {
       pubkey: toNode.pubkey,
       fundingAmount: ckbToShannonHex(capacity),
@@ -597,6 +635,7 @@ export class Orchestrator {
       chain,
       `${from}->${to}`,
       log,
+      priorReady + 1,
     );
   }
 
@@ -812,12 +851,21 @@ export class Orchestrator {
     }
   }
 
+  /** Ready channels a node currently has with a peer — the baseline a new open must exceed. */
+  private async readyChannelCount(
+    rpc: FnnRpc,
+    peerPubkey: string,
+  ): Promise<number> {
+    return (await rpc.listChannels(peerPubkey)).filter(isChannelReady).length;
+  }
+
   private async waitChannelReady(
     rpc: FnnRpc,
     peerPubkey: string,
     chain: DevChain,
     label: string,
     log: (message: string) => void,
+    minReady = 1,
     timeoutMs = 120_000,
   ): Promise<void> {
     const deadline = Date.now() + timeoutMs;
@@ -825,7 +873,9 @@ export class Orchestrator {
       // Mine a few blocks each pass so the funding tx proposes+commits quickly (CKB is two-step).
       await chain.generateBlocks(3);
       const channels = await rpc.listChannels(peerPubkey);
-      if (channels.some(isChannelReady)) {
+      // Count ready channels, not "any ready" — else a new channel to an already-connected peer
+      // is reported ready the instant its sibling is, and the new one is left half-open.
+      if (channels.filter(isChannelReady).length >= minReady) {
         log(`channel ${label} ready`);
         return;
       }
