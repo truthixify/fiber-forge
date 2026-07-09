@@ -842,10 +842,19 @@ class Component extends DCLogic {
     const fn = this.node(this.state.capFrom), tn = this.node(this.state.capTo);
     if (window.__FORGE__) {
       const from = this.state.capFrom, to = this.state.capTo, udt = this.state.capUdt, po = { from: from, to: to, cap: cap, udt: udt }, self = this, label = fn.name + '⇄' + tn.name;
-      this._forgeApi('/api/channel/open', { net: this._forgeNet(), from: fn.name, to: tn.name, capacity: cap, udt: udt });
-      // A channel can stall (e.g. the opener has no spendable cell); drop the OPENING conduit after
-      // 100s if it never reconciles into a real channel, so it isn't stuck on the graph forever.
-      setTimeout(function () { self.setState(function (st) { return (st.pendingOpens || []).indexOf(po) < 0 ? {} : { pendingOpens: st.pendingOpens.filter(function (x) { return x !== po; }), events: [{ t: self.now(), c: 'var(--alarm)', msg: 'CHANNEL ' + label + ' OPEN TIMED OUT — check node funds' }, ...st.events].slice(0, 8) }; }); }, 100000);
+      // Await the real result so a failed open surfaces its reason instead of hanging on "opening".
+      fetch('/api/channel/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ net: this._forgeNet(), from: fn.name, to: tn.name, capacity: cap, udt: udt }) })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.error) {
+            self.setState(function (st) { return { pendingOpens: (st.pendingOpens || []).filter(function (x) { return x !== po; }), events: [{ t: self.now(), c: 'var(--alarm)', msg: 'CHANNEL ' + label + ' OPEN FAILED · ' + String(res.error).replace(/^[^:]*:\s*/, '').slice(0, 52) }, ...st.events].slice(0, 8) }; });
+          } else {
+            self.setState(function (st) { return { events: [{ t: self.now(), c: 'var(--flux)', msg: 'CHANNEL ' + label + ' READY' }, ...st.events].slice(0, 8) }; });
+          }
+        })
+        .catch(function () {});
+      // Belt-and-suspenders: drop the OPENING conduit after 130s if nothing ever reconciles it.
+      setTimeout(function () { self.setState(function (st) { return (st.pendingOpens || []).indexOf(po) < 0 ? {} : { pendingOpens: st.pendingOpens.filter(function (x) { return x !== po; }), events: [{ t: self.now(), c: 'var(--alarm)', msg: 'CHANNEL ' + label + ' OPEN TIMED OUT — check node funds' }, ...st.events].slice(0, 8) }; }); }, 130000);
       this.setState(st => {
         const pid = 'pending-live';
         return { capOpen: false, sel: null, pendingOpens: [...(st.pendingOpens || []), po], channels: [...st.channels.filter(c => c.id !== pid), { id: pid, from: from, to: to, cap: cap, channelId: null, udt: udt, pending: true }], chState: { ...st.chState, [pid]: 'pending' }, balances: { ...st.balances, [pid]: Math.round(cap / 2) }, lastCmd: 'forge channel open ' + this._forgeNet() + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' OPENING' }, ...st.events].slice(0, 8) };

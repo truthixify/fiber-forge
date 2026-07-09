@@ -567,6 +567,16 @@ export class Orchestrator {
     // Confirm any in-flight funding/issuance txs first, so the opener has a spendable cell to fund
     // this channel (otherwise fnn fails with "capacity not enough" and stalls at AwaitingTxSignatures).
     await chain.generateBlocks(3);
+    // A UDT channel is funded from the opener's UDT balance; fail fast (not a silent stall) if short.
+    if (udt) {
+      const balance =
+        Number(await chain.udtBalanceOf(fromNode.ckbAddress)) / 1e8;
+      if (balance < capacity) {
+        throw new Error(
+          `${from} has ${balance} UDT but needs ${capacity} to open this channel — fund UDT to ${from} first`,
+        );
+      }
+    }
 
     const toPeerId = peerIdOf(await toRpc.nodeInfo());
     if (!toPeerId) {
@@ -812,7 +822,8 @@ export class Orchestrator {
   ): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
-      await chain.generateBlocks(1);
+      // Mine a few blocks each pass so the funding tx proposes+commits quickly (CKB is two-step).
+      await chain.generateBlocks(3);
       const channels = await rpc.listChannels(peerPubkey);
       if (channels.some(isChannelReady)) {
         log(`channel ${label} ready`);
@@ -821,7 +832,7 @@ export class Orchestrator {
       if (Date.now() > deadline) {
         throw new Error(`channel ${label} did not reach CHANNEL_READY in time`);
       }
-      await sleep(2000);
+      await sleep(1000);
     }
   }
 }
