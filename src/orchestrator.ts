@@ -200,6 +200,9 @@ export class Orchestrator {
     private readonly stateDir = join(homedir(), ".fiber-forge"),
   ) {}
 
+  /** Serializes channel opens per network: two fundings must not race for the same wallet cell. */
+  private readonly openQueue = new Map<string, Promise<void>>();
+
   /** Bring the whole network up to funded, connected, CHANNEL_READY channels. */
   async up(
     topology: Topology,
@@ -522,6 +525,30 @@ export class Orchestrator {
 
   /** Open a channel between two already-running nodes and wait until it is ready. */
   async openChannelBetween(
+    net: string,
+    from: string,
+    to: string,
+    capacity: number,
+    onProgress?: (message: string) => void,
+    udt?: boolean,
+  ): Promise<void> {
+    const prev = this.openQueue.get(net) ?? Promise.resolve();
+    const task = prev
+      .catch(() => {})
+      .then(() =>
+        this.openChannelBetweenInner(net, from, to, capacity, onProgress, udt),
+      );
+    this.openQueue.set(
+      net,
+      task.then(
+        () => {},
+        () => {},
+      ),
+    );
+    return task;
+  }
+
+  private async openChannelBetweenInner(
     net: string,
     from: string,
     to: string,
