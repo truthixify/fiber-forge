@@ -847,7 +847,7 @@ class Component extends DCLogic {
         .then(function (r) { return r.json(); })
         .then(function (res) {
           if (res && res.error) {
-            self.setState(function (st) { return { pendingOpens: (st.pendingOpens || []).filter(function (x) { return x !== po; }), events: [{ t: self.now(), c: 'var(--alarm)', msg: 'CHANNEL ' + label + ' OPEN FAILED · ' + String(res.error).replace(/^[^:]*:\s*/, '').slice(0, 52) }, ...st.events].slice(0, 8) }; });
+            self.setState(function (st) { return { pendingOpens: (st.pendingOpens || []).filter(function (x) { return x !== po; }), channels: st.channels.filter(function (c) { return !c.pending; }), events: [{ t: self.now(), c: 'var(--alarm)', msg: 'CHANNEL ' + label + ' OPEN FAILED · ' + String(res.error).replace(/^[^:]*:\s*/, '').slice(0, 52) }, ...st.events].slice(0, 8) }; });
           } else {
             self.setState(function (st) { return { events: [{ t: self.now(), c: 'var(--flux)', msg: 'CHANNEL ' + label + ' READY' }, ...st.events].slice(0, 8) }; });
           }

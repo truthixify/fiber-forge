@@ -129,8 +129,16 @@ export class DockerEngine implements ContainerEngine {
     const existing = await this.docker.listNetworks({
       filters: { name: [name] },
     });
-    if (existing.some((n) => n.Name === name)) {
-      return;
+    const match = existing.find((n) => n.Name === name);
+    if (match) {
+      // Reuse only if the subnet matches; a stale network with a different subnet (left by a
+      // crashed run) can't host the planned IPs, so tear it down and recreate it clean.
+      const current = (match as { IPAM?: { Config?: { Subnet?: string }[] } })
+        .IPAM?.Config?.[0]?.Subnet;
+      if (current === subnet) {
+        return;
+      }
+      await this.removeNetwork(name);
     }
     await this.docker.createNetwork({
       Name: name,
@@ -140,7 +148,18 @@ export class DockerEngine implements ContainerEngine {
 
   async removeNetwork(name: string): Promise<void> {
     try {
-      await this.docker.getNetwork(name).remove();
+      const network = this.docker.getNetwork(name);
+      const info = (await network.inspect()) as {
+        Containers?: Record<string, unknown>;
+      };
+      for (const id of Object.keys(info.Containers ?? {})) {
+        try {
+          await network.disconnect({ Container: id, Force: true });
+        } catch {
+          // container already gone
+        }
+      }
+      await network.remove();
     } catch (error) {
       if (!isNotFound(error)) throw error;
     }
