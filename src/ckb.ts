@@ -54,6 +54,7 @@ export class DevChain {
   private readonly client: ccc.ClientPublicTestnet;
   private devScriptsReady = false;
   private udtOutpoint?: OutPoint;
+  private depGroupTxHash?: string;
 
   constructor(private readonly rpcUrl: string) {
     this.client = new ccc.ClientPublicTestnet({ url: rpcUrl });
@@ -143,6 +144,7 @@ export class DevChain {
       throw new Error("could not read the dev chain genesis block");
     }
     const depGroupTxHash = genesis.transactions[1].hash();
+    this.depGroupTxHash = depGroupTxHash;
     const cellbase = genesis.transactions[0];
     for (let i = 0; i < cellbase.outputsData.length; i += 1) {
       if (ccc.hashCkb(cellbase.outputsData[i]) === SIMPLE_UDT_CODE_HASH) {
@@ -201,38 +203,62 @@ export class DevChain {
     };
   }
 
+  /** A throwaway client (with the devnet secp dep override) so retries never reuse a stale cell cache. */
+  private freshDeployerContext(): {
+    client: ccc.ClientPublicTestnet;
+    signer: ccc.SignerCkbPrivateKey;
+  } {
+    const client = new ccc.ClientPublicTestnet({ url: this.rpcUrl });
+    const depGroupTxHash = this.depGroupTxHash!;
+    const original = client.getKnownScript.bind(client);
+    client.getKnownScript = async (script) => {
+      const info = await original(script);
+      if (script === ccc.KnownScript.Secp256k1Blake160) {
+        info.cellDeps = [
+          ccc.CellDepInfo.from({
+            cellDep: {
+              outPoint: { txHash: depGroupTxHash, index: 0 },
+              depType: "depGroup",
+            },
+          }),
+        ];
+      }
+      return info;
+    };
+    return {
+      client,
+      signer: new ccc.SignerCkbPrivateKey(client, DEPLOYER_PRIVATE_KEY),
+    };
+  }
+
   /**
-   * Mint `amount` base units of the dev UDT into `address` (signed by the deployer/owner), and
-   * return the tx hash once it is committed. Right after `up`, the deployer's cells are still
-   * settling from node funding, so an issuance can be accepted then evicted — each attempt rebuilds
-   * against freshly-selected inputs, mines, and verifies commitment, retrying on conflict.
+   * Mint `amount` base units of the dev UDT into `address`, returning once the recipient's balance
+   * has actually risen by that amount. Right after `up`, the deployer's cells are still settling, so
+   * an issuance can be accepted then silently evicted — checking the tx status alone gives false
+   * positives. Each attempt mines to settle prior txs, builds against a fresh client (no stale cell
+   * cache), and only succeeds once the on-chain balance confirms the mint landed.
    */
   async issueUdt(
     address: string,
     amount: bigint,
-    attempts = 6,
+    attempts = 10,
   ): Promise<string> {
     const dep = await this.udtDep();
-    const signer = new ccc.SignerCkbPrivateKey(
-      this.client,
-      DEPLOYER_PRIVATE_KEY,
-    );
     const udtType = ccc.Script.from({
       codeHash: SIMPLE_UDT_CODE_HASH,
       hashType: "data1",
       args: await this.udtOwnerLockHash(),
     });
-    const to = await ccc.Address.fromString(address, this.client);
-    let lastError: unknown = new Error("udt issuance did not commit");
+    const start = await this.udtBalanceOf(address);
+    let lastError: unknown = new Error(`udt issuance to ${address} did not land`);
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
+        await this.generateBlocks(2);
+        const { client, signer } = this.freshDeployerContext();
+        const to = await ccc.Address.fromString(address, client);
         const tx = ccc.Transaction.from({
           outputs: [
-            {
-              lock: to.script,
-              type: udtType,
-              capacity: ccc.fixedPointFrom(200),
-            },
+            { lock: to.script, type: udtType, capacity: ccc.fixedPointFrom(200) },
           ],
           outputsData: [ccc.hexFrom(ccc.numLeToBytes(amount, 16))],
         });
@@ -245,34 +271,26 @@ export class DevChain {
         await tx.completeInputsByCapacity(signer);
         await tx.completeFeeBy(signer, 1000);
         const hash = await signer.sendTransaction(tx);
-        // CKB commits in two steps (propose, then commit a block later); mine until it lands.
-        let status: string | undefined;
-        for (let block = 0; block < 8; block += 1) {
+        for (let block = 0; block < 10; block += 1) {
           await this.generateBlocks(1);
-          status = (await this.client.getTransaction(hash))?.status;
-          if (status === "committed" || status === "rejected") {
-            break;
+          if ((await this.udtBalanceOf(address)) >= start + amount) {
+            return hash;
           }
         }
-        if (status === "committed") {
-          return hash;
-        }
-        lastError = new Error(
-          `udt issuance tx ${hash} did not commit (status: ${status ?? "unknown"})`,
-        );
       } catch (error) {
         lastError = error;
       }
-      await sleep(800);
+      await sleep(500);
     }
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
-  /** Total dev-UDT base units held by `address`. */
+  /** Total dev-UDT base units held by `address`. A fresh client avoids a stale cell cache. */
   async udtBalanceOf(address: string): Promise<bigint> {
-    const lock = (await ccc.Address.fromString(address, this.client)).script;
+    const client = new ccc.ClientPublicTestnet({ url: this.rpcUrl });
+    const lock = (await ccc.Address.fromString(address, client)).script;
     let total = 0n;
-    for await (const cell of this.client.findCellsByLock(lock)) {
+    for await (const cell of client.findCellsByLock(lock)) {
       if (cell.cellOutput.type?.codeHash === SIMPLE_UDT_CODE_HASH) {
         total += ccc.numLeFromBytes(
           ccc.bytesFrom(cell.outputData).slice(0, 16),
