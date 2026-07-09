@@ -14,39 +14,49 @@ invoices, and live channel open/close are all verified against real nodes. The C
 colorful; the web GUI serves a live network graph. Nodes are named after philosophers, scientists,
 and historical figures — every network gets a fresh cast.
 
-## Usage
+## Install
 
 Requires a running Docker daemon (the tool pulls `nervos/ckb` and `nervos/fiber` on first run).
 
 ```sh
-npm install
+npx @truthixify/fiber-forge up trio        # run without installing
+# — or —
+npm install -g @truthixify/fiber-forge     # then use the `forge` command directly
+```
 
+The examples below use the global `forge` command. With `npx`, prefix each one with
+`npx @truthixify/fiber-forge` instead. From a cloned repo, `node bin/forge.mjs <args>` runs the
+same CLI with no build step.
+
+## Usage
+
+```sh
 # lifecycle
-node bin/forge.mjs up trio                 # boot 3 nodes + 2 channels → CHANNEL_READY
-node bin/forge.mjs ls                       # list all networks
-node bin/forge.mjs status trio              # nodes + channels with live state
-node bin/forge.mjs gui trio                 # serve the live graph at http://127.0.0.1:5178
-node bin/forge.mjs down trio                # tear down (--keep data volume, --purge everything)
+forge up trio                 # boot 3 nodes + 2 channels → CHANNEL_READY
+forge ls                      # list all networks
+forge status trio             # nodes + channels with live state
+forge gui trio                # serve the live graph at http://127.0.0.1:5178
+forge down trio               # tear down (--keep data volume, --purge everything)
 
 # payments & channels (use the node names from `up`/`status`)
-node bin/forge.mjs pay trio feynman galileo 42     # multi-hop payment
-node bin/forge.mjs invoice trio lorentz 100        # create an invoice
-node bin/forge.mjs channel open trio feynman galileo 1000
-node bin/forge.mjs channel ls trio                 # channels with balances
-node bin/forge.mjs channel close trio feynman <id>
-node bin/forge.mjs logs trio feynman --level warn  # node logs (or 'ckb'), filtered by level
+forge pay trio feynman galileo 42     # multi-hop payment
+forge invoice trio lorentz 100        # create an invoice
+forge channel open trio feynman galileo 1000
+forge channel ls trio                 # channels with balances
+forge channel close trio feynman <id>
+forge logs trio feynman --level warn  # node logs (or 'ckb'), filtered by level
 
 # scenario scripts — a little traffic generator (see examples/payments.yml)
-node bin/forge.mjs run trio ./examples/payments.yml
+forge run trio ./examples/payments.yml
 
 # UDT asset channels (dev simple_udt, baked into the devnet genesis)
-node bin/forge.mjs udt issue trio feynman 10000    # mint 10000 UDT to a node
-node bin/forge.mjs channel open trio feynman galileo 5000 --udt
-node bin/forge.mjs pay trio feynman galileo 100 --udt
+forge udt issue trio feynman 10000    # mint 10000 UDT to a node
+forge channel open trio feynman galileo 5000 --udt
+forge pay trio feynman galileo 100 --udt
 
 # a custom network, and machine-readable output
-node bin/forge.mjs up ./my-topology.yml
-node bin/forge.mjs status trio --json | jq
+forge up ./my-topology.yml
+forge status trio --json | jq
 ```
 
 Presets: `duo` (2 nodes), `trio` (3), `hub` (5-node star), or **`shape:N`** for any count —
