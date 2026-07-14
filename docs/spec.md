@@ -11,18 +11,18 @@ addresses, write two `config.yml`s, boot two `fnn` processes, exchange peer addr
 channel opening over raw JSON-RPC. Core issue #1262 (install/quick-start scripts) is still open;
 every tutorial front-loads this pain. Lightning's answer was Polar — which won a hackathon and
 became the ecosystem's standard dev tool. Fiber has nothing in this slot. fiber-forge is that
-tool: `forge up trio` → three connected nodes with funded channels and a live graph GUI.
+tool: `fiber-forge up trio` → three connected nodes with funded channels and a live graph GUI.
 
 ## 2. Deliverables
 
-1. `forge` CLI (npm package): create/destroy/inspect local networks from presets or a topology file.
-2. Web GUI served by `forge up`: live network graph, click-to-open channels, click-to-pay,
+1. `fiber-forge` CLI (npm package): create/destroy/inspect local networks from presets or a topology file.
+2. Web GUI served by `fiber-forge up`: live network graph, click-to-open channels, click-to-pay,
    per-node detail (balances, channels, logs), connection info for app integration.
 3. Topologies: named presets `duo`, `trio` (A—B—C multi-hop), and `hub` (5-node star); parametric
    shapes `line:N` (chain), `ring:N` (loop), and `star:N` (hub + N−1 spokes) for any `N` from 2 to
    10; plus a topology file schema (YAML) for fully custom networks. Several networks run at once,
    each on its own subnet and host ports.
-4. Docs: quickstart, topology schema reference, "point your app at a forge node" guide.
+4. Docs: quickstart, topology schema reference, "point your app at a fiber-forge node" guide.
 
 ## 3. Scope
 
@@ -30,31 +30,31 @@ tool: `forge up trio` → three connected nodes with funded channels and a live 
 topologies (`line`/`ring`/`star`), and custom YAML; graph GUI with open/pay/close actions and log
 streaming; deterministic teardown; works on macOS + Linux (amd64 + arm64).
 **Stretch:** UDT asset preset (deploy an xUDT on the devnet, whitelist it in node configs,
-open a UDT channel); scenario scripts (`forge run payments.yml` traffic generator); headless CI
-mode (`forge up --no-ui --json`).
+open a UDT channel); scenario scripts (`fiber-forge run payments.yml` traffic generator); headless CI
+mode (`fiber-forge up --no-ui --json`).
 **Non-goals:** testnet/mainnet management (local devnet only); node version matrixing (pinned
 image); Windows-native (WSL2 is the supported path).
 
 ## 4. Architecture
 
 ```
-forge CLI ──► orchestrator (TS lib) ──► Docker Engine API (dockerode)
+fiber-forge CLI ──► orchestrator (TS lib) ──► Docker Engine API (dockerode)
                     │                      ├── ckb container (dev chain + miner)
                     │                      └── fnn containers ×N (nervos/fiber, pinned)
                     ├──► funding module (devnet genesis key → transfers to node wallets)
                     ├──► fnn RPC clients (per node, via mapped ports)
                     └──► state store  (~/.fiber-forge/<network>/ : topology, ports, data dirs)
-GUI (React/vite, served on localhost) ──► forge daemon HTTP+WS API (wraps orchestrator)
+GUI (React/vite, served on localhost) ──► fiber-forge daemon HTTP+WS API (wraps orchestrator)
 ```
 
-- One Docker network per forge network; fixed container names (`forge-<net>-ckb`,
+- One Docker network per fiber-forge network; fixed container names (`forge-<net>-ckb`,
   `forge-<net>-node-<i>`); host ports allocated from a base (8114 CKB, 8228+i per node RPC).
 - CKB dev chain configured for ~1s blocks with the miner enabled, so funding and channel
   transactions confirm nearly instantly.
 - Funding: the dev-chain genesis issued cells (well-known dev keys) are the treasury; the
   funding module builds simple transfers (via `@ckb-ccc/core`) to each node's wallet address,
   read from the node after boot.
-- Node data dirs are host mounts, so `forge down --keep` preserves state and `forge up` resumes.
+- Node data dirs are host mounts, so `fiber-forge down --keep` preserves state and `fiber-forge up` resumes.
 
 ## 5. Fiber integration points
 
@@ -68,15 +68,17 @@ GUI (React/vite, served on localhost) ──► forge daemon HTTP+WS API (wraps 
 
 ## 6. Functional requirements
 
-- FR-1 `forge up <preset|file>` produces a network where every declared channel reaches
-  `CHANNEL_READY`, or exits non-zero with a per-step error naming the failing node/channel.
-- FR-2 `forge down` removes containers + network; `--keep` preserves data dirs; `--purge` wipes.
+- FR-1 `fiber-forge up <preset|file>` produces a network where every declared channel reaches
+  `CHANNEL_READY`, or exits non-zero with a per-step error naming the failing node/channel. With no
+  argument, `fiber-forge up` opens the GUI on its spawn chooser to pick a topology and Forge it there.
+- FR-2 `fiber-forge down <net>` removes containers + network; `--keep` preserves data dirs; `--purge`
+  wipes; `--all` (no net) tears down every network at once.
 - FR-3 The GUI reflects node/channel/balance state within 2s of change (poll or WS push).
 - FR-4 Opening a channel from the GUI requires only source, target, capacity; the orchestrator
   handles funding, acceptance, and readiness.
 - FR-5 One-click payment: GUI picks receiver, generates an invoice, pays it from the chosen
   sender, and animates the route (multi-hop visible on `trio`).
-- FR-6 `forge status --json` emits machine-readable network state (ports, pubkeys, channels)
+- FR-6 `fiber-forge status --json` emits machine-readable network state (ports, pubkeys, channels)
   for scripting and CI.
 - FR-7 Per-node log panel streams `docker logs` with level filtering.
 - FR-8 Topology file is validated with actionable errors (unknown node ref, capacity below
@@ -108,8 +110,8 @@ funding:
 4. CLI surface (`up/down/status`) + topology parser/validator (FR-8 unit tests).
 5. Forge daemon API (HTTP+WS) + GUI: graph view, node cards, open-channel modal, pay flow,
    log panel. Test: FR-3/4/5 against a live `trio`.
-6. Presets, `--json`, docs, README GIFs. E2E script: `forge up trio` → multi-hop payment
-   asserts `Success` → `forge down` — this script is also CI.
+6. Presets, `--json`, docs, README GIFs. E2E script: `fiber-forge up trio` → multi-hop payment
+   asserts `Success` → `fiber-forge down` — this script is also CI.
 7. Stretch items only after the E2E is green and recorded.
 
 ## 9. Acceptance criteria
@@ -117,7 +119,7 @@ funding:
 - AC-1 On a clean machine with Docker: `npx @truthixify/fiber-forge up trio` → GUI open →
   multi-hop payment succeeds, in under 90 seconds total.
 - AC-2 The E2E script passes in CI (Linux runner) headlessly.
-- AC-3 Kill any single fnn container: GUI shows the node unhealthy within 2s; `forge up`
+- AC-3 Kill any single fnn container: GUI shows the node unhealthy within 2s; `fiber-forge up`
   after `down --keep` restores the network with channel state intact.
 - AC-4 Topology validation rejects the documented error classes with named messages.
 - AC-5 `make ci` green: lint, unit (parser, port allocator, orchestrator with mocked Docker),
@@ -125,9 +127,9 @@ funding:
 
 ## 10. Demo script (~75s)
 
-Blank terminal → `forge up trio` → containers pull/boot on screen → GUI opens showing three
+Blank terminal → `fiber-forge up trio` → containers pull/boot on screen → GUI opens showing three
 nodes, channels animating to ready → drag-open a new channel alice→carol → one-click pay along
-the 2-hop route, route animates, balances shift → `forge status --json` piped to `jq` ("and it's
+the 2-hop route, route animates, balances shift → `fiber-forge status --json` piped to `jq` ("and it's
 scriptable") → closing line: "yesterday this was an afternoon of YAML; the next hackathon's
 participants get it in one command."
 

@@ -30,7 +30,7 @@ function paint(
   return (s) => `\x1b[38;2;${r};${g};${b}m${s}\x1b[39m`;
 }
 
-// A forge palette: warm ember for energy/focal, cool flux for ready/structure, gold for CKB.
+// A fiber-forge palette: warm ember for energy/focal, cool flux for ready/structure, gold for CKB.
 export const ember = paint("#FF6A3D", pc.red);
 export const accent = ember;
 export const flux = paint("#2DE0C7", pc.cyan);

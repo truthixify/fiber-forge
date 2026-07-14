@@ -1,8 +1,8 @@
 /**
- * The forge daemon: a central HTTP server for the web GUI. It serves the GUI and exposes the
+ * The fiber-forge daemon: a central HTTP server for the web GUI. It serves the GUI and exposes the
  * orchestrator over JSON routes so the GUI can list/create networks and drive live actions
  * (pay, open/close channel, fund, tear down) against any of them. It is network-agnostic — the
- * GUI passes `net` per request — so one daemon manages every forge network at once.
+ * GUI passes `net` per request — so one daemon manages every fiber-forge network at once.
  */
 
 import { readFile } from "node:fs/promises";

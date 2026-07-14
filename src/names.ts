@@ -1,7 +1,7 @@
 /**
  * A pool of recognizable names — philosophers, mathematicians, scientists, and historical figures
  * — so networks are fun to explore. Nodes are named from here instead of `n1, n2, …`; you refer to
- * them by name in `forge pay <from> <to>`, channel ops, and the GUI.
+ * them by name in `fiber-forge pay <from> <to>`, channel ops, and the GUI.
  */
 
 export const NAME_POOL = [

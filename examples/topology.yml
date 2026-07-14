@@ -1,0 +1,26 @@
+# A custom fiber-forge topology. Spin it up with:
+#   fiber-forge up examples/topology.yml
+# (any YAML file works — pass its path to `fiber-forge up`, or omit the arg to pick one in the GUI).
+#
+# Presets (duo, trio, line:N, ring:N, star:N, hub) cover the common shapes. Write a file like this
+# when you want an exact custom layout.
+
+# Network name: lowercase letters, digits, hyphens (1–30 chars). Names the containers + state dir.
+name: my-net
+
+# 2–10 nodes, each with a unique name.
+nodes:
+  - name: alice
+  - name: bob
+  - name: carol
+
+# Channels to open. `from` funds the channel with `capacity_ckb` CKB (minimum 100). Payments route
+# along whatever path these channels form — here alice—bob—carol, so alice↔carol is a two-hop route.
+channels:
+  - { from: alice, to: bob, capacity_ckb: 1000 }
+  - { from: bob, to: carol, capacity_ckb: 1000 }
+
+# On-chain CKB granted to each node's wallet on startup. Must cover the channels that node funds
+# (plus the ~99 CKB each funding cell reserves) and its fees.
+funding:
+  per_node_ckb: 100000

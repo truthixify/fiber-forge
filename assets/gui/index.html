@@ -78,7 +78,7 @@
       <div style="font-size:40px;font-weight:800;color:var(--bone);letter-spacing:-.02em;line-height:1;">No network forged yet</div>
       <div style="font-size:15px;color:var(--muted);max-width:440px;line-height:1.6;">Spin up a local Fiber payment-channel network — nodes, funded channels and a CKB dev chain — as one live thermal circuit.</div>
       <button onClick="{{ enterWizard }}" style="margin-top:6px;background:var(--ember);color:#1a0b06;border:none;padding:15px 30px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:13px;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:10px;box-shadow:0 0 40px rgba(255,106,61,.35);">FORGE A NETWORK ⚒</button>
-      <div class="mc" style="color:var(--faint);margin-top:2px;">OR RUN · forge up trio</div>
+      <div class="mc" style="color:var(--faint);margin-top:2px;">OR RUN · fiber-forge up trio</div>
     </div>
   </sc-if>
 
@@ -544,7 +544,7 @@
               </sc-if>
             </div>
             <div style="margin-top:16px;padding:12px 14px;background:var(--inset);border:1px solid var(--hairline);display:flex;align-items:center;gap:8px;">
-              <span style="color:var(--flux);">≡</span><span class="num" style="font-size:11px;color:var(--muted);">forge up {{ reviewCmd }}</span>
+              <span style="color:var(--flux);">≡</span><span class="num" style="font-size:11px;color:var(--muted);">fiber-forge up {{ reviewCmd }}</span>
             </div>
           </div>
         </sc-if>
@@ -573,7 +573,7 @@ class Component extends DCLogic {
 
   state = {
     screen: 'floor', mode: 'select', sel: null,
-    payMin: 0, block: 0, lastCmd: 'forge up',
+    payMin: 0, block: 0, lastCmd: 'fiber-forge up',
     events: [],
     paying: false, relayId: null, showResult: false, payAmt: 250,
     wizardStep: 1, preset: 'trio', nodeCount: 3, funding: 10000, udtFunding: 0,
@@ -759,7 +759,7 @@ class Component extends DCLogic {
     const routeChans = this.state.channels.filter(c => !!c.udt === !!this.state.payUdt);
     if (this._pathNodes(this.state.nodes, routeChans, this.state.payFrom, this.state.payTo).length <= 1) return;
     const fn = f ? f.name : '', tn = t ? t.name : '', amt = this.state.payAmt, unit = this.state.payUdt ? 'UDT' : 'CKB';
-    this.setState({ payOpen: false, lastCmd: 'forge pay ' + (window.__FORGE__ ? this._forgeNet() : this.state.name.replace('forge-', '')) + ' ' + fn + ' ' + tn + ' ' + amt + (this.state.payUdt ? ' --udt' : '') });
+    this.setState({ payOpen: false, lastCmd: 'fiber-forge pay ' + (window.__FORGE__ ? this._forgeNet() : this.state.name.replace('forge-', '')) + ' ' + fn + ' ' + tn + ' ' + amt + (this.state.payUdt ? ' --udt' : '') });
     if (window.__FORGE__) {
       const self = this;
       fetch('/api/pay', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ net: this._forgeNet(), from: fn, to: tn, amount: amt, udt: this.state.payUdt }) })
@@ -828,7 +828,7 @@ class Component extends DCLogic {
       const patch = fundUdt
         ? { udt: { ...st.udt, [fundTarget]: (st.udt[fundTarget] || 0) + fundAmt } }
         : { onchain: { ...st.onchain, [fundTarget]: (st.onchain[fundTarget] || 0) + fundAmt } };
-      return Object.assign(patch, { fundOpen: false, fundFlash: { id: fundTarget, amt: fundAmt, udt: fundUdt }, lastCmd: (fundUdt ? 'forge udt issue ' : 'forge fund ') + st.name.replace('forge-', '') + ' ' + tn.name + ' ' + fundAmt, events: [{ t: this.now(), c: 'var(--gold)', msg: (fundUdt ? 'ISSUED ' : 'FUNDED ') + tn.name + ' +' + this.fmt(fundAmt) + ' ' + unit }, ...st.events].slice(0, 2) });
+      return Object.assign(patch, { fundOpen: false, fundFlash: { id: fundTarget, amt: fundAmt, udt: fundUdt }, lastCmd: (fundUdt ? 'fiber-forge udt issue ' : 'fiber-forge fund ') + st.name.replace('forge-', '') + ' ' + tn.name + ' ' + fundAmt, events: [{ t: this.now(), c: 'var(--gold)', msg: (fundUdt ? 'ISSUED ' : 'FUNDED ') + tn.name + ' +' + this.fmt(fundAmt) + ' ' + unit }, ...st.events].slice(0, 2) });
     });
     clearTimeout(this._ff); this._ff = setTimeout(() => this.setState({ fundFlash: null }), 2200);
   };
@@ -867,13 +867,13 @@ class Component extends DCLogic {
       setTimeout(function () { self.setState(function (st) { return (st.pendingOpens || []).indexOf(po) < 0 ? {} : { pendingOpens: st.pendingOpens.filter(function (x) { return x !== po; }), events: [{ t: self.now(), c: 'var(--alarm)', msg: 'CHANNEL ' + label + ' OPEN TIMED OUT — check node funds' }, ...st.events].slice(0, 8) }; }); }, 130000);
       this.setState(st => {
         const pid = 'pending-live';
-        return { capOpen: false, sel: null, pendingOpens: [...(st.pendingOpens || []), po], channels: [...st.channels.filter(c => c.id !== pid), { id: pid, from: from, to: to, cap: cap, channelId: null, udt: udt, pending: true }], chState: { ...st.chState, [pid]: 'pending' }, balances: { ...st.balances, [pid]: Math.round(cap / 2) }, lastCmd: 'forge channel open ' + this._forgeNet() + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' OPENING' }, ...st.events].slice(0, 8) };
+        return { capOpen: false, sel: null, pendingOpens: [...(st.pendingOpens || []), po], channels: [...st.channels.filter(c => c.id !== pid), { id: pid, from: from, to: to, cap: cap, channelId: null, udt: udt, pending: true }], chState: { ...st.chState, [pid]: 'pending' }, balances: { ...st.balances, [pid]: Math.round(cap / 2) }, lastCmd: 'fiber-forge channel open ' + this._forgeNet() + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' OPENING' }, ...st.events].slice(0, 8) };
       });
       return;
     }
     const id = 'x' + (this._cc = (this._cc || 0) + 1);
     const ch = { id, from: this.state.capFrom, to: this.state.capTo, cap, hash: this.mkHash(90 + this._cc) };
-    this.setState(st => ({ capOpen: false, sel: null, channels: [...st.channels, ch], chState: { ...st.chState, [id]: 'pending' }, balances: { ...st.balances, [id]: Math.round(cap / 2) }, lastCmd: 'forge channel open ' + st.name.replace('forge-', '') + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' NEGOTIATING' }, ...st.events].slice(0, 2) }));
+    this.setState(st => ({ capOpen: false, sel: null, channels: [...st.channels, ch], chState: { ...st.chState, [id]: 'pending' }, balances: { ...st.balances, [id]: Math.round(cap / 2) }, lastCmd: 'fiber-forge channel open ' + st.name.replace('forge-', '') + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' NEGOTIATING' }, ...st.events].slice(0, 2) }));
     clearTimeout(this._ig);
     this._ig = setTimeout(() => { this.setState(st => ({ chState: { ...st.chState, [id]: 'ready' }, igniteId: id, events: [{ t: this.now(), c: 'var(--flux)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' → READY' }, ...st.events].slice(0, 2) })); setTimeout(() => this.setState({ igniteId: null }), 700); }, 1700);
   };
@@ -884,7 +884,7 @@ class Component extends DCLogic {
     const fn = this.node(ch.from);
     if (window.__FORGE__ && ch.channelId) {
       this._forgeApi('/api/channel/close', { net: this._forgeNet(), node: fn ? fn.name : '', channelId: ch.channelId });
-      this.setState(st => ({ sel: null, lastCmd: 'forge channel close ' + this._forgeNet() + ' ' + (fn ? fn.name : ''), events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + (fn ? fn.name : '') + ' closing' }, ...st.events].slice(0, 8) }));
+      this.setState(st => ({ sel: null, lastCmd: 'fiber-forge channel close ' + this._forgeNet() + ' ' + (fn ? fn.name : ''), events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + (fn ? fn.name : '') + ' closing' }, ...st.events].slice(0, 8) }));
     } else {
       this.setState({ sel: null });
     }
@@ -897,7 +897,7 @@ class Component extends DCLogic {
 
   componentWillUnmount() { cancelAnimationFrame(this._raf); clearInterval(this._boot); clearInterval(this._forgePoll); window.removeEventListener('resize', this._onResize); window.removeEventListener('wheel', this._onWheel); window.removeEventListener('keydown', this._onKey); }
 
-  // ---------------- forge live bridge (central daemon) ----------------
+  // ---------------- fiber-forge live bridge (central daemon) ----------------
   _forgeNet() { return this._forgeNet_ || ''; }
   _forgeApi(path, body) {
     fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(function () {});
@@ -977,15 +977,19 @@ class Component extends DCLogic {
   }
   _forgeInit() {
     var F = this;
+    var wantSpawn = false;
+    try { wantSpawn = new URLSearchParams(location.search).get('spawn') === '1'; } catch (e) {}
+    var toWizard = function () { F.setState({ screen: 'wizard', wizardStep: 1, sel: null }); };
     fetch('/api/networks').then(function (r) { return r.json(); }).then(function (list) {
       F._forgeNets = list || [];
+      if (wantSpawn) { toWizard(); return; }
       if (list && list.length) {
         var running = list.filter(function (n) { return n.running; });
         F._forgeSelect((running[0] || list[0]).net);
       } else {
         F.setState({ screen: 'empty' });
       }
-    }).catch(function () {});
+    }).catch(function () { if (wantSpawn) toWizard(); });
   }
   _forgeSpawn() {
     var F = this;
@@ -1006,7 +1010,7 @@ class Component extends DCLogic {
       .then(function (r) { return r.json(); })
       .then(function (res) {
         if (!res.jobId) throw new Error(res.error || 'spawn failed');
-        // drive the forge animation from the REAL build progress so it lasts the real ~40s
+        // drive the fiber-forge animation from the REAL build progress so it lasts the real ~40s
         F._boot = setInterval(function () {
           fetch('/api/job?id=' + res.jobId).then(function (r) { return r.json(); }).then(function (job) {
             if (!job) return;

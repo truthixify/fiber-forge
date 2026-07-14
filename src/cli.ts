@@ -1,5 +1,5 @@
 /**
- * The `forge` CLI. Human output is calm and colorful (see {@link ui}); every data command also
+ * The `fiber-forge` CLI. Human output is calm and colorful (see {@link ui}); every data command also
  * takes `--json` for scripting. Live progress and spinners render to stderr, results to stdout.
  */
 
@@ -50,12 +50,16 @@ async function openBrowser(url: string): Promise<void> {
 }
 
 /** Serve the GUI on a free port, open it, and keep the process alive. */
-async function launchGui(note?: string): Promise<void> {
+async function launchGui(
+  note?: string,
+  opts: { spawn?: boolean } = {},
+): Promise<void> {
   const { serveGui } = await import("./daemon");
   const { findFreePort } = await import("./ports");
   const port = await findFreePort(5178);
   await serveGui(orchestrator(), port);
-  const url = `http://127.0.0.1:${port}`;
+  const base = `http://127.0.0.1:${port}`;
+  const url = opts.spawn ? `${base}/?spawn=1` : base;
   console.log(ui.hint("GUI", [url]));
   console.log(
     ui.muted(
@@ -71,7 +75,7 @@ function printJson(data: unknown): void {
 
 function fail(message: string, suggestion?: string): void {
   const hint =
-    suggestion ?? (/not found/.test(message) ? "forge ls" : undefined);
+    suggestion ?? (/not found/.test(message) ? "fiber-forge ls" : undefined);
   console.error("\n" + ui.errorBox(message, hint) + "\n");
   process.exitCode = 1;
 }
@@ -143,9 +147,9 @@ function printUpCard(layout: NetworkLayout, topology: Topology): void {
   const otherNode = layout.nodes[layout.nodes.length - 1]?.name ?? "b";
   console.log(
     ui.hint("NEXT", [
-      `forge status ${layout.net}`,
-      `forge pay ${layout.net} ${someNode} ${otherNode} 42`,
-      `forge gui ${layout.net}`,
+      `fiber-forge status ${layout.net}`,
+      `fiber-forge pay ${layout.net} ${someNode} ${otherNode} 42`,
+      `fiber-forge gui ${layout.net}`,
     ]),
   );
 }
@@ -174,13 +178,16 @@ function printStatus(view: NetworkView): void {
 export function buildCli(): Command {
   const program = new Command();
   program
-    .name("forge")
+    .name("fiber-forge")
     .description("One-click local Fiber networks")
     .version("0.1.0");
 
   program
     .command("up")
-    .argument("<preset|file>", `${presetHelp()}, or a topology YAML file`)
+    .argument(
+      "[preset|file]",
+      `${presetHelp()}, or a topology YAML file (omit to choose one in the GUI)`,
+    )
     .option("--ckb-port <n>", "host port for the ckb rpc", (v) =>
       Number.parseInt(v, 10),
     )
@@ -191,7 +198,7 @@ export function buildCli(): Command {
     .option("--no-gui", "do not open the web GUI when the network is ready")
     .action(
       async (
-        target: string,
+        target: string | undefined,
         options: {
           ckbPort?: number;
           rpcBase?: number;
@@ -199,6 +206,18 @@ export function buildCli(): Command {
           gui?: boolean;
         },
       ) => {
+        if (!target) {
+          if (options.gui === false) {
+            fail(
+              "nothing to spin up — give a preset or topology file, or drop --no-gui to pick one in the GUI",
+            );
+            return;
+          }
+          await launchGui("pick a topology, then Forge it to spawn", {
+            spawn: true,
+          });
+          return;
+        }
         const topology = await resolveTopology(target);
         const layoutOptions = {
           ckbHostPort: options.ckbPort,
@@ -226,27 +245,55 @@ export function buildCli(): Command {
           progress.finish();
           printUpCard(layout, topology);
           if (options.gui !== false) {
-            await launchGui(`forge down ${layout.net} to remove it`);
+            await launchGui(`fiber-forge down ${layout.net} to remove it`);
           }
         } catch (error) {
           progress.failActive((error as Error).message);
-          fail((error as Error).message, `forge down ${topology.name}`);
+          fail((error as Error).message, `fiber-forge down ${topology.name}`);
         }
       },
     );
 
   program
     .command("down")
-    .argument("<net>", "network name")
+    .argument("[net]", "network name (omit when using --all)")
+    .option("--all", "tear down every network at once")
     .option("--purge", "also delete the state dir — nothing left on disk")
     .option("--keep", "preserve the ckb data volume for a stateful restart")
     .action(
-      async (net: string, options: { purge?: boolean; keep?: boolean }) => {
+      async (
+        net: string | undefined,
+        options: { all?: boolean; purge?: boolean; keep?: boolean },
+      ) => {
+        const note = options.purge ? ui.muted("  (purged)") : "";
+        if (options.all) {
+          const removed = await orchestrator().downAll({
+            purge: options.purge,
+            keep: options.keep,
+          });
+          if (removed.length === 0) {
+            console.log(`\n  ${ui.muted("no networks to remove")}\n`);
+            return;
+          }
+          const plural = removed.length === 1 ? "" : "s";
+          console.log(
+            `\n  ${ui.success("✔")}  removed ${ui.text(String(removed.length))} network${plural} — ${removed
+              .map((n) => ui.text(n))
+              .join(", ")}${note}\n`,
+          );
+          return;
+        }
+        if (!net) {
+          fail(
+            "specify a network, or --all to tear down every one",
+            "fiber-forge ls",
+          );
+          return;
+        }
         await orchestrator().down(net, {
           purge: options.purge,
           keep: options.keep,
         });
-        const note = options.purge ? ui.muted("  (purged)") : "";
         console.log(`\n  ${ui.success("✔")}  removed ${ui.text(net)}${note}\n`);
       },
     );
@@ -260,7 +307,7 @@ export function buildCli(): Command {
       try {
         view = await orchestrator().inspect(net);
       } catch {
-        fail(`network "${net}" not found`, "forge ls");
+        fail(`network "${net}" not found`, "fiber-forge ls");
         return;
       }
       if (options.json) {
@@ -273,7 +320,7 @@ export function buildCli(): Command {
   program
     .command("ls")
     .alias("list")
-    .description("list all forge networks")
+    .description("list all fiber-forge networks")
     .option("--json", "print machine-readable JSON")
     .action(async (options: { json?: boolean }) => {
       const networks = await orchestrator().list();
@@ -283,7 +330,9 @@ export function buildCli(): Command {
       }
       if (networks.length === 0) {
         console.log(
-          ui.muted("\n  no networks yet  ·  forge up trio to create one\n"),
+          ui.muted(
+            "\n  no networks yet  ·  fiber-forge up trio to create one\n",
+          ),
         );
         return;
       }
@@ -301,7 +350,7 @@ export function buildCli(): Command {
         ),
       );
       console.log(
-        `\n  ${ui.muted(`${networks.length} networks  ·  forge status <net> for detail`)}\n`,
+        `\n  ${ui.muted(`${networks.length} networks  ·  fiber-forge status <net> for detail`)}\n`,
       );
     });
 
@@ -460,7 +509,7 @@ export function buildCli(): Command {
     .command("close")
     .argument("<net>", "network name")
     .argument("<node>", "node that owns the channel")
-    .argument("<channelId>", "the channel id (from `forge channel ls`)")
+    .argument("<channelId>", "the channel id (from `fiber-forge channel ls`)")
     .action(async (net: string, node: string, channelId: string) => {
       await orchestrator().closeChannel(net, node, channelId);
       console.log(

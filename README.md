@@ -8,7 +8,7 @@ Built for the **"Gone in 60ms" Fiber Network Infrastructure Hackathon** — Cate
 
 ## Status
 
-**Working end to end.** `forge up trio` boots a CKB dev chain and three Fiber nodes, funds them,
+**Working end to end.** `fiber-forge up trio` boots a CKB dev chain and three Fiber nodes, funds them,
 connects them, and opens channels to `CHANNEL_READY` in well under a minute; multi-hop payments,
 invoices, and live channel open/close are all verified against real nodes. The CLI is complete and
 colorful; the web GUI serves a live network graph. Nodes are named after philosophers, scientists,
@@ -21,42 +21,44 @@ Requires a running Docker daemon (the tool pulls `nervos/ckb` and `nervos/fiber`
 ```sh
 npx @truthixify/fiber-forge up trio        # run without installing
 # — or —
-npm install -g @truthixify/fiber-forge     # then use the `forge` command directly
+npm install -g @truthixify/fiber-forge     # then use the `fiber-forge` command directly
 ```
 
-The examples below use the global `forge` command. With `npx`, prefix each one with
-`npx @truthixify/fiber-forge` instead. From a cloned repo, `node bin/forge.mjs <args>` runs the
+The examples below use the global `fiber-forge` command. With `npx`, prefix each one with
+`npx @truthixify/fiber-forge` instead. From a cloned repo, `node bin/fiber-forge.mjs <args>` runs the
 same CLI with no build step.
 
 ## Usage
 
 ```sh
 # lifecycle
-forge up trio                 # boot 3 nodes + 2 channels → CHANNEL_READY
-forge ls                      # list all networks
-forge status trio             # nodes + channels with live state
-forge gui trio                # serve the live graph at http://127.0.0.1:5178
-forge down trio               # tear down (--keep data volume, --purge everything)
+fiber-forge up trio                 # boot 3 nodes + 2 channels → CHANNEL_READY
+fiber-forge up                      # no preset → pick a topology in the GUI, then Forge it
+fiber-forge ls                      # list all networks
+fiber-forge status trio             # nodes + channels with live state
+fiber-forge gui trio                # serve the live graph at http://127.0.0.1:5178
+fiber-forge down trio               # tear down one (--keep data volume, --purge everything)
+fiber-forge down --all              # tear down every network at once
 
 # payments & channels (use the node names from `up`/`status`)
-forge pay trio feynman galileo 42     # multi-hop payment
-forge invoice trio lorentz 100        # create an invoice
-forge channel open trio feynman galileo 1000
-forge channel ls trio                 # channels with balances
-forge channel close trio feynman <id>
-forge logs trio feynman --level warn  # node logs (or 'ckb'), filtered by level
+fiber-forge pay trio feynman galileo 42     # multi-hop payment
+fiber-forge invoice trio lorentz 100        # create an invoice
+fiber-forge channel open trio feynman galileo 1000
+fiber-forge channel ls trio                 # channels with balances
+fiber-forge channel close trio feynman <id>
+fiber-forge logs trio feynman --level warn  # node logs (or 'ckb'), filtered by level
 
 # scenario scripts — a little traffic generator (see examples/payments.yml)
-forge run trio ./examples/payments.yml
+fiber-forge run trio ./examples/payments.yml
 
 # UDT asset channels (dev simple_udt, baked into the devnet genesis)
-forge udt issue trio feynman 10000    # mint 10000 UDT to a node
-forge channel open trio feynman galileo 5000 --udt
-forge pay trio feynman galileo 100 --udt
+fiber-forge udt issue trio feynman 10000    # mint 10000 UDT to a node
+fiber-forge channel open trio feynman galileo 5000 --udt
+fiber-forge pay trio feynman galileo 100 --udt
 
-# a custom network, and machine-readable output
-forge up ./my-topology.yml
-forge status trio --json | jq
+# a custom network from your own topology file (see examples/topology.yml for the format)
+fiber-forge up ./examples/topology.yml
+fiber-forge status trio --json | jq
 ```
 
 Presets: `duo` (2 nodes), `trio` (3), `hub` (5-node star), or **`shape:N`** for any count —
@@ -64,7 +66,7 @@ Presets: `duo` (2 nodes), `trio` (3), `hub` (5-node star), or **`shape:N`** for 
 file declares `nodes`, `channels` (`from`/`to`/`capacity_ckb`), and `funding.per_node_ckb`. Every
 data command takes `--json`.
 
-Networks are independent: `forge up` auto-picks a free subnet and free host ports, so several can
+Networks are independent: `fiber-forge up` auto-picks a free subnet and free host ports, so several can
 run at once (`trio` **and** `line:5`, …) without clashing. `--ckb-port` / `--rpc-base` pin them.
 
 ## How it works

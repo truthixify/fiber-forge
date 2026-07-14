@@ -1,7 +1,7 @@
 /**
  * Scenario scripts: a small YAML traffic-generator for a running network. A scenario is an
  * ordered list of steps (pay / open / close / fund / invoice / wait), optionally looped, driven
- * against the orchestrator by `forge run`. Parsing validates with actionable errors up front
+ * against the orchestrator by `fiber-forge run`. Parsing validates with actionable errors up front
  * (same discipline as topologies) so a bad script fails before it touches a live node.
  */
 

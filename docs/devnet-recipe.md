@@ -29,7 +29,7 @@ the whole "deploy" is shipping the right `dev.toml` + contract binaries and boot
 
 ## 1. CKB dev-chain container
 
-- Image `nervos/ckb:v0.201.0`. One per forge network; name `forge-<net>-ckb`; RPC 8114.
+- Image `nervos/ckb:v0.201.0`. One per fiber-forge network; name `forge-<net>-ckb`; RPC 8114.
 - Init (idempotent, guard on an existing data dir):
   - `ckb init -C <data> -c dev --force --ba-arg 0xc8328aabcd9b9e8e64fbc566c4385c3bdeb219d7`
   - copy `assets/dev.toml` → `<data>/specs/dev.toml`; rewrite the `../../deploy/contracts` paths to
@@ -75,7 +75,7 @@ node (topology).
 5. Poll `list_channels` until the channel reaches `CHANNEL_READY`; anything else past a timeout is
    a named failure carrying the node's last log lines (FR-1).
 
-## Naming & ports (one forge network)
+## Naming & ports (one fiber-forge network)
 
 - Docker network `forge-<net>`; CKB `forge-<net>-ckb` (host 8114); node `i` container
   `forge-<net>-node-<i>`, RPC host port `8228 + i`, p2p internal 8228.

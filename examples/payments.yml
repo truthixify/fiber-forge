@@ -1,5 +1,5 @@
 # A sample fiber-forge scenario: a little payment traffic over a running network.
-# Run with:  forge run <net> examples/payments.yml
+# Run with:  fiber-forge run <net> examples/payments.yml
 #
 # Each step is exactly one action: pay / open / close / fund / invoice / wait (ms).
 # The whole list repeats `loop` times.

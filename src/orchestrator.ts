@@ -166,7 +166,7 @@ export interface PaymentReport {
   status: string;
 }
 
-/** One row of `forge ls`. */
+/** One row of `fiber-forge ls`. */
 export interface NetworkSummary {
   net: string;
   nodeCount: number;
@@ -459,7 +459,18 @@ export class Orchestrator {
     }
   }
 
-  /** Every forge network on disk, with its node count and whether its ckb chain is running. */
+  /** Tear down every network on disk, in one call. Returns the names removed (in order). */
+  async downAll(
+    options: { purge?: boolean; keep?: boolean } = {},
+  ): Promise<string[]> {
+    const nets = (await this.list()).map((summary) => summary.net);
+    for (const net of nets) {
+      await this.down(net, options);
+    }
+    return nets;
+  }
+
+  /** Every fiber-forge network on disk, with its node count and whether its ckb chain is running. */
   async list(): Promise<NetworkSummary[]> {
     let entries: string[];
     try {
