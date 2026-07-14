@@ -138,7 +138,6 @@
 
 
     <div style="position:absolute;top:20px;right:20px;display:flex;gap:1px;background:var(--border);border:1px solid var(--border);">
-      <div style="background:var(--panel);color:var(--muted);padding:10px 14px;display:flex;align-items:center;"><span class="mc">⌘K</span></div>
       <button onClick="{{ enterWizard }}" style="background:var(--panel);color:var(--text);border:none;padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;"><span style="color:var(--gold);">⚒</span> SPAWN</button>
       <button onClick="{{ openPay }}" style="background:var(--ember);color:#1a0b06;border:none;padding:10px 18px;cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;">⚡ PAY</button>
     </div>
@@ -748,7 +747,16 @@ class Component extends DCLogic {
   };
 
   // ---------------- pay ----------------
-  openPay = () => this.setState({ payOpen: true, sel: null });
+  openPay = () => this.setState(s => {
+    const patch = { payOpen: true, sel: null };
+    if (s.sel && s.sel.type === 'channel') {
+      const ch = s.channels.find(c => c.id === s.sel.id);
+      if (ch) { patch.payUdt = !!ch.udt; patch.payFrom = ch.from; patch.payTo = ch.to; }
+    } else if (s.sel && s.sel.type === 'node') {
+      patch.payFrom = s.sel.id;
+    }
+    return patch;
+  });
   closePay = () => this.setState({ payOpen: false });
   incPay = () => this.setState(s => ({ payAmt: Math.min(900, s.payAmt + 50) }));
   decPay = () => this.setState(s => ({ payAmt: Math.max(50, s.payAmt - 50) }));
@@ -937,6 +945,7 @@ class Component extends DCLogic {
     var F = this;
     this._forgeNet_ = net;
     this._forgeFitted = false;
+    this.setState({ events: [], nodeLogEntries: [], nodeLogs: '', sel: null });
     var first = true;
     this._forgeApply = function (v) {
       if (v && v.nodes && v.nodes.length && F._forgeNet_ === net) {
@@ -1275,9 +1284,9 @@ class Component extends DCLogic {
   miniMap() {
     const h = React.createElement;
     return h('div', { style: { position: 'absolute', inset: '6px 10px' } },
-      this.state.nodes.map((n, i) => h('div', { key: n.id, style: { position: 'absolute', left: ((n.x - 200) / 1100 * 100) + '%', top: ((n.y - 120) / 660 * 100) + '%', width: 6, height: 6, background: n.hue } })),
+      this.state.nodes.map((n, i) => h('div', { key: n.id, title: n.name, onClick: () => { if (this.state.screen === 'floor') this.select('node', n.id); }, style: { position: 'absolute', left: ((n.x - 200) / 1100 * 100) + '%', top: ((n.y - 120) / 660 * 100) + '%', width: 10, height: 10, marginLeft: -2, marginTop: -2, background: n.hue, cursor: 'pointer', borderRadius: '2px' } })),
       h('div', { style: { position: 'absolute', left: ((this.state.core.x - 200) / 1100 * 100) + '%', top: ((this.state.core.y - 120) / 660 * 100) + '%', width: 5, height: 5, background: 'var(--gold)', borderRadius: '50%' } }),
-      h('div', { style: { position: 'absolute', left: '8%', top: '10%', width: '70%', height: '66%', border: '1px solid var(--ember)', opacity: 0.5 } }));
+      h('div', { style: { position: 'absolute', left: '8%', top: '10%', width: '70%', height: '66%', border: '1px solid var(--ember)', opacity: 0.5, pointerEvents: 'none' } }));
   }
 
   renderVals() {
