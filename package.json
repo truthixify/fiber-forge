@@ -1,6 +1,6 @@
 {
   "name": "@truthixify/fiber-forge",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "type": "module",
   "description": "One-click local Fiber networks with a visual channel GUI",
   "license": "MIT",
