@@ -16,8 +16,9 @@ Polar; this is that tool.
 You need exactly two things on the machine:
 
 - **Docker, running.** fiber-forge builds every node as a container, so the Docker daemon must be up
-  before you run anything — Docker Desktop on macOS/Windows, or the engine on Linux. (First run pulls
-  `nervos/ckb` + `nervos/fiber`, once.)
+  before you run anything — Docker Desktop on macOS/Windows, or the engine on Linux. On the first
+  `up`, fiber-forge **downloads the `nervos/ckb` + `nervos/fiber` images itself** (once) — you don't
+  pull anything by hand.
 - **Node.js 20+**, to launch the CLI with `npx`.
 
 Then, from a cold start:
