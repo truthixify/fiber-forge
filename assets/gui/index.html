@@ -721,9 +721,9 @@ class Component extends DCLogic {
   goFloor = () => { clearInterval(this._boot); this.setState(s => ({ screen: 'floor', bootStep: s.nodes.length + 1 + s.channels.length, chState: Object.fromEntries(s.channels.map(c => [c.id, 'ready'])) })); };
 
   // ---------------- wizard ----------------
-  setPreset = (p) => { const nc = p === 'duo' ? 2 : p === 'trio' ? 3 : ['hub', 'star'].includes(p) ? 6 : p === 'ring' ? 6 : 5; this.setState({ preset: p, nodeCount: nc }); };
-  incN = () => this.setState(s => ({ nodeCount: Math.min(10, s.nodeCount + 1) }));
-  decN = () => this.setState(s => ({ nodeCount: Math.max(2, s.nodeCount - 1) }));
+  setPreset = (p) => { const nc = p === 'duo' ? 2 : p === 'trio' ? 3 : ['hub', 'star'].includes(p) ? 6 : p === 'ring' ? 6 : 5; this.setState({ preset: p, nodeCount: nc, ...this.build(p, nc, this.state.funding) }); };
+  incN = () => this.setState(s => { const nc = Math.min(10, s.nodeCount + 1); return { nodeCount: nc, ...this.build(s.preset, nc, s.funding) }; });
+  decN = () => this.setState(s => { const nc = Math.max(2, s.nodeCount - 1); return { nodeCount: nc, ...this.build(s.preset, nc, s.funding) }; });
   setFunding = (v) => this.setState({ funding: v });
   setUdtFunding = (v) => this.setState({ udtFunding: v });
   wizNext = () => this.setState(s => ({ wizardStep: Math.min(3, s.wizardStep + 1) }));
@@ -979,17 +979,17 @@ class Component extends DCLogic {
     var F = this;
     var wantSpawn = false;
     try { wantSpawn = new URLSearchParams(location.search).get('spawn') === '1'; } catch (e) {}
-    var toWizard = function () { F.setState({ screen: 'wizard', wizardStep: 1, sel: null }); };
+    var toForge = function () { F.setState({ screen: 'empty', sel: null }); };
     fetch('/api/networks').then(function (r) { return r.json(); }).then(function (list) {
       F._forgeNets = list || [];
-      if (wantSpawn) { toWizard(); return; }
+      if (wantSpawn) { toForge(); return; }
       if (list && list.length) {
         var running = list.filter(function (n) { return n.running; });
         F._forgeSelect((running[0] || list[0]).net);
       } else {
         F.setState({ screen: 'empty' });
       }
-    }).catch(function () { if (wantSpawn) toWizard(); });
+    }).catch(function () { if (wantSpawn) toForge(); });
   }
   _forgeSpawn() {
     var F = this;
