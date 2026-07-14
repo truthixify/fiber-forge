@@ -79,6 +79,19 @@
       <div style="font-size:15px;color:var(--muted);max-width:440px;line-height:1.6;">Spin up a local Fiber payment-channel network — nodes, funded channels and a CKB dev chain — as one live thermal circuit.</div>
       <button onClick="{{ enterWizard }}" style="margin-top:6px;background:var(--ember);color:#1a0b06;border:none;padding:15px 30px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:13px;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:10px;box-shadow:0 0 40px rgba(255,106,61,.35);">FORGE A NETWORK ⚒</button>
       <div class="mc" style="color:var(--faint);margin-top:2px;">OR RUN · fiber-forge up trio</div>
+      <sc-if value="{{ hasNets }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:8px;width:100%;max-width:460px;">
+          <div class="mc" style="color:var(--faint);margin-bottom:9px;text-align:left;">EXISTING NETWORKS · CLICK TO RESUME</div>
+          <div style="display:flex;flex-direction:column;gap:1px;background:var(--border);border:1px solid var(--border);max-height:236px;overflow:auto;">
+            <sc-for list="{{ emptyNets }}" as="nw" hint-placeholder-count="3">
+              <button onClick="{{ nw.go }}" style="background:var(--panel);border:none;padding:12px 15px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;">
+                <span style="display:flex;align-items:center;gap:10px;"><span style="width:7px;height:7px;border-radius:50%;background:{{ nw.dot }};"></span><span style="font-weight:700;font-size:14px;color:var(--bone);">{{ nw.name }}</span></span>
+                <span class="mc" style="color:var(--faint);">{{ nw.sub }} · {{ nw.state }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
     </div>
   </sc-if>
 
@@ -583,7 +596,7 @@ class Component extends DCLogic {
     nodes: [], channels: [], chState: {}, balances: {}, onchain: {}, udt: {}, core: { x: 720, y: 440 },
     name: 'forge-trio', payFrom: null, payTo: null,
     nodeTab: 'overview', invoiceOpen: false, invoiceAmt: 100, invoiceAddr: '', invoiceBusy: false, nodeLogs: '', nodeLogEntries: [], logLevel: 'ALL', copyFlash: null,
-    payUdt: false, capUdt: false, invoiceUdt: false, fundUdt: false, pendingOpens: [],
+    payUdt: false, capUdt: false, invoiceUdt: false, fundUdt: false, pendingOpens: [], nets: [],
   };
 
   constructor(props) {
@@ -712,10 +725,11 @@ class Component extends DCLogic {
   fundAssetCkb = () => this.setState({ fundUdt: false });
   fundAssetUdt = () => this.setState({ fundUdt: true });
   setMode = (id) => this.setState({ mode: id });
-  goEmpty = () => { clearInterval(this._boot); this.setState({ screen: 'empty', sel: null, payOpen: false, fundOpen: false, capOpen: false }); };
+  _refreshNets = () => { var F = this; fetch('/api/networks').then(function (r) { return r.json(); }).then(function (list) { F._forgeNets = list || []; F.setState({ nets: list || [] }); }).catch(function () {}); };
+  goEmpty = () => { clearInterval(this._boot); this._refreshNets(); this.setState({ screen: 'empty', sel: null, payOpen: false, fundOpen: false, capOpen: false }); };
   goWizard = () => { clearInterval(this._boot); this.setState({ screen: 'wizard', wizardStep: 1, sel: null }); };
   enterWizard = () => this.goWizard();
-  closeWizard = () => this.setState({ screen: 'empty' });
+  closeWizard = () => this.goEmpty();
   goForging = () => this.startForge();
   goFloor = () => { clearInterval(this._boot); this.setState(s => ({ screen: 'floor', bootStep: s.nodes.length + 1 + s.channels.length, chState: Object.fromEntries(s.channels.map(c => [c.id, 'ready'])) })); };
 
@@ -992,6 +1006,7 @@ class Component extends DCLogic {
     var toForge = function () { F.setState({ screen: 'empty', sel: null }); };
     fetch('/api/networks').then(function (r) { return r.json(); }).then(function (list) {
       F._forgeNets = list || [];
+      F.setState({ nets: list || [] });
       if (wantSpawn) { toForge(); return; }
       // If a specific network was requested (e.g. `up trio` just created it), show that one.
       if (wantNet && list && list.some(function (n) { return n.net === wantNet; })) { F._forgeSelect(wantNet); return; }
@@ -1340,6 +1355,7 @@ class Component extends DCLogic {
 
     const presetDefs = [['duo', 'Duo', '2 nodes · 1 channel'], ['trio', 'Trio', '3 nodes · line'], ['hub', 'Hub', 'star · 1 center'], ['line', 'Line : N', 'chain of N'], ['ring', 'Ring : N', 'closed loop'], ['star', 'Star : N', 'N spokes']];
     const presets = presetDefs.map(([id, label, desc]) => { const on = S.preset === id; return { set: () => this.setPreset(id), glyph: this.glyph(id), label, desc, accent: on ? 'var(--ember)' : 'transparent', bg: on ? 'var(--panel-2)' : 'var(--panel)', name: on ? 'var(--ember)' : 'var(--bone)' }; });
+    const emptyNets = (S.nets || []).map(nw => ({ go: () => this._forgeSelect(nw.net), name: nw.net, sub: nw.nodeCount + (nw.nodeCount === 1 ? ' node' : ' nodes'), state: nw.running ? 'RUNNING' : 'STOPPED', dot: nw.running ? 'var(--flux)' : 'var(--faint)' }));
     const fundPreset = (v) => ({ label: v >= 1000 ? (v / 1000) + 'k' : String(v), set: () => this.setFundAmt(v), bg: S.fundAmt === v ? 'var(--gold)' : 'var(--panel-2)', fg: S.fundAmt === v ? '#1a1206' : 'var(--text)' });
     const fundingPreset = (v) => ({ label: (v / 1000) + 'k', set: () => this.setFunding(v), bg: S.funding === v ? 'var(--gold)' : 'var(--panel-2)', fg: S.funding === v ? '#1a1206' : 'var(--text)' });
     const udtFundingPreset = (v) => ({ label: v === 0 ? 'NONE' : (v / 1000) + 'k', set: () => this.setUdtFunding(v), bg: S.udtFunding === v ? 'var(--flux)' : 'var(--panel-2)', fg: S.udtFunding === v ? '#04201c' : 'var(--text)' });
@@ -1405,7 +1421,7 @@ class Component extends DCLogic {
       closeWizard: this.closeWizard, wizNext: this.wizNext, wizBack: this.wizBack, forgeIt: this.forgeIt,
       wizSteps: [wizStep(1, '1 · TOPOLOGY'), wizStep(2, '2 · FUNDING'), wizStep(3, '3 · REVIEW')],
       wizStep1: S.wizardStep === 1, wizStep2: S.wizardStep === 2, wizStep3: S.wizardStep === 3, wizNotLast: S.wizardStep < 3, wizLast: S.wizardStep === 3,
-      presets, showNStepper: showN, nodeCount: String(S.nodeCount), incN: this.incN, decN: this.decN,
+      presets, emptyNets, hasNets: (S.nets || []).length > 0, showNStepper: showN, nodeCount: String(S.nodeCount), incN: this.incN, decN: this.decN,
       fundingPresets: [fundingPreset(1000), fundingPreset(10000), fundingPreset(50000)], fundingDisp: this.fmt(S.funding), treasuryDraw: this.fmt(S.funding * eN),
       udtFundingPresets: [udtFundingPreset(0), udtFundingPreset(10000), udtFundingPreset(50000)], udtFundingDisp: this.fmt(S.udtFunding), udtFundingOn: S.udtFunding > 0, reviewUdt: S.udtFunding > 0 ? (this.fmt(S.udtFunding) + ' UDT') : 'none', treasuryUdt: this.fmt(S.udtFunding * eN) + ' UDT', udtTotalBorder: S.udtFunding > 0 ? 'border-bottom:1px solid var(--hairline);' : '',
       reviewName: presetName, reviewNodes: String(eN), reviewChannels: String(reviewCh), reviewCmd,
