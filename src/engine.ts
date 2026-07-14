@@ -49,6 +49,9 @@ export interface ContainerEngine {
   logs(name: string, tailLines: number): Promise<string>;
   /** Names of containers carrying `label=value`. */
   listByLabel(label: string, value: string): Promise<string[]>;
+  /** Net names (with the `forge-` prefix stripped) of every forge docker network, so a full
+   * teardown can also remove networks whose state dir was already deleted. */
+  forgeNets(): Promise<string[]>;
   /** The subnets (CIDR) of every existing network, so a new one can avoid overlaps. */
   usedSubnets(): Promise<string[]>;
 }
@@ -110,6 +113,12 @@ export class FakeEngine implements ContainerEngine {
     return [...this.containers.values()]
       .filter((c) => c.spec.labels?.[label] === value)
       .map((c) => c.spec.name);
+  }
+
+  async forgeNets(): Promise<string[]> {
+    return [...this.networks.keys()]
+      .filter((name) => name.startsWith("forge-"))
+      .map((name) => name.slice("forge-".length));
   }
 
   async usedSubnets(): Promise<string[]> {
@@ -258,6 +267,16 @@ export class DockerEngine implements ContainerEngine {
       filters: { label: [`${label}=${value}`] },
     });
     return list.flatMap((c) => c.Names.map((n) => n.replace(/^\//, "")));
+  }
+
+  async forgeNets(): Promise<string[]> {
+    const networks = await this.docker.listNetworks();
+    return networks
+      .map((n) => n.Name)
+      .filter(
+        (name): name is string => Boolean(name) && name.startsWith("forge-"),
+      )
+      .map((name) => name.slice("forge-".length));
   }
 
   async usedSubnets(): Promise<string[]> {

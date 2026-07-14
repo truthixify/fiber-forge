@@ -104,6 +104,8 @@ function upHandler(
   return (message) => {
     if (/^network .+ ready$/.test(message)) {
       progress.enter("ready");
+    } else if (message.startsWith("propagating")) {
+      progress.enter("ready");
     } else if (message.startsWith("network ")) {
       progress.enter("network");
     } else if (message.startsWith("ckb ")) {
@@ -184,7 +186,7 @@ export function buildCli(): Command {
   program
     .name("fiber-forge")
     .description("One-click local Fiber networks")
-    .version("0.2.8");
+    .version("0.2.9");
 
   program
     .command("up")

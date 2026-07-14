@@ -125,6 +125,15 @@ export class FnnRpc {
     await this.transport.call("shutdown_channel", [{ channel_id: channelId }]);
   }
 
+  /** How many channels this node currently sees in the routing graph. Used to wait for gossip to
+   * propagate after `up`, so the first cross-node payment does not fail with "no path found". */
+  async graphChannelCount(): Promise<number> {
+    const result = (await this.transport.call("graph_channels", [{}])) as {
+      channels?: unknown[];
+    };
+    return result.channels?.length ?? 0;
+  }
+
   /**
    * Create an invoice. `amount` is a `0x`-hex shannons string; fiber-forge runs dev chains, whose
    * nodes require the `Fibd` currency (the node rejects any other). Verified live.

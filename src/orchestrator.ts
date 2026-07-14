@@ -230,146 +230,183 @@ export class Orchestrator {
     const log = options.onProgress ?? (() => {});
     const netDir = join(this.stateDir, layout.net);
 
-    log(`network ${layout.network} (${layout.subnet})`);
-    await this.engine.ensureNetwork(layout.network, layout.subnet);
+    try {
+      log(`network ${layout.network} (${layout.subnet})`);
+      await this.engine.ensureNetwork(layout.network, layout.subnet);
 
-    log(`ckb dev chain ${layout.ckbContainer}`);
-    await this.engine.run(
-      ckbContainerSpec(layout, this.assetsDir, options.ckbImage),
-    );
-    const chain = new DevChain(`http://127.0.0.1:${layout.ckbHostPort}`);
-    await chain.waitReady();
-    await chain.generateBlocks(2);
-
-    const udtDep = await chain.udtDep();
-    const udtWhitelist: UdtWhitelistInfo = {
-      codeHash: SIMPLE_UDT_CODE_HASH,
-      depTxHash: udtDep.txHash,
-      depIndex: udtDep.index,
-    };
-
-    const privateKeys = new Map<string, string>();
-    for (const node of layout.nodes) {
-      const nodeDir = join(netDir, node.container);
-      const privateKey = generatePrivateKey();
-      privateKeys.set(node.name, hex(privateKey));
-      await this.writeNodeDir(nodeDir, layout, node, privateKey, udtWhitelist);
-      log(`node ${node.name} (${node.ip})`);
+      log(`ckb dev chain ${layout.ckbContainer}`);
       await this.engine.run(
-        nodeContainerSpec(layout, node, nodeDir, options.fnnImage),
+        ckbContainerSpec(layout, this.assetsDir, options.ckbImage),
       );
-    }
+      const chain = new DevChain(`http://127.0.0.1:${layout.ckbHostPort}`);
+      await chain.waitReady();
+      await chain.generateBlocks(2);
 
-    const rpcByName = new Map<string, FnnRpc>();
-    const infoByName = new Map<string, { pubkey: string; peerId: string }>();
-    for (const node of layout.nodes) {
-      const rpc = new FnnRpc(
-        new HttpTransport(`http://127.0.0.1:${node.rpcHostPort}`),
-      );
-      rpcByName.set(node.name, rpc);
-      log(`waiting for ${node.name} rpc`);
-      const info = await this.waitNodeInfo(rpc);
-      const peerId = peerIdOf(info);
-      if (!peerId) {
-        throw new Error(`node ${node.name} did not announce a peer address`);
-      }
-      infoByName.set(node.name, { pubkey: info.pubkey, peerId });
-    }
+      const udtDep = await chain.udtDep();
+      const udtWhitelist: UdtWhitelistInfo = {
+        codeHash: SIMPLE_UDT_CODE_HASH,
+        depTxHash: udtDep.txHash,
+        depIndex: udtDep.index,
+      };
 
-    const addressByName = new Map<string, string>();
-    for (const node of layout.nodes) {
-      const address = await chain.addressOfPrivateKey(
-        privateKeys.get(node.name)!,
-      );
-      addressByName.set(node.name, address);
-      log(`funding ${node.name} ${topology.funding.perNodeCkb} CKB`);
-      await chain.fund(address, topology.funding.perNodeCkb);
-    }
-    await chain.generateBlocks(4);
-
-    for (const channel of topology.channels) {
-      const from = rpcByName.get(channel.from)!;
-      const to = infoByName.get(channel.to)!;
-      const toLayout = layout.nodes.find((n) => n.name === channel.to)!;
-      log(`connect ${channel.from} -> ${channel.to}`);
-      await from.connectPeer(dialAddress(toLayout.ip, to.peerId, FNN_P2P_PORT));
-      await this.waitPeerConnected(from, to.pubkey);
-      log(
-        `open channel ${channel.from} -> ${channel.to} (${channel.capacityCkb} CKB)`,
-      );
-      const priorReady = await this.readyChannelCount(from, to.pubkey);
-      await this.openChannel(from, {
-        pubkey: to.pubkey,
-        fundingAmount: ckbToShannonHex(channel.capacityCkb),
-      });
-      await this.waitChannelReady(
-        from,
-        to.pubkey,
-        chain,
-        `${channel.from}->${channel.to}`,
-        log,
-        priorReady + 1,
-      );
-    }
-
-    if (options.udtPerNode && options.udtPerNode > 0) {
-      const amountUdt = options.udtPerNode;
+      const privateKeys = new Map<string, string>();
       for (const node of layout.nodes) {
-        log(`issuing ${amountUdt} UDT to ${node.name}`);
-        await chain.issueUdt(
-          addressByName.get(node.name)!,
-          BigInt(Math.round(amountUdt * 1e8)),
+        const nodeDir = join(netDir, node.container);
+        const privateKey = generatePrivateKey();
+        privateKeys.set(node.name, hex(privateKey));
+        await this.writeNodeDir(
+          nodeDir,
+          layout,
+          node,
+          privateKey,
+          udtWhitelist,
+        );
+        log(`node ${node.name} (${node.ip})`);
+        await this.engine.run(
+          nodeContainerSpec(layout, node, nodeDir, options.fnnImage),
         );
       }
-      const udtTypeScript = await chain.udtScript();
+
+      const rpcByName = new Map<string, FnnRpc>();
+      const infoByName = new Map<string, { pubkey: string; peerId: string }>();
+      for (const node of layout.nodes) {
+        const rpc = new FnnRpc(
+          new HttpTransport(`http://127.0.0.1:${node.rpcHostPort}`),
+        );
+        rpcByName.set(node.name, rpc);
+        log(`waiting for ${node.name} rpc`);
+        const info = await this.waitNodeInfo(rpc);
+        const peerId = peerIdOf(info);
+        if (!peerId) {
+          throw new Error(`node ${node.name} did not announce a peer address`);
+        }
+        infoByName.set(node.name, { pubkey: info.pubkey, peerId });
+      }
+
+      const addressByName = new Map<string, string>();
+      for (const node of layout.nodes) {
+        const address = await chain.addressOfPrivateKey(
+          privateKeys.get(node.name)!,
+        );
+        addressByName.set(node.name, address);
+        log(`funding ${node.name} ${topology.funding.perNodeCkb} CKB`);
+        await chain.fund(address, topology.funding.perNodeCkb);
+      }
+      await chain.generateBlocks(4);
+
       for (const channel of topology.channels) {
         const from = rpcByName.get(channel.from)!;
         const to = infoByName.get(channel.to)!;
+        const toLayout = layout.nodes.find((n) => n.name === channel.to)!;
+        log(`connect ${channel.from} -> ${channel.to}`);
+        await from.connectPeer(
+          dialAddress(toLayout.ip, to.peerId, FNN_P2P_PORT),
+        );
+        await this.waitPeerConnected(from, to.pubkey);
         log(
-          `open UDT channel ${channel.from} -> ${channel.to} (${channel.capacityCkb} UDT)`,
+          `open channel ${channel.from} -> ${channel.to} (${channel.capacityCkb} CKB)`,
         );
         const priorReady = await this.readyChannelCount(from, to.pubkey);
         await this.openChannel(from, {
           pubkey: to.pubkey,
           fundingAmount: ckbToShannonHex(channel.capacityCkb),
-          udtTypeScript,
         });
         await this.waitChannelReady(
           from,
           to.pubkey,
           chain,
-          `${channel.from}->${channel.to} (UDT)`,
+          `${channel.from}->${channel.to}`,
           log,
           priorReady + 1,
         );
       }
+
+      if (options.udtPerNode && options.udtPerNode > 0) {
+        const amountUdt = options.udtPerNode;
+        for (const node of layout.nodes) {
+          log(`issuing ${amountUdt} UDT to ${node.name}`);
+          await chain.issueUdt(
+            addressByName.get(node.name)!,
+            BigInt(Math.round(amountUdt * 1e8)),
+          );
+        }
+        const udtTypeScript = await chain.udtScript();
+        for (const channel of topology.channels) {
+          const from = rpcByName.get(channel.from)!;
+          const to = infoByName.get(channel.to)!;
+          log(
+            `open UDT channel ${channel.from} -> ${channel.to} (${channel.capacityCkb} UDT)`,
+          );
+          const priorReady = await this.readyChannelCount(from, to.pubkey);
+          await this.openChannel(from, {
+            pubkey: to.pubkey,
+            fundingAmount: ckbToShannonHex(channel.capacityCkb),
+            udtTypeScript,
+          });
+          await this.waitChannelReady(
+            from,
+            to.pubkey,
+            chain,
+            `${channel.from}->${channel.to} (UDT)`,
+            log,
+            priorReady + 1,
+          );
+        }
+      }
+
+      if (topology.channels.length > 0) {
+        log("propagating routing graph");
+        await this.waitGraphPropagated(rpcByName, topology.channels.length);
+      }
+
+      const state: NetworkState = {
+        net: layout.net,
+        network: layout.network,
+        ckbHostPort: layout.ckbHostPort,
+        nodes: layout.nodes.map((n) => ({
+          name: n.name,
+          container: n.container,
+          ip: n.ip,
+          rpcHostPort: n.rpcHostPort,
+          pubkey: infoByName.get(n.name)!.pubkey,
+          ckbAddress: addressByName.get(n.name)!,
+        })),
+        channels: topology.channels.map((c) => ({
+          from: c.from,
+          to: c.to,
+          capacityCkb: c.capacityCkb,
+        })),
+      };
+      await writeFile(
+        join(netDir, "layout.json"),
+        JSON.stringify(state, null, 2),
+      );
+
+      log(`network ${layout.net} ready`);
+      return layout;
+    } catch (error) {
+      // A spawn that fails partway must not leave half-built containers running on the machine —
+      // tear down whatever was created before surfacing the error.
+      await this.down(layout.net, { purge: true }).catch(() => {});
+      throw error;
     }
+  }
 
-    const state: NetworkState = {
-      net: layout.net,
-      network: layout.network,
-      ckbHostPort: layout.ckbHostPort,
-      nodes: layout.nodes.map((n) => ({
-        name: n.name,
-        container: n.container,
-        ip: n.ip,
-        rpcHostPort: n.rpcHostPort,
-        pubkey: infoByName.get(n.name)!.pubkey,
-        ckbAddress: addressByName.get(n.name)!,
-      })),
-      channels: topology.channels.map((c) => ({
-        from: c.from,
-        to: c.to,
-        capacityCkb: c.capacityCkb,
-      })),
-    };
-    await writeFile(
-      join(netDir, "layout.json"),
-      JSON.stringify(state, null, 2),
-    );
-
-    log(`network ${layout.net} ready`);
-    return layout;
+  /** Wait until every node's routing graph has learned all `expected` channels, so a payment made
+   * immediately after `up` can find a route instead of failing with "no path found". Bounded so it
+   * never blocks forever. */
+  private async waitGraphPropagated(
+    rpcByName: Map<string, FnnRpc>,
+    expected: number,
+  ): Promise<void> {
+    const deadline = Date.now() + 60_000;
+    for (const rpc of rpcByName.values()) {
+      while (Date.now() < deadline) {
+        const count = await rpc.graphChannelCount().catch(() => 0);
+        if (count >= expected) break;
+        await sleep(1500);
+      }
+    }
   }
 
   /** A fully-live graph view for the GUI — real block height, node balances, and open channels. */
@@ -463,7 +500,11 @@ export class Orchestrator {
   async downAll(
     options: { purge?: boolean; keep?: boolean } = {},
   ): Promise<string[]> {
-    const nets = (await this.list()).map((summary) => summary.net);
+    // Discover nets from docker itself as well as the state dir, so orphaned networks (whose state
+    // dir was already deleted) are still torn down instead of piling up and starving Docker.
+    const stateNets = (await this.list()).map((summary) => summary.net);
+    const dockerNets = await this.engine.forgeNets();
+    const nets = [...new Set([...stateNets, ...dockerNets])];
     for (const net of nets) {
       await this.down(net, options);
     }
@@ -726,9 +767,28 @@ export class Orchestrator {
   ): Promise<{ paymentHash: string; status: string }> {
     const fromNode = await this.nodeOf(net, from);
     const rpc = this.rpcFor(fromNode.rpcHostPort);
-    const sent = await rpc.sendPayment(invoice);
+    const sent = await this.sendPaymentSettling(rpc, invoice);
     const status = await this.waitPayment(rpc, sent.payment_hash);
     return { paymentHash: sent.payment_hash, status };
+  }
+
+  /** Send a payment, retrying while routing gossip settles. A channel that just reached
+   * `ChannelReady` is not yet in the graph for a few seconds, so the first attempt can fail with
+   * "no path found"; retry that specific error rather than surfacing it. */
+  private async sendPaymentSettling(rpc: FnnRpc, invoice: string) {
+    const deadline = Date.now() + 30_000;
+    for (;;) {
+      try {
+        return await rpc.sendPayment(invoice);
+      } catch (error) {
+        const message = (error as Error).message ?? "";
+        const routing = /no path found|pathfind|no route/i.test(message);
+        if (!routing || Date.now() > deadline) {
+          throw error;
+        }
+        await sleep(2000);
+      }
+    }
   }
 
   private async waitPayment(
