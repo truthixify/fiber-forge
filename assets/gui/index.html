@@ -945,13 +945,14 @@ class Component extends DCLogic {
     var F = this;
     this._forgeNet_ = net;
     this._forgeFitted = false;
-    this.setState({ events: [], nodeLogEntries: [], nodeLogs: '', sel: null });
+    this.setState({ events: [], nodeLogEntries: [], nodeLogs: '', pendingOpens: [], sel: null });
     var first = true;
     this._forgeApply = function (v) {
       if (v && v.nodes && v.nodes.length && F._forgeNet_ === net) {
+        // After the first load, don't overwrite the graph while the user is off the floor
+        // (wizard / forge animation / empty screen) — that would clobber the topology preview.
+        if (!first && F.state.screen !== 'floor') return;
         var st = F._forgeMap(v);
-        // Only jump to the floor on the first load; later updates just refresh data so they
-        // never yank the user out of the wizard, a modal, or a selection.
         if (first) { st.screen = 'floor'; first = false; }
         F.setState(st, function () { if (!F._forgeFitted) { F._forgeFitted = true; if (F.fitView) F.fitView(); } });
       }
@@ -986,12 +987,14 @@ class Component extends DCLogic {
   }
   _forgeInit() {
     var F = this;
-    var wantSpawn = false;
-    try { wantSpawn = new URLSearchParams(location.search).get('spawn') === '1'; } catch (e) {}
+    var wantSpawn = false, wantNet = null;
+    try { var q = new URLSearchParams(location.search); wantSpawn = q.get('spawn') === '1'; wantNet = q.get('net'); } catch (e) {}
     var toForge = function () { F.setState({ screen: 'empty', sel: null }); };
     fetch('/api/networks').then(function (r) { return r.json(); }).then(function (list) {
       F._forgeNets = list || [];
       if (wantSpawn) { toForge(); return; }
+      // If a specific network was requested (e.g. `up trio` just created it), show that one.
+      if (wantNet && list && list.some(function (n) { return n.net === wantNet; })) { F._forgeSelect(wantNet); return; }
       if (list && list.length) {
         var running = list.filter(function (n) { return n.running; });
         F._forgeSelect((running[0] || list[0]).net);

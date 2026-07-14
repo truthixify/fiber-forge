@@ -52,14 +52,18 @@ async function openBrowser(url: string): Promise<void> {
 /** Serve the GUI on a free port, open it, and keep the process alive. */
 async function launchGui(
   note?: string,
-  opts: { spawn?: boolean } = {},
+  opts: { spawn?: boolean; net?: string } = {},
 ): Promise<void> {
   const { serveGui } = await import("./daemon");
   const { findFreePort } = await import("./ports");
   const port = await findFreePort(5178);
   await serveGui(orchestrator(), port);
   const base = `http://127.0.0.1:${port}`;
-  const url = opts.spawn ? `${base}/?spawn=1` : base;
+  const url = opts.spawn
+    ? `${base}/?spawn=1`
+    : opts.net
+      ? `${base}/?net=${encodeURIComponent(opts.net)}`
+      : base;
   console.log(ui.hint("GUI", [url]));
   console.log(
     ui.muted(
@@ -180,7 +184,7 @@ export function buildCli(): Command {
   program
     .name("fiber-forge")
     .description("One-click local Fiber networks")
-    .version("0.2.2");
+    .version("0.2.3");
 
   program
     .command("up")
@@ -245,7 +249,9 @@ export function buildCli(): Command {
           progress.finish();
           printUpCard(layout, topology);
           if (options.gui !== false) {
-            await launchGui(`fiber-forge down ${layout.net} to remove it`);
+            await launchGui(`fiber-forge down ${layout.net} to remove it`, {
+              net: layout.net,
+            });
           }
         } catch (error) {
           progress.failActive((error as Error).message);
