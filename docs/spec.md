@@ -1,17 +1,19 @@
 # fiber-forge — build spec
 
-> **A forge for local Fiber networks.** A CLI + web GUI that heats a CKB devnet and N Fiber nodes
-> into a funded, channels-open network — with a live floor to pay, wire, and inspect it — in under a
-> minute. Category 2. Stack: **TypeScript** (CLI + orchestrator + React GUI) over Docker.
+> fiber-forge is a CLI and web GUI that sets up a local Fiber payment-channel network — a CKB dev
+> chain and N Fiber nodes, funded and connected with open channels — and lets you pay, open channels,
+> and inspect them from a live graph. A network is ready in under a minute. Category 2. Stack:
+> TypeScript (CLI + orchestrator + React GUI) over Docker.
 
-## 1. The gap it fills
+## 1. Goal and gap
 
-Standing up even a two-node local Fiber network today is a slog: run a CKB dev chain, mine, fund
-addresses, hand-write two `config.yml`s, boot two `fnn` processes, exchange peer addresses, then
-drive channel opening over raw JSON-RPC. Core issue #1262 (quick-start scripts) is still open, and
-every tutorial front-loads that pain. Lightning had Polar — a hackathon winner that became the
-ecosystem's default dev tool; Fiber has an empty slot where it should be. fiber-forge fills it:
-`fiber-forge up trio` → three peered nodes, funded channels, and a live graph, from one command.
+Setting up even a two-node local Fiber network today takes many manual steps: run a CKB dev chain,
+mine, fund addresses, write two `config.yml` files, start two `fnn` processes, exchange peer
+addresses, and drive channel opening over raw JSON-RPC. Core issue #1262 (quick-start scripts) is
+still open, and every tutorial begins with this setup. Lightning has Polar, which became the standard
+local-testing tool for that ecosystem; Fiber has no equivalent. fiber-forge is meant to fill that
+gap: running `fiber-forge up trio` gives you three connected nodes with funded channels and a live
+graph GUI.
 
 ## 2. Deliverables
 

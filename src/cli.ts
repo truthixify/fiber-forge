@@ -184,7 +184,7 @@ export function buildCli(): Command {
   program
     .name("fiber-forge")
     .description("One-click local Fiber networks")
-    .version("0.2.6");
+    .version("0.2.7");
 
   program
     .command("up")
