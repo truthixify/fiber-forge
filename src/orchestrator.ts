@@ -615,14 +615,20 @@ export class Orchestrator {
     // Confirm any in-flight funding/issuance txs first, so the opener has a spendable cell to fund
     // this channel (otherwise fnn fails with "capacity not enough" and stalls at AwaitingTxSignatures).
     await chain.generateBlocks(3);
-    // A UDT channel is funded from the opener's UDT balance; fail fast (not a silent stall) if short.
+    // A UDT channel is funded from the opener's UDT balance. On this devnet the UDT is free to
+    // issue from genesis, so top up the shortfall automatically rather than failing — opening a
+    // UDT channel then works without a separate `udt issue` step first.
     if (udt) {
       const balance =
         Number(await chain.udtBalanceOf(fromNode.ckbAddress)) / 1e8;
       if (balance < capacity) {
-        throw new Error(
-          `${from} has ${balance} UDT but needs ${capacity} to open this channel — fund UDT to ${from} first`,
+        const short = Math.ceil(capacity - balance);
+        log(`issuing ${short} UDT to ${from}`);
+        await chain.issueUdt(
+          fromNode.ckbAddress,
+          BigInt(Math.round(short * 1e8)),
         );
+        await chain.generateBlocks(4);
       }
     }
 

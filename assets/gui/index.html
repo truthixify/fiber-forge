@@ -601,10 +601,13 @@ class Component extends DCLogic {
 
   constructor(props) {
     super(props);
+    this._nameOrder = this._shuffle(this.NAMES);
     const t = this.build('trio', 3, 10000);
     Object.assign(this.state, t);
     this._view = this.computeFit();
   }
+
+  _shuffle(arr) { var a = arr.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 
   // ---------------- topology builder ----------------
   mkPub(i) { const h = '0123456789abcdef'; return '0x0' + (3 + i % 9) + h[(i * 5 + 2) % 16] + h[(i * 7 + 1) % 16] + (i % 10) + '…' + h[(i * 11 + 3) % 16] + h[(i * 3 + 5) % 16] + (i % 9) + h[(i * 13) % 16]; }
@@ -631,7 +634,7 @@ class Component extends DCLogic {
       for (let i = 0; i < ringN; i++) { const a = start + i * 2 * Math.PI / ringN; pos.push({ x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) }); }
       core = { x: Math.max(300, cx - R - 120), y: cy };
     }
-    const nodes = pos.map((p, i) => ({ id: 'n' + i, name: this.NAMES[i % this.NAMES.length], port: 8300 + i, p2p: 8228 + i, x: Math.round(p.x), y: Math.round(p.y), hue: this.HUES[i % this.HUES.length], pubkey: this.mkPub(i) }));
+    const nodes = pos.map((p, i) => ({ id: 'n' + i, name: (this._nameOrder || this.NAMES)[i % this.NAMES.length], port: 8300 + i, p2p: 8228 + i, x: Math.round(p.x), y: Math.round(p.y), hue: this.HUES[i % this.HUES.length], pubkey: this.mkPub(i) }));
     const pairs = [];
     if (preset === 'duo') pairs.push([0, 1]);
     else if (preset === 'trio') pairs.push([0, 1], [1, 2]);
@@ -727,7 +730,7 @@ class Component extends DCLogic {
   setMode = (id) => this.setState({ mode: id });
   _refreshNets = () => { var F = this; fetch('/api/networks').then(function (r) { return r.json(); }).then(function (list) { F._forgeNets = list || []; F.setState({ nets: list || [] }); }).catch(function () {}); };
   goEmpty = () => { clearInterval(this._boot); this._refreshNets(); this.setState({ screen: 'empty', sel: null, payOpen: false, fundOpen: false, capOpen: false }); };
-  goWizard = () => { clearInterval(this._boot); this.setState({ screen: 'wizard', wizardStep: 1, sel: null }); };
+  goWizard = () => { clearInterval(this._boot); this._nameOrder = this._shuffle(this.NAMES); const t = this.build(this.state.preset, this.effN(), this.state.funding); this.setState({ screen: 'wizard', wizardStep: 1, sel: null, ...t, chState: Object.fromEntries(t.channels.map(c => [c.id, 'ready'])) }); };
   enterWizard = () => this.goWizard();
   closeWizard = () => this.goEmpty();
   goForging = () => this.startForge();
@@ -1021,8 +1024,8 @@ class Component extends DCLogic {
   _forgeSpawn() {
     var F = this;
     var udtFunding = this.state.udtFunding || 0;
-    var body = { preset: this.state.preset, nodes: this.effN(), funding: this.state.funding, udtFunding: udtFunding };
     var t = this.build(this.state.preset, this.effN(), this.state.funding);
+    var body = { preset: this.state.preset, nodes: this.effN(), funding: this.state.funding, udtFunding: udtFunding, names: t.nodes.map(function (n) { return n.name; }) };
     var total = t.nodes.length + 1 + t.channels.length;
     // the real up() emits ~3 messages per node + ~3 per channel + a couple of framing ones;
     // with UDT it also issues to each node and opens a mirrored UDT channel per channel.

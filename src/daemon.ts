@@ -118,6 +118,28 @@ async function spawnTopology(
     name = `${base.name}-${i}`;
   }
   const perNodeCkb = body.funding ? num(body.funding) : base.funding.perNodeCkb;
+  // If the GUI sent the node names it previewed, use them so the spawned network matches the
+  // preview instead of getting a fresh random set from the preset.
+  const names = Array.isArray(body.names)
+    ? (body.names as unknown[]).map((n) => String(n))
+    : null;
+  if (names && names.length === base.nodes.length) {
+    const remap: Record<string, string> = {};
+    base.nodes.forEach((node, i) => {
+      remap[node.name] = names[i];
+    });
+    return {
+      ...base,
+      name,
+      nodes: base.nodes.map((_node, i) => ({ name: names[i] })),
+      channels: base.channels.map((c) => ({
+        ...c,
+        from: remap[c.from],
+        to: remap[c.to],
+      })),
+      funding: { perNodeCkb },
+    };
+  }
   return { ...base, name, funding: { perNodeCkb } };
 }
 
