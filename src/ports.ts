@@ -5,14 +5,25 @@
 
 import { createServer } from "node:net";
 
-/** Whether a TCP port is free to bind on all interfaces. */
-export function isPortFree(port: number): Promise<boolean> {
+/** Whether `host` can bind `port`. */
+function canBind(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const server = createServer();
     server.once("error", () => resolve(false));
     server.once("listening", () => server.close(() => resolve(true)));
-    server.listen(port, "0.0.0.0");
+    server.listen(port, host);
   });
+}
+
+/**
+ * Whether a TCP port is free for docker to publish a container port on. Both the wildcard and the
+ * loopback address are probed because BSD socket semantics let a wildcard bind succeed while
+ * loopback is already held: on macOS, probing `0.0.0.0` alone reports a port that another
+ * container already publishes on `127.0.0.1` as free, and the container then fails to start with
+ * "port is already allocated".
+ */
+export async function isPortFree(port: number): Promise<boolean> {
+  return (await canBind(port, "0.0.0.0")) && (await canBind(port, "127.0.0.1"));
 }
 
 /** The first free port at or after `start`. */
