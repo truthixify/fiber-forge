@@ -5,8 +5,8 @@
  *    `star:N` (one hub + N-1 spokes). N is bounded by the topology's node limits.
  */
 
-import { pickNames } from "./names";
-import { MAX_NODES, MIN_NODES, type Topology } from "./topology";
+import { pickNames } from "./names.js";
+import { MAX_NODES, MIN_NODES, type Topology } from "./topology.js";
 
 const FUNDING = { perNodeCkb: 100_000 };
 const CAP = 1000;

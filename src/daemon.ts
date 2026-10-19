@@ -15,15 +15,15 @@ import {
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type WebSocket, WebSocketServer } from "ws";
-import { type NetworkLayout } from "./config";
+import { type NetworkLayout } from "./config.js";
 import {
   type ChannelRow,
   type NetworkSummary,
   type NetworkView,
   type PaymentReport,
-} from "./orchestrator";
-import { preset } from "./presets";
-import { type Topology } from "./topology";
+} from "./orchestrator.js";
+import { preset } from "./presets.js";
+import { type Topology } from "./topology.js";
 
 /** The orchestrator operations the daemon exposes over HTTP (the Orchestrator implements these). */
 export interface Backend {

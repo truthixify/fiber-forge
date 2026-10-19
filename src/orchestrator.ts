@@ -10,7 +10,7 @@ import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { DevChain, SIMPLE_UDT_CODE_HASH } from "./ckb";
+import { DevChain, SIMPLE_UDT_CODE_HASH } from "./ckb.js";
 import {
   CKB_RPC_PORT,
   FNN_P2P_PORT,
@@ -22,10 +22,10 @@ import {
   fnnConfigYaml,
   pickSubnetBase,
   planLayout,
-} from "./config";
-import { type ContainerEngine, type ContainerSpec } from "./engine";
-import { encryptKey, generatePrivateKey } from "./keys";
-import { findFreePort, findFreePortBlock } from "./ports";
+} from "./config.js";
+import { type ContainerEngine, type ContainerSpec } from "./engine.js";
+import { encryptKey, generatePrivateKey } from "./keys.js";
+import { findFreePort, findFreePortBlock } from "./ports.js";
 import {
   type Channel,
   FnnRpc,
@@ -39,8 +39,8 @@ import {
   isPaymentSettled,
   peerIdOf,
   shannonHexToCkb,
-} from "./rpc";
-import { type Topology } from "./topology";
+} from "./rpc.js";
+import { type Topology } from "./topology.js";
 
 export const FORGE_LABEL = "fiber-forge";
 export const DEFAULT_FNN_IMAGE = "nervos/fiber:0.9.0-rc7";
@@ -56,6 +56,14 @@ export interface UpOptions {
   onProgress?: (message: string) => void;
   /** If set, issue this many whole UDT to every node and mirror each channel as a UDT channel. */
   udtPerNode?: number;
+}
+
+/** Options controlling how much persisted state is retained during teardown. */
+export interface DownOptions {
+  /** Remove the saved layout directory as well as runtime resources. */
+  purge?: boolean;
+  /** Preserve the CKB data volume for a later stateful restart. */
+  keep?: boolean;
 }
 
 /** The CKB dev-chain container spec (contracts baked into genesis via the mounted assets). */
@@ -479,10 +487,7 @@ export class Orchestrator {
    * the state dir. `keep` preserves the data volume too (for a stateful restart); `purge` also
    * deletes the state dir, leaving nothing on disk.
    */
-  async down(
-    net: string,
-    options: { purge?: boolean; keep?: boolean } = {},
-  ): Promise<void> {
+  async down(net: string, options: DownOptions = {}): Promise<void> {
     for (const name of await this.engine.listByLabel(FORGE_LABEL, net)) {
       await this.engine.stop(name);
       await this.engine.remove(name);
@@ -497,9 +502,7 @@ export class Orchestrator {
   }
 
   /** Tear down every network on disk, in one call. Returns the names removed (in order). */
-  async downAll(
-    options: { purge?: boolean; keep?: boolean } = {},
-  ): Promise<string[]> {
+  async downAll(options: DownOptions = {}): Promise<string[]> {
     // Discover nets from docker itself as well as the state dir, so orphaned networks (whose state
     // dir was already deleted) are still torn down instead of piling up and starving Docker.
     const stateNets = (await this.list()).map((summary) => summary.net);

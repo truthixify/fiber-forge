@@ -7,13 +7,14 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { type NetworkLayout } from "./config";
-import { DockerEngine } from "./engine";
-import { type NetworkView, Orchestrator } from "./orchestrator";
-import { preset, presetHelp } from "./presets";
-import { parseScenario, runScenario } from "./scenario";
-import { type Topology, parseTopology } from "./topology";
-import * as ui from "./ui";
+import { type NetworkLayout } from "./config.js";
+import { DockerEngine } from "./engine.js";
+import { type NetworkView, Orchestrator } from "./orchestrator.js";
+import { preset, presetHelp } from "./presets.js";
+import { parseScenario, runScenario } from "./scenario.js";
+import { type Topology, parseTopology } from "./topology.js";
+import * as ui from "./ui.js";
+import { version } from "./version.js";
 
 /** The bundled assets directory (a sibling of `src`). */
 export function assetsDir(): string {
@@ -54,8 +55,8 @@ async function launchGui(
   note?: string,
   opts: { spawn?: boolean; net?: string } = {},
 ): Promise<void> {
-  const { serveGui } = await import("./daemon");
-  const { findFreePort } = await import("./ports");
+  const { serveGui } = await import("./daemon.js");
+  const { findFreePort } = await import("./ports.js");
   const port = await findFreePort(5178);
   await serveGui(orchestrator(), port);
   const base = `http://127.0.0.1:${port}`;
@@ -186,7 +187,7 @@ export function buildCli(): Command {
   program
     .name("fiber-forge")
     .description("One-click local Fiber networks")
-    .version("0.2.9");
+    .version(version);
 
   program
     .command("up")
@@ -641,8 +642,8 @@ export function buildCli(): Command {
     .description("serve the web GUI for all networks")
     .option("--port <n>", "http port", (v) => Number.parseInt(v, 10), 5178)
     .action(async (options: { port: number }) => {
-      const { serveGui } = await import("./daemon");
-      const { findFreePort } = await import("./ports");
+      const { serveGui } = await import("./daemon.js");
+      const { findFreePort } = await import("./ports.js");
       const port = await findFreePort(options.port);
       await serveGui(orchestrator(), port);
       const url = `http://127.0.0.1:${port}`;

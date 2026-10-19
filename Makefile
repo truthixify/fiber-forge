@@ -1,4 +1,4 @@
-.PHONY: setup build test lint fmt fmt-check ci clean
+.PHONY: setup build test sdk-test lint fmt fmt-check ci clean
 
 setup:
 	npm ci
@@ -9,6 +9,9 @@ build:
 test:
 	npm test
 
+sdk-test: build
+	npm run test:sdk
+
 lint:
 	npm run lint
 
@@ -18,7 +21,7 @@ fmt:
 fmt-check:
 	npm run fmt:check
 
-ci: fmt-check lint test build
+ci: fmt-check lint test sdk-test
 
 clean:
 	rm -rf dist node_modules

@@ -1,0 +1,109 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { type NetworkLayout } from "./config.js";
+import { DockerEngine } from "./engine.js";
+import {
+  type ChannelRow,
+  type DownOptions,
+  type NetworkSummary,
+  type NetworkView,
+  Orchestrator,
+  type PaymentReport,
+  type UpOptions,
+} from "./orchestrator.js";
+import { type Topology } from "./topology.js";
+
+export { version } from "./version.js";
+export {
+  FUNDING_BUFFER_CKB,
+  MAX_NODES,
+  MIN_CHANNEL_CAPACITY_CKB,
+  MIN_NODES,
+  TopologyError,
+  parseTopology,
+  validateTopology,
+} from "./topology.js";
+export type {
+  ChannelSpec,
+  FundingSpec,
+  NodeSpec,
+  Topology,
+} from "./topology.js";
+export { line, preset, presetNames, ring, star } from "./presets.js";
+export type { LayoutOptions, NetworkLayout, NodeLayout } from "./config.js";
+export type {
+  ChannelRow,
+  DownOptions,
+  NetworkState,
+  NetworkSummary,
+  NetworkView,
+  PaymentReport,
+  UpOptions,
+} from "./orchestrator.js";
+
+/** Options for constructing the default Docker-backed SDK client. */
+export interface FiberForgeOptions {
+  /** Directory used for persisted network layouts. Defaults to `~/.fiber-forge`. */
+  stateDir?: string;
+}
+
+/**
+ * The supported high-level SDK contract. It operates only on local networks managed by Fiber
+ * Forge; low-level Docker, key, chain, and raw Fiber RPC helpers remain internal.
+ */
+export interface FiberForge {
+  up(topology: Topology, options?: UpOptions): Promise<NetworkLayout>;
+  inspect(net: string): Promise<NetworkView>;
+  down(net: string, options?: DownOptions): Promise<void>;
+  downAll(options?: DownOptions): Promise<string[]>;
+  list(): Promise<NetworkSummary[]>;
+  createInvoice(
+    net: string,
+    node: string,
+    amount: number,
+    description?: string,
+    udt?: boolean,
+  ): Promise<string>;
+  pay(
+    net: string,
+    from: string,
+    to: string,
+    amount: number,
+    description?: string,
+    udt?: boolean,
+  ): Promise<PaymentReport>;
+  payInvoice(
+    net: string,
+    from: string,
+    invoice: string,
+  ): Promise<PaymentReport>;
+  issueUdt(net: string, node: string, amountUdt: number): Promise<string>;
+  openChannelBetween(
+    net: string,
+    from: string,
+    to: string,
+    capacity: number,
+    onProgress?: (message: string) => void,
+    udt?: boolean,
+  ): Promise<void>;
+  closeChannel(net: string, node: string, channelId: string): Promise<void>;
+  fund(net: string, node: string, amountCkb: number): Promise<string>;
+  channels(net: string, node?: string): Promise<ChannelRow[]>;
+  logs(
+    net: string,
+    node: string,
+    tailLines?: number,
+    level?: string,
+  ): Promise<string>;
+}
+
+/** Create a Docker-backed client using the assets bundled with the installed package. */
+export function createFiberForge(options: FiberForgeOptions = {}): FiberForge {
+  const assetsDir = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "assets",
+  );
+  return new Orchestrator(new DockerEngine(), assetsDir, options.stateDir);
+}

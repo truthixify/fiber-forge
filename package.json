@@ -27,9 +27,16 @@
   "publishConfig": {
     "access": "public"
   },
+  "exports": {
+    "./sdk": {
+      "types": "./dist/sdk.d.ts",
+      "import": "./dist/sdk.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
+    "test:sdk": "tsc --noEmit -p test/fixtures/sdk-consumer/tsconfig.json && node test/fixtures/sdk-consumer/runtime.mjs",
     "lint": "tsc --noEmit",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check .",
@@ -62,6 +69,7 @@
     "dist",
     "src",
     "bin",
-    "assets"
+    "assets",
+    "docs/sdk.md"
   ]
 }

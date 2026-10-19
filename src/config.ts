@@ -4,7 +4,7 @@
  * The generated config mirrors the layout the live spike proved boots against a dev chain.
  */
 
-import { type Topology } from "./topology";
+import { type Topology } from "./topology.js";
 
 export const FNN_RPC_PORT = 8227;
 export const FNN_P2P_PORT = 8228;

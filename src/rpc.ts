@@ -5,7 +5,7 @@
  * `list_channels{pubkey?} -> {channels}`. Only the verified method set is exposed.
  */
 
-import { type UdtScript } from "./ckb";
+import { type UdtScript } from "./ckb.js";
 
 /** Carries out a single JSON-RPC call and returns its `result`. */
 export interface RpcTransport {
