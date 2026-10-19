@@ -90,6 +90,30 @@ fiber-forge run trio ./examples/payments.yml     # run a scenario of scripted tr
 fiber-forge status trio --json | jq              # every data command accepts --json
 ```
 
+## Library API
+
+Automation that needs more than the CLI can import the supported ESM API from
+`@truthixify/fiber-forge/sdk`:
+
+```ts
+import { createFiberForge, preset } from "@truthixify/fiber-forge/sdk";
+
+const forge = createFiberForge();
+const topology = preset("trio");
+if (!topology) throw new Error("trio preset is unavailable");
+
+try {
+  const layout = await forge.up(topology);
+  console.log(await forge.inspect(layout.net));
+} finally {
+  await forge.down(topology.name, { purge: true });
+}
+```
+
+The SDK exposes high-level network lifecycle and topology operations. Docker internals, generated
+keys, raw RPC helpers, and source-file imports are not public API. See [the SDK contract](docs/sdk.md)
+for the complete surface and compatibility policy.
+
 ## Topologies
 
 Use a **preset** — `duo` (2 nodes), `trio` (3 nodes in an A—B—C line), or `hub` (a 5-node star) — or
@@ -134,6 +158,7 @@ tested against a fake, so `make ci` never needs Docker.
 make setup    # install the toolchain and dependencies
 make test     # unit tests (the live Docker end-to-end test is behind FORGE_E2E=1)
 make ci       # fmt-check, lint, test, and build — the same steps CI runs
+make sdk-test # build, typecheck, and execute a consumer through the package export
 
 FORGE_E2E=1 npx vitest run test/e2e.test.ts   # run a real network up to CHANNEL_READY
 ```

@@ -25,6 +25,7 @@ graph GUI.
    10; plus a topology file schema (YAML) for fully custom networks. Several networks run at once,
    each on its own subnet and host ports.
 4. Docs: quickstart, topology schema reference, "point your app at a fiber-forge node" guide.
+5. Public ESM SDK at `@truthixify/fiber-forge/sdk` for supported lifecycle and topology automation.
 
 ## 3. Scope
 
@@ -40,9 +41,10 @@ image); Windows-native (WSL2 is the supported path).
 ## 4. Architecture
 
 ```
-fiber-forge CLI ──► orchestrator (TS lib) ──► Docker Engine API (dockerode)
-                    │                      ├── ckb container (dev chain + miner)
-                    │                      └── fnn containers ×N (nervos/fiber, pinned)
+fiber-forge CLI ─┐
+public SDK ──────┴──► orchestrator (TS lib) ──► Docker Engine API (dockerode)
+                    │                         ├── ckb container (dev chain + miner)
+                    │                         └── fnn containers ×N (nervos/fiber, pinned)
                     ├──► funding module (devnet genesis key → transfers to node wallets)
                     ├──► fnn RPC clients (per node, via mapped ports)
                     └──► state store  (~/.fiber-forge/<network>/ : topology, ports, data dirs)
@@ -85,6 +87,8 @@ GUI (React/vite, served on localhost) ──► fiber-forge daemon HTTP+WS API (
 - FR-7 Per-node log panel streams `docker logs` with level filtering.
 - FR-8 Topology file is validated with actionable errors (unknown node ref, capacity below
   channel reserve, duplicate names) before any container starts.
+- FR-9 `@truthixify/fiber-forge/sdk` exposes the documented high-level lifecycle and topology
+  contract without requiring imports from package-internal source or build paths.
 
 ## 7. Topology schema (YAML)
 
@@ -126,6 +130,8 @@ funding:
 - AC-4 Topology validation rejects the documented error classes with named messages.
 - AC-5 `make ci` green: lint, unit (parser, port allocator, orchestrator with mocked Docker),
   E2E behind a flag.
+- AC-6 A Node 20 ESM consumer resolves the documented SDK runtime and TypeScript declarations
+  through the package export map after a clean build.
 
 ## 10. Demo script (~75s)
 
