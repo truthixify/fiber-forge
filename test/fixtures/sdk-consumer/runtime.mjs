@@ -23,8 +23,23 @@ const expectedRuntimeExports = [
 assert.deepEqual(Object.keys(sdk).sort(), expectedRuntimeExports.sort());
 
 const packageMetadata = JSON.parse(
-  await readFile(new URL("../../../package.json", import.meta.url), "utf8"),
+  await readFile(
+    new URL(
+      "../package.json",
+      import.meta.resolve("@truthixify/fiber-forge/sdk"),
+    ),
+    "utf8",
+  ),
 );
 assert.equal(sdk.version, packageMetadata.version);
 assert.equal(sdk.preset("trio").nodes.length, 3);
+assert.equal(
+  sdk.parseTopology(`
+name: package-smoke
+nodes: [{ name: alice }, { name: bob }]
+channels: [{ from: alice, to: bob, capacity_ckb: 1000 }]
+funding: { per_node_ckb: 100000 }
+`).channels.length,
+  1,
+);
 assert.equal(typeof sdk.createFiberForge().up, "function");

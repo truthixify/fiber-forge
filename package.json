@@ -37,6 +37,7 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:sdk": "tsc --noEmit -p test/fixtures/sdk-consumer/tsconfig.json && node test/fixtures/sdk-consumer/runtime.mjs",
+    "test:package": "node scripts/verify-packed-artifact.mjs",
     "lint": "tsc --noEmit",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check .",

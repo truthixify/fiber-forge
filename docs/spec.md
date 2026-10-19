@@ -130,8 +130,9 @@ funding:
 - AC-4 Topology validation rejects the documented error classes with named messages.
 - AC-5 `make ci` green: lint, unit (parser, port allocator, orchestrator with mocked Docker),
   E2E behind a flag.
-- AC-6 A Node 20 ESM consumer resolves the documented SDK runtime and TypeScript declarations
-  through the package export map after a clean build.
+- AC-6 A Node 20 ESM consumer installs the packed artifact with production dependencies only, then
+  resolves the documented CLI, SDK runtime, TypeScript declarations, and bundled assets outside the
+  source tree.
 
 ## 10. Demo script (~75s)
 

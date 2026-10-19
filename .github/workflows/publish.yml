@@ -15,7 +15,9 @@ jobs:
           cache: npm
           registry-url: "https://registry.npmjs.org"
       - run: npm ci
-      - run: make ci
-      - run: npm publish
+      - name: verify source and packed artifact
+        run: make ci
+      - name: publish package
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

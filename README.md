@@ -157,8 +157,9 @@ tested against a fake, so `make ci` never needs Docker.
 ```sh
 make setup    # install the toolchain and dependencies
 make test     # unit tests (the live Docker end-to-end test is behind FORGE_E2E=1)
-make ci       # fmt-check, lint, test, and build — the same steps CI runs
+make ci       # formatting, types, tests, build, and packed-artifact smoke — the CI gate
 make sdk-test # build, typecheck, and execute a consumer through the package export
+make package-test # install the tarball with production dependencies and smoke the CLI + SDK
 
 FORGE_E2E=1 npx vitest run test/e2e.test.ts   # run a real network up to CHANNEL_READY
 ```
