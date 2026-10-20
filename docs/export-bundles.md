@@ -119,7 +119,8 @@ A `.ffbundle` is a gzip-compressed USTAR archive. Export normalizes entry order,
 (`0`), uid/gid (`0`), user/group names (empty), and regular-file mode (`0644`). File names are ASCII,
 POSIX-relative, and selected from the level allowlist. Stable logical inputs therefore produce the
 same canonical topology/scenario bytes and `recipeDigest`; timestamps and diagnostics do not promise
-byte-identical archives.
+byte-identical archives. For fixed manifest and artifact bytes, the USTAR body is canonical; the
+gzip DEFLATE encoding may vary across Node.js/zlib releases without changing bundle semantics.
 
 The version-1 manifest schema is published at
 [`schema/export-manifest-v1.schema.json`](schema/export-manifest-v1.schema.json). Its core fields are:
@@ -208,7 +209,7 @@ resources or state already exist. Cleanup is scoped by that validated name and F
 ## Reviewable sample
 
 [`examples/export-v1`](examples/export-v1/manifest.json) is the logical, uncompressed form of a recipe
-bundle, and [`failure.ffbundle`](examples/export-v1/failure.ffbundle) is its deterministic shareable
+bundle, and [`failure.ffbundle`](examples/export-v1/failure.ffbundle) is its checked shareable
 archive. CI rebuilds the archive, verifies every manifest hash, inspects it through the production
 importer, and checks that it has no secret-shaped content, symlinks, unexpected files, oversized
 entries, or forbidden persisted-state names such as `ckb/key`, `fiber/sk`, `fiber/store`, and Docker

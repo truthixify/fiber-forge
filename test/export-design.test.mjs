@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { buildBundleArchive, inspectBundleFile } from "../src/bundle";
 import { parseScenario } from "../src/scenario";
@@ -173,9 +174,10 @@ describe("export bundle design", () => {
       ),
     );
     const checkedArchive = await readFile(join(sampleDir, "failure.ffbundle"));
-    expect(
-      checkedArchive.equals(buildBundleArchive(manifest, artifactFiles)),
-    ).toBe(true);
+    const rebuiltArchive = buildBundleArchive(manifest, artifactFiles);
+    expect(gunzipSync(checkedArchive).equals(gunzipSync(rebuiltArchive))).toBe(
+      true,
+    );
     await expect(
       inspectBundleFile(join(sampleDir, "failure.ffbundle")),
     ).resolves.toMatchObject({
