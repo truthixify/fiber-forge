@@ -407,13 +407,29 @@ export class Orchestrator {
     rpcByName: Map<string, FnnRpc>,
     expected: number,
   ): Promise<void> {
-    const deadline = Date.now() + 60_000;
-    for (const rpc of rpcByName.values()) {
-      while (Date.now() < deadline) {
-        const count = await rpc.graphChannelCount().catch(() => 0);
-        if (count >= expected) break;
-        await sleep(1500);
+    const deadline = Date.now() + 180_000;
+    let counts = new Map<string, number>();
+    for (;;) {
+      counts = new Map(
+        await Promise.all(
+          [...rpcByName].map(
+            async ([name, rpc]) =>
+              [name, await rpc.graphChannelCount().catch(() => 0)] as const,
+          ),
+        ),
+      );
+      if ([...counts.values()].every((count) => count >= expected)) {
+        return;
       }
+      if (Date.now() > deadline) {
+        const observed = [...counts]
+          .map(([name, count]) => `${name}=${count}/${expected}`)
+          .join(", ");
+        throw new Error(
+          `routing graph did not propagate in 180s (${observed})`,
+        );
+      }
+      await sleep(1500);
     }
   }
 

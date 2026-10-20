@@ -161,7 +161,7 @@ make ci       # formatting, types, tests, build, and packed-artifact smoke — t
 make sdk-test # build, typecheck, and execute a consumer through the package export
 make package-test # install the tarball with production dependencies and smoke the CLI + SDK
 
-FORGE_E2E=1 npx vitest run test/e2e.test.ts   # run a real network up to CHANNEL_READY
+FORGE_E2E=1 npx vitest run test/e2e.test.ts   # live trio multi-hop, failure, and UDT proofs
 ```
 
 Run `make ci` before every push. Pushing a `v*` tag publishes to npm through

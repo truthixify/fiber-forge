@@ -54,6 +54,7 @@ describe("Orchestrator.down", () => {
       name: "forge-duo-ckb",
       image: "i",
       network: "forge-duo",
+      volumes: [{ source: "forge-duo-ckb-data", target: "/data" }],
       labels: { [FORGE_LABEL]: "duo" },
     });
     await engine.run({
@@ -63,11 +64,13 @@ describe("Orchestrator.down", () => {
       labels: { [FORGE_LABEL]: "duo" },
     });
     await engine.ensureNetwork("forge-duo", "172.30.0.0/16");
+    expect(await engine.volumeExists("forge-duo-ckb-data")).toBe(true);
 
     await new Orchestrator(engine, "/assets").down("duo");
 
     expect(await engine.status("forge-duo-ckb")).toBe("absent");
     expect(await engine.status("forge-duo-node-1")).toBe("absent");
     expect(engine.networks.has("forge-duo")).toBe(false);
+    expect(await engine.volumeExists("forge-duo-ckb-data")).toBe(false);
   });
 });

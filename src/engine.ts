@@ -41,6 +41,8 @@ export interface ContainerEngine {
   removeNetwork(name: string): Promise<void>;
   /** Remove a named volume if it exists. */
   removeVolume(name: string): Promise<void>;
+  /** Whether a named volume currently exists. */
+  volumeExists(name: string): Promise<boolean>;
   /** Create and start a container from the spec (removing any prior container of that name). */
   run(spec: ContainerSpec): Promise<void>;
   stop(name: string): Promise<void>;
@@ -59,6 +61,7 @@ export interface ContainerEngine {
 /** An in-memory engine for unit tests and dry runs; records every spec and models status. */
 export class FakeEngine implements ContainerEngine {
   readonly networks = new Map<string, string>();
+  readonly volumes = new Set<string>();
   readonly containers = new Map<
     string,
     { spec: ContainerSpec; status: ContainerStatus }
@@ -78,10 +81,20 @@ export class FakeEngine implements ContainerEngine {
   }
 
   async removeVolume(name: string): Promise<void> {
+    this.volumes.delete(name);
     this.log.push(`rm-volume ${name}`);
   }
 
+  async volumeExists(name: string): Promise<boolean> {
+    return this.volumes.has(name);
+  }
+
   async run(spec: ContainerSpec): Promise<void> {
+    for (const volume of spec.volumes ?? []) {
+      if (volume.source.startsWith("forge-")) {
+        this.volumes.add(volume.source);
+      }
+    }
     this.containers.set(spec.name, { spec, status: "running" });
     this.log.push(
       `run ${spec.name} ${spec.image}${spec.ip ? " @" + spec.ip : ""}`,
@@ -179,6 +192,16 @@ export class DockerEngine implements ContainerEngine {
       await this.docker.getVolume(name).remove({ force: true });
     } catch (error) {
       if (!isNotFound(error)) throw error;
+    }
+  }
+
+  async volumeExists(name: string): Promise<boolean> {
+    try {
+      await this.docker.getVolume(name).inspect();
+      return true;
+    } catch (error) {
+      if (isNotFound(error)) return false;
+      throw error;
     }
   }
 
