@@ -1,0 +1,14 @@
+name: sandbox
+nodes:
+  - name: alice
+  - name: bob
+  - name: carol
+channels:
+  - from: alice
+    to: bob
+    capacity_ckb: 1000
+  - from: bob
+    to: carol
+    capacity_ckb: 1000
+funding:
+  per_node_ckb: 100000

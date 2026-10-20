@@ -1,0 +1,40 @@
+{
+  "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.schema.json",
+  "name": "Fiber Forge sandbox",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:3-22-bookworm@sha256:f8017fec2cb83acccf8c5a1dbe98a477a899f30aa2934e73a9eeaba263e0d508",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:4.1.3": {
+      "version": "29.3.1",
+      "moby": true,
+      "dockerDashComposeVersion": "none",
+      "installDockerBuildx": false,
+      "disableIp6tables": true
+    }
+  },
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+  "runArgs": ["--cpus=4", "--memory=8g", "--pids-limit=4096"],
+  "mounts": [
+    "source=${localWorkspaceFolderBasename}-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
+  ],
+  "forwardPorts": [5178],
+  "portsAttributes": {
+    "5178": {
+      "label": "Fiber Forge GUI (private)",
+      "onAutoForward": "openBrowserOnce",
+      "protocol": "http"
+    }
+  },
+  "otherPortsAttributes": {
+    "onAutoForward": "ignore"
+  },
+  "postCreateCommand": "sudo chown node:node node_modules && npm ci && npm run build",
+  "postStartCommand": "npm run sandbox:start",
+  "postAttachCommand": "npm run sandbox:status",
+  "waitFor": "postStartCommand",
+  "remoteUser": "node",
+  "init": true
+}

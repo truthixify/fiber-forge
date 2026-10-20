@@ -8,6 +8,7 @@ inspect each node. A working network is ready in under a minute.
 [![Unit CI](https://github.com/truthixify/fiber-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/truthixify/fiber-forge/actions/workflows/ci.yml)
 [![Live E2E](https://github.com/truthixify/fiber-forge/actions/workflows/e2e.yml/badge.svg)](https://github.com/truthixify/fiber-forge/actions/workflows/e2e.yml)
 [![npm](https://img.shields.io/npm/v/@truthixify/fiber-forge)](https://www.npmjs.com/package/@truthixify/fiber-forge)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/truthixify/fiber-forge?quickstart=1)
 
 It was built for the "Gone in 60ms" Fiber Network Infrastructure Hackathon (Category 2). Lightning
 developers use Polar for this kind of local testing; fiber-forge aims to be the equivalent for Fiber.
@@ -38,6 +39,12 @@ arguments. It opens the GUI on the network-creation screen, where you choose a s
 
 When you are finished, `fiber-forge down trio` removes one network, and `fiber-forge down --all`
 removes all of them.
+
+To try a real funded network without preparing Docker or Node.js locally, open the repository in a
+private GitHub Codespace. Its checked-in sandbox starts a fixed three-node network, proves a
+multi-hop payment, and exposes only the GUI through GitHub's authenticated private port forwarding.
+It expires and purges its runtime state after four hours. See the [sandbox guide](docs/sandbox.md)
+for the walkthrough, quota implications, controls, and exact reproducibility boundary.
 
 ## The GUI
 

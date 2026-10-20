@@ -47,6 +47,10 @@
     "test:package": "node scripts/verify-packed-artifact.mjs",
     "example:local": "node scripts/run-integration-example.mjs",
     "example:failure": "node scripts/run-integration-example.mjs --fail-after-payment",
+    "sandbox:start": "node scripts/sandbox.mjs start",
+    "sandbox:stop": "node scripts/sandbox.mjs stop",
+    "sandbox:reset": "node scripts/sandbox.mjs reset",
+    "sandbox:status": "node scripts/sandbox.mjs status",
     "lint": "tsc --noEmit",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check .",
@@ -86,6 +90,7 @@
     "docs/verification.md",
     "docs/compatibility.md",
     "docs/github-action.md",
+    "docs/sandbox.md",
     "docs/evidence"
   ]
 }
