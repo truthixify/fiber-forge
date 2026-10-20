@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "kind": "cch-feasibility",
+  "result": "passed",
+  "validatedAt": "2026-10-20T10:03:29Z",
+  "source": {
+    "type": "manual-live-proof",
+    "commit": "0561302b466d5c926eb8a4b9602ff00043ab9f77",
+    "package": "@truthixify/fiber-forge@0.4.0-rc.1"
+  },
+  "host": {
+    "os": "Darwin",
+    "architecture": "arm64",
+    "node": "v24.13.0",
+    "dockerClient": "29.3.1",
+    "dockerServer": "29.3.1",
+    "dockerDaemonOs": "linux",
+    "dockerDaemonArchitecture": "arm64"
+  },
+  "images": {
+    "ckb": {
+      "version": "0.201.0",
+      "reference": "nervos/ckb:v0.201.0@sha256:b995cd8b5f35571283d066f011317ef88b6d8e42f10c8b63c4c9ecf7b5cb647e"
+    },
+    "fiber": {
+      "version": "0.9.0-rc7",
+      "commit": "bc361aa",
+      "reference": "nervos/fiber:0.9.0-rc7@sha256:827d2eb4f557811c0f0f81268f993aae73d979eacfe48d36bd41d9041fe36081"
+    },
+    "lnd": {
+      "version": "0.18.0-beta",
+      "commit": "fed7609",
+      "reference": "lightninglabs/lnd:v0.18.0-beta@sha256:dab0f5ae09615066d4c0f29f6f7444ab7e6c8a2548f56ea50288236b542095d4",
+      "releaseVerifier": "passed-six-signatures"
+    },
+    "bitcoin": {
+      "version": "27.0.0",
+      "reference": "bitcoin/bitcoin:27.0@sha256:bf3748000b46aa9515f856326abbe61ce9f4f7af2ebf9da38930974323634f30",
+      "distribution": "unofficial-testing-image"
+    }
+  },
+  "topology": {
+    "fiberNodes": 2,
+    "fiberWrappedChannelUnits": 200000,
+    "lndNodes": 2,
+    "lightningChannelSats": 1000000,
+    "bitcoinNetwork": "regtest",
+    "ckbNetwork": "devnet",
+    "cchMode": "standalone"
+  },
+  "flows": [
+    {
+      "direction": "fiber-to-lightning",
+      "paymentHash": "0x0d619711b4314ece27b0404fb7a4be22f9763d6c63b7bfeeb09e9983ebb8b9d0",
+      "amountSats": 100000,
+      "feeSats": 0,
+      "cchStatus": "Success",
+      "lightningInvoiceStatus": "SETTLED",
+      "fiberHubBalanceBefore": 0,
+      "fiberHubBalanceAfter": 100000,
+      "lightningUserBalanceBefore": 0,
+      "lightningUserBalanceAfter": 100000,
+      "invoiceLifetimeSeconds": 22
+    },
+    {
+      "direction": "lightning-to-fiber",
+      "paymentHash": "0xac56318aa4fadfd6d730b06d367869e04a111792b7fc42d33414f278bd42d682",
+      "amountSats": 50000,
+      "feeSats": 0,
+      "cchStatus": "Success",
+      "lightningPaymentStatus": "SUCCEEDED",
+      "fiberUserBalanceBefore": 100000,
+      "fiberUserBalanceAfter": 150000,
+      "lightningUserBalanceBefore": 100000,
+      "lightningUserBalanceAfter": 50000,
+      "lightningHtlcResolutionMilliseconds": 211
+    }
+  ],
+  "resourceSnapshot": {
+    "aggregateMemoryMiB": 656,
+    "ckbMemoryMiB": 439,
+    "bitcoinDataMiB": 18,
+    "ckbDataMiB": 163,
+    "fiberStateMiB": 150,
+    "lndDataMiB": 2,
+    "cchStateMiB": 75
+  },
+  "timing": {
+    "operatorInclusiveSetupSeconds": 430,
+    "correctedLndStartToCchReadySeconds": 168,
+    "cchRpcReadyUnderSeconds": 1
+  },
+  "hostExposure": {
+    "loopback": [8114, 8300, 8301, 8400],
+    "privateOnly": [8080, 9735, 10009, 18443, 28332, 28333]
+  },
+  "safety": {
+    "mainnetFunds": false,
+    "publicRpc": false,
+    "lndTls": true,
+    "lndMacaroon": true,
+    "secretsRetained": false
+  },
+  "cleanup": {
+    "containers": "absent",
+    "network": "absent",
+    "volumes": "absent",
+    "stateDirectory": "absent",
+    "temporaryCredentials": "absent"
+  }
+}

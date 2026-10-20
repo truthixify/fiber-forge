@@ -29,6 +29,8 @@ graph GUI.
 6. Versioned scenario specifications with bounded assertions, stable error expectations, and
    machine-readable reports suitable for CI.
 7. Secret-safe recipe/diagnostic exports with integrity validation and clean-state replay.
+8. A local-only CCH development topology whose accepted compatibility, trust, readiness, and secret
+   boundaries are defined in [the feasibility record](cch-feasibility.md).
 
 ## 3. Scope
 

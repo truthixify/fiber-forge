@@ -227,7 +227,8 @@ also checks the Docker daemon architecture and both image manifest lists before 
 - **Resilience** — stuck HTLC simulation and force-close/on-chain settlement visibility.
 - **Routing** — multi-path payments, per-hop fee and route inspection, and a view of the gossip graph.
 - **Scenarios** — a curated library of portable failure and recovery recipes.
-- **Cross-chain** — `cch` (Fiber ↔ Lightning) hub demos and BTC bridging.
+- **Cross-chain** — the local-only [CCH compatibility and trust boundary](docs/cch-feasibility.md)
+  is proven in both directions; product orchestration and independent live CI remain roadmap work.
 - **Reproducibility** — signed bundle provenance and broader cross-host replay evidence.
 
 Force-close is an explicit local-dev operation with full-ID confirmation and terminal settlement
