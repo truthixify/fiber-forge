@@ -16,6 +16,7 @@ import {
 } from "../src/orchestrator";
 import { FnnRpc, type RpcTransport } from "../src/rpc";
 import { type DevChain } from "../src/ckb";
+import { parseScenario, type ScenarioReport } from "../src/scenario";
 import { type Topology } from "../src/topology";
 
 async function pathExists(path: string): Promise<boolean> {
@@ -1311,5 +1312,110 @@ describe("Orchestrator.up preflight and rollback", () => {
     expect(engine.observedPathPresent).toBe(false);
     expect(await pathExists(join(stateDir, "duo"))).toBe(false);
     await rm(stateDir, { recursive: true, force: true });
+  });
+
+  it("does not replace an unlabeled exact-name container in clean replay mode", async () => {
+    const engine = new FakeEngine();
+    await engine.ensureNetwork("external", "10.200.1.0/24");
+    await engine.run({
+      name: "forge-clean-replay-ckb",
+      image: "external",
+      network: "external",
+    });
+    const topology = { ...duo, name: "clean-replay" };
+
+    await expect(
+      new Orchestrator(engine, "/assets").up(topology, {
+        requireClean: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "NETWORK_EXISTS",
+      resource: "clean-replay",
+    });
+    expect(await engine.status("forge-clean-replay-ckb")).toBe("running");
+    expect(engine.networks.has("forge-clean-replay")).toBe(false);
+  });
+
+  it("does not claim an orphaned fault network in clean replay mode", async () => {
+    const engine = new FakeEngine();
+    await engine.ensureNetwork("ffault-clean-replay-1", "10.201.1.0/24", {
+      labels: { owner: "external" },
+    });
+    const topology = { ...duo, name: "clean-replay" };
+
+    await expect(
+      new Orchestrator(engine, "/assets").up(topology, {
+        requireClean: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "NETWORK_EXISTS",
+      resource: "clean-replay",
+    });
+    expect(engine.networks.get("ffault-clean-replay-1")).toBe("10.201.1.0/24");
+    expect(engine.networks.has("forge-clean-replay")).toBe(false);
+  });
+});
+
+describe("Orchestrator export bundles", () => {
+  it("requires and cross-checks an original topology for a legacy layout", async () => {
+    const { orchestrator, stateDir } = await lifecycleFixture();
+    const scenario = parseScenario("version: 1\nsteps:\n  - wait: 0\n");
+    const report: ScenarioReport = {
+      format: "fiber-forge-scenario-report",
+      version: 1,
+      scenarioVersion: 1,
+      network: "duo",
+      startedAt: "2026-10-20T00:00:00.000Z",
+      finishedAt: "2026-10-20T00:00:00.000Z",
+      durationMs: 0,
+      passed: true,
+      summary: { total: 1, passed: 1, failed: 0 },
+      steps: [
+        {
+          index: 0,
+          iteration: 0,
+          action: "wait",
+          passed: true,
+          summary: "waited 0ms",
+          startedAt: "2026-10-20T00:00:00.000Z",
+          finishedAt: "2026-10-20T00:00:00.000Z",
+          durationMs: 0,
+          assertions: [],
+        },
+      ],
+    };
+    try {
+      await expect(
+        orchestrator.exportBundle("duo", {
+          scenario,
+          report,
+          output: join(stateDir, "missing.ffbundle"),
+        }),
+      ).rejects.toMatchObject({ code: "BUNDLE_INVALID" });
+
+      const output = join(stateDir, "legacy.ffbundle");
+      const exported = await orchestrator.exportBundle("duo", {
+        scenario,
+        report,
+        topology: duo,
+        output,
+      });
+      expect(exported).toMatchObject({ level: "recipe", output });
+      await expect(orchestrator.inspectBundle(output)).resolves.toMatchObject({
+        integrity: "verified",
+        recipe: { network: "duo", executions: 1 },
+      });
+
+      await expect(
+        orchestrator.exportBundle("duo", {
+          scenario,
+          report,
+          topology: { ...duo, name: "wrong" },
+          output: join(stateDir, "wrong.ffbundle"),
+        }),
+      ).rejects.toMatchObject({ code: "BUNDLE_INVALID" });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
   });
 });

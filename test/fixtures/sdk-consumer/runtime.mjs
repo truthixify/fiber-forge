@@ -4,19 +4,29 @@ import { readFile } from "node:fs/promises";
 import * as sdk from "@truthixify/fiber-forge/sdk";
 
 const expectedRuntimeExports = [
+  "BUNDLE_SCHEMA_VERSION",
+  "DEFAULT_REPLAY_TIMEOUT_MS",
   "DEFAULT_PROVISION_TIMEOUT_MS",
   "FAULT_KINDS",
   "FUNDING_BUFFER_CKB",
   "ForgeError",
   "MAX_NODES",
+  "MAX_BUNDLE_BYTES",
+  "MAX_BUNDLE_ENTRIES",
+  "MAX_BUNDLE_EXPANDED_BYTES",
+  "MAX_REPLAY_TIMEOUT_MS",
   "MIN_CHANNEL_CAPACITY_CKB",
   "MIN_NODES",
   "TopologyError",
+  "SCENARIO_REPORT_VERSION",
+  "SCENARIO_SCHEMA_VERSION",
+  "ScenarioError",
   "createFiberForge",
   "errorDetails",
   "isFaultKind",
   "line",
   "parseTopology",
+  "parseScenario",
   "planNetwork",
   "preset",
   "presetNames",
@@ -66,6 +76,10 @@ assert.equal(typeof forge.faultStatus, "function");
 assert.equal(typeof forge.resetFault, "function");
 assert.equal(typeof forge.resetAllFaults, "function");
 assert.equal(typeof forge.mineBlocks, "function");
+assert.equal(typeof forge.runScenario, "function");
+assert.equal(typeof forge.exportBundle, "function");
+assert.equal(typeof forge.inspectBundle, "function");
+assert.equal(typeof forge.replayBundle, "function");
 assert.equal(sdk.planNetwork(sdk.preset("duo")).nodes.length, 2);
 assert.deepEqual(
   sdk.errorDetails(

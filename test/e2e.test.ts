@@ -27,6 +27,7 @@ const RUN = process.env.FORGE_E2E === "1";
 const assetsDir = join(import.meta.dirname, "..", "assets");
 const MULTIHOP_NET = "e2e-multihop";
 const RECOVERY_NET = "e2e-recovery";
+const REPLAY_NET = "e2e-replay";
 const FAILURE_PROBE = ["1", "true"].includes(
   (process.env.FORGE_E2E_FAILURE_PROBE ?? "").toLowerCase(),
 );
@@ -706,6 +707,45 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
       );
       expect(killRecovery.pubkeys).toEqual(infos.map((info) => info.pubkey));
 
+      const bundlePath = join(stateDir, "outage.ffbundle");
+      const exported = await orchestrator.exportBundle(RECOVERY_NET, {
+        scenario: outageScenario,
+        report: outageReport,
+        output: bundlePath,
+      });
+      expect(exported).toMatchObject({
+        level: "recipe",
+        artifacts: 3,
+      });
+      await expect(
+        orchestrator.inspectBundle(bundlePath),
+      ).resolves.toMatchObject({
+        integrity: "verified",
+        redaction: "verified",
+        compatibility: { replayable: true },
+        recipe: { network: RECOVERY_NET, executions: 3 },
+      });
+      const replay = await orchestrator.replayBundle(bundlePath, {
+        network: REPLAY_NET,
+        timeoutMs: 10 * 60_000,
+        onProgress: (message) => {
+          progress.push(`replay: ${message}`);
+          console.log(`  replay: ${message}`);
+        },
+      });
+      expect(replay).toMatchObject({
+        network: REPLAY_NET,
+        reproduced: true,
+        differences: [],
+        cleanup: { purged: true },
+      });
+      expect(await engine.listByLabel(FORGE_LABEL, REPLAY_NET)).toEqual([]);
+      expect((await engine.forgeNets()).includes(REPLAY_NET)).toBe(false);
+      expect(await engine.volumeExists(`forge-${REPLAY_NET}-ckb-data`)).toBe(
+        false,
+      );
+      expect(await pathExists(join(stateDir, REPLAY_NET))).toBe(false);
+
       const forceCloseChannelId = channelIdsBefore[0][0];
       if (!forceCloseChannelId) {
         throw new Error(
@@ -812,7 +852,7 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
     if (cleanupFailure) {
       throw cleanupFailure;
     }
-  }, 720_000);
+  }, 840_000);
 });
 
 describe.skipIf(!RUN)("live: partial provisioning rollback", () => {

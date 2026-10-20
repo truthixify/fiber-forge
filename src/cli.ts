@@ -99,6 +99,24 @@ function failJson(error: unknown): void {
   process.exitCode = 1;
 }
 
+async function withProcessAbort<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const abort = (signal: NodeJS.Signals) =>
+    controller.abort(new Error(`received ${signal}`));
+  const onSigint = () => abort("SIGINT");
+  const onSigterm = () => abort("SIGTERM");
+  process.once("SIGINT", onSigint);
+  process.once("SIGTERM", onSigterm);
+  try {
+    return await operation(controller.signal);
+  } finally {
+    process.removeListener("SIGINT", onSigint);
+    process.removeListener("SIGTERM", onSigterm);
+  }
+}
+
 const UP_STEPS: ui.Step[] = [
   { key: "network", label: "network" },
   { key: "ckb", label: "ckb" },
@@ -950,6 +968,122 @@ export function buildCli(): Command {
       console.log(`\n  ${result}   ${ui.muted(`${report.durationMs}ms`)}\n`);
       if (!report.passed) process.exitCode = 2;
     });
+
+  program
+    .command("export")
+    .description("export a secret-safe recipe or diagnostic bundle")
+    .argument("<net>", "existing managed network")
+    .requiredOption("--scenario <file>", "scenario JSON or YAML file")
+    .requiredOption("--report <file>", "scenario report JSON file")
+    .requiredOption("--output <file>", "new .ffbundle output path")
+    .option(
+      "--topology <file>",
+      "original topology for a legacy unversioned layout",
+    )
+    .option("--diagnostics", "include bounded redacted inspections and logs")
+    .option("--json", "print machine-readable JSON")
+    .action(
+      async (
+        net: string,
+        options: {
+          scenario: string;
+          report: string;
+          output: string;
+          topology?: string;
+          diagnostics?: boolean;
+          json?: boolean;
+        },
+      ) => {
+        const [scenario, report, topology] = await Promise.all([
+          readFile(resolve(options.scenario), "utf8"),
+          readFile(resolve(options.report), "utf8"),
+          options.topology
+            ? readFile(resolve(options.topology), "utf8")
+            : undefined,
+        ]);
+        const result = await orchestrator().exportBundle(net, {
+          scenario,
+          report,
+          output: resolve(options.output),
+          ...(topology ? { topology } : {}),
+          diagnostics: options.diagnostics,
+        });
+        if (options.json) {
+          printJson(result);
+          return;
+        }
+        console.log(
+          `\n  ${ui.success("exported")}   ${ui.text(result.output)}   ${ui.muted(result.recipeDigest)}\n`,
+        );
+      },
+    );
+
+  const bundle = program
+    .command("bundle")
+    .description("inspect Fiber Forge export bundles without execution");
+
+  bundle
+    .command("inspect")
+    .argument("<file>", "path to a .ffbundle file")
+    .option("--json", "print machine-readable JSON")
+    .action(async (file: string, options: { json?: boolean }) => {
+      const inspection = await orchestrator().inspectBundle(resolve(file));
+      if (options.json) {
+        printJson(inspection);
+        return;
+      }
+      console.log(ui.heading2(inspection.recipe.network));
+      console.log(
+        `  ${ui.success("verified")}   ${ui.text(inspection.level)}   ${ui.muted(inspection.recipeDigest)}`,
+      );
+      console.log(
+        `  ${ui.muted("recipe")}     ${inspection.recipe.nodes.length} nodes   ${inspection.recipe.channels} channels   ${inspection.recipe.executions} steps`,
+      );
+      console.log(
+        `  ${ui.muted("replay")}     ${inspection.compatibility.replayable ? ui.success("compatible") : ui.error("incompatible")}\n`,
+      );
+    });
+
+  program
+    .command("replay")
+    .description("reproduce a bundle on a fresh network, then purge it")
+    .argument("<file>", "path to a .ffbundle file")
+    .requiredOption("--network <name>", "fresh target network name")
+    .option("--timeout <ms>", "overall replay timeout", (value) =>
+      Number.parseInt(value, 10),
+    )
+    .option("--json", "print machine-readable JSON")
+    .action(
+      async (
+        file: string,
+        options: { network: string; timeout?: number; json?: boolean },
+      ) => {
+        const progress = options.json
+          ? undefined
+          : (message: string) => console.error(`  ${ui.muted(message)}`);
+        const result = await withProcessAbort((signal) =>
+          orchestrator().replayBundle(resolve(file), {
+            network: options.network,
+            signal,
+            ...(options.timeout === undefined
+              ? {}
+              : { timeoutMs: options.timeout }),
+            onProgress: progress,
+          }),
+        );
+        if (options.json) {
+          printJson(result);
+        } else {
+          console.log(
+            `\n  ${result.reproduced ? ui.success("reproduced") : ui.error("different")}   ${ui.text(result.network)}   ${ui.muted("purged")}\n`,
+          );
+          for (const difference of result.differences) {
+            console.log(`  ${ui.error("-")} ${ui.text(difference)}`);
+          }
+        }
+        if (!result.reproduced) process.exitCode = 2;
+      },
+    );
 
   program
     .command("gui")

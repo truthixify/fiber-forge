@@ -81,12 +81,12 @@ mismatched result rejects export; a report cannot be attached to a different sce
 both files parse. Export never infers expected behavior from live state. Replay requires a
 caller-selected, validated fresh network name so an imported bundle cannot select a cleanup target.
 
-The current unversioned `layout.json` records nodes and channel capacities but not the original
-per-node funding, so it cannot reconstruct a faithful topology by itself. The implementation must
-version newly persisted layout state and retain its normalized topology. A legacy layout is
-exportable only with `--topology <file>` (or the SDK equivalent); the exporter validates that its
-network name, node set, and channels match recorded state before using its funding declaration.
-Guessing funding from current balances is prohibited.
+Legacy unversioned `layout.json` files record nodes and channel capacities but not the original
+per-node funding, so they cannot reconstruct a faithful topology by themselves. Current layouts
+persist schema version 1 and the normalized topology. A legacy layout is exportable only with
+`--topology <file>` (or the SDK equivalent); the exporter validates that its network name, ordered
+node set, and channels match recorded state before using its funding declaration. Guessing funding
+from current balances is prohibited.
 
 ### Diagnostic bundle
 
@@ -95,8 +95,9 @@ Contains the recipe files and an allowlisted subset of:
 - `diagnostics/network.json`: sanitized `inspect` result;
 - `diagnostics/channels.json`: sanitized channel rows;
 - `diagnostics/faults.json`: sanitized fault observations; and
-- `diagnostics/logs/ckb.log` and `diagnostics/logs/<node>.log`: at most 64 KiB per tail and 512 KiB
-  for all logs combined.
+- `diagnostics/logs/ckb.log` and `diagnostics/logs/node-<node>.log`: at most 64 KiB per tail and
+  512 KiB for all logs combined. The `node-` prefix keeps a node named `ckb` distinct from the
+  chain log.
 
 Diagnostics are inert evidence. Replay never reads them to choose images, resource names, actions,
 or expected assertions.
@@ -149,8 +150,8 @@ provenance must come from the transport, repository commit, or separately signed
 provisioning, the importer must:
 
 1. require a regular input file no larger than 4 MiB;
-2. stream decompression with a 2 MiB uncompressed limit, at most 64 entries, a 1 MiB per-entry limit,
-   a 64 KiB manifest limit, and a 64 KiB per-log/512 KiB aggregate-log limit;
+2. bounded decompression with a 2 MiB uncompressed limit, at most 64 entries, a 1 MiB per-entry
+   limit, a 64 KiB manifest limit, and a 64 KiB per-log/512 KiB aggregate-log limit;
 3. reject absolute paths, `.`/`..`, empty segments, backslashes, NULs, non-ASCII names, names over
    240 bytes, duplicates, case-fold collisions, and every path outside the level allowlist;
 4. reject symlinks, hard links, devices, FIFOs, sparse files, PAX/GNU extensions, nested archives,
@@ -180,7 +181,7 @@ not pull images, contact Docker, create files beside the bundle, or execute a sc
 | Fiber Forge package | Exact generator version is supported. A different version may inspect the base envelope but replay is rejected; re-export with the installed version. |
 | CKB/Fiber images | References must exactly equal the installed package's pinned references. Replay refuses arbitrary or drifted image references. A native manifest for the target Docker daemon is required. |
 | OS/architecture | Linux amd64 and macOS arm64 with Docker Desktop are supported using their native image variants. Other hosts are rejected until the compatibility matrix records full live evidence. |
-| Docker/Node | The exact verified host rows are supported. Other versions on an otherwise supported host are best effort for inspection and rejected for replay unless the compatibility policy is updated with evidence. |
+| Docker/Node | Replay requires Node.js 20 or newer on a supported host family. The manifest records source versions as evidence, but patch-level Docker differences are not a replay input. Docker availability and native-image compatibility still fail before provisioning. |
 | Source to target host | Recipe replay between the two supported host rows is supported because keys, ports, subnet, chain, and databases are regenerated. Source image IDs may differ by native architecture; image references must not. |
 | Reports | Assertion type, expected value, pass/fail outcome, and aggregate result are comparable. Timestamps, durations, attempts, public keys, addresses, hashes, channel IDs, ports, and diagnostic text are informational and may differ. |
 | Exact state/channel restore | Unsupported on every version and host. |
@@ -207,8 +208,9 @@ resources or state already exist. Cleanup is scoped by that validated name and F
 ## Reviewable sample
 
 [`examples/export-v1`](examples/export-v1/manifest.json) is the logical, uncompressed form of a recipe
-bundle. Its manifest hashes are checked in CI. The test verifies that the sample has no
-secret-shaped content, symlinks, unexpected files, oversized entries, or forbidden persisted-state
-names such as `ckb/key`, `fiber/sk`, `fiber/store`, and Docker volume data. The sample is
-documentation evidence; the export implementation will produce the equivalent normalized
-`.ffbundle` archive and test hostile archive rejection directly.
+bundle, and [`failure.ffbundle`](examples/export-v1/failure.ffbundle) is its deterministic shareable
+archive. CI rebuilds the archive, verifies every manifest hash, inspects it through the production
+importer, and checks that it has no secret-shaped content, symlinks, unexpected files, oversized
+entries, or forbidden persisted-state names such as `ckb/key`, `fiber/sk`, `fiber/store`, and Docker
+volume data. Security tests also exercise traversal, link, expansion, hash, schema, cancellation,
+and cleanup rejection paths directly.

@@ -1,3 +1,10 @@
+import {
+  type BundleInspection,
+  type ExportBundleOptions,
+  type ExportBundleResult,
+  type ReplayBundleOptions,
+  type ReplayBundleResult,
+} from "./bundle.js";
 import { type LayoutOptions, type NetworkLayout } from "./config.js";
 import { type ForgeErrorDetails } from "./errors.js";
 import { type FaultKind, type FaultReport } from "./faults.js";
@@ -14,8 +21,35 @@ import {
   type ForceCloseOptions,
   type UpOptions,
 } from "./orchestrator.js";
+import {
+  type Scenario,
+  type ScenarioReport,
+  type ScenarioRunOptions,
+} from "./scenario.js";
 import { type Topology } from "./topology.js";
 export { version } from "./version.js";
+export {
+  BUNDLE_SCHEMA_VERSION,
+  DEFAULT_REPLAY_TIMEOUT_MS,
+  MAX_BUNDLE_BYTES,
+  MAX_BUNDLE_ENTRIES,
+  MAX_BUNDLE_EXPANDED_BYTES,
+  MAX_REPLAY_TIMEOUT_MS,
+} from "./bundle.js";
+export type {
+  BundleArtifactManifest,
+  BundleArtifactRole,
+  BundleCompatibility,
+  BundleInspection,
+  BundleLevel,
+  ExportBundleOptions,
+  ExportBundleResult,
+  ExportManifest,
+  PortableAssertionResult,
+  PortableScenarioReport,
+  ReplayBundleOptions,
+  ReplayBundleResult,
+} from "./bundle.js";
 export { ForgeError, errorDetails } from "./errors.js";
 export type { ForgeErrorCode, ForgeErrorDetails } from "./errors.js";
 export { FAULT_KINDS, isFaultKind } from "./faults.js";
@@ -42,6 +76,27 @@ export type {
   Topology,
 } from "./topology.js";
 export { line, preset, presetNames, ring, star } from "./presets.js";
+export {
+  SCENARIO_REPORT_VERSION,
+  SCENARIO_SCHEMA_VERSION,
+  ScenarioError,
+  parseScenario,
+} from "./scenario.js";
+export type {
+  AssertionResult,
+  BalanceAsset,
+  BalanceOperator,
+  Scenario,
+  ScenarioAction,
+  ScenarioAssertion,
+  ScenarioExpectation,
+  ScenarioNodeStatus,
+  ScenarioReport,
+  ScenarioRunOptions,
+  ScenarioStep,
+  ScenarioTiming,
+  StepResult,
+} from "./scenario.js";
 export type { LayoutOptions, NetworkLayout, NodeLayout } from "./config.js";
 export { DEFAULT_PROVISION_TIMEOUT_MS } from "./orchestrator.js";
 export type {
@@ -81,6 +136,20 @@ export declare function planNetwork(
  */
 export interface FiberForge {
   up(topology: Topology, options?: UpOptions): Promise<NetworkLayout>;
+  runScenario(
+    net: string,
+    scenario: Scenario | string,
+    options?: ScenarioRunOptions,
+  ): Promise<ScenarioReport>;
+  exportBundle(
+    net: string,
+    options: ExportBundleOptions,
+  ): Promise<ExportBundleResult>;
+  inspectBundle(path: string): Promise<BundleInspection>;
+  replayBundle(
+    path: string,
+    options: ReplayBundleOptions,
+  ): Promise<ReplayBundleResult>;
   inspect(net: string): Promise<NetworkView>;
   inspectNode(net: string, node: string): Promise<NodeLifecycleReport>;
   stopNode(net: string, node: string): Promise<NodeLifecycleReport>;

@@ -28,6 +28,7 @@ graph GUI.
 5. Public ESM SDK at `@truthixify/fiber-forge/sdk` for supported lifecycle and topology automation.
 6. Versioned scenario specifications with bounded assertions, stable error expectations, and
    machine-readable reports suitable for CI.
+7. Secret-safe recipe/diagnostic exports with integrity validation and clean-state replay.
 
 ## 3. Scope
 
@@ -108,6 +109,10 @@ GUI (React/vite, served on localhost) ──► fiber-forge daemon HTTP+WS API (
   confirmation, and is never substituted for cooperative close. Success requires both terminal
   Fiber settlement flags and a committed CKB closing transaction; timeouts retain observable
   transaction and state evidence for later inspection.
+- FR-14 Export re-serializes only validated logical inputs and bounded diagnostics into a versioned,
+  hashed bundle. Inspect performs no execution. Replay validates before Docker access, requires a
+  fresh caller-selected network, creates new keys/state, compares portable outcomes, and purges all
+  resources it created.
 
 ## 7. Topology schema (YAML)
 

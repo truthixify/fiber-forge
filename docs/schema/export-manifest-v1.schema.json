@@ -141,7 +141,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 240,
-          "pattern": "^(?:topology\\.json|scenario\\.json|report\\.json|diagnostics/(?:network|channels|faults)\\.json|diagnostics/logs/(?:ckb|[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?)\\.log)$"
+          "pattern": "^(?:topology\\.json|scenario\\.json|report\\.json|diagnostics/(?:network|channels|faults)\\.json|diagnostics/logs/(?:ckb|node-[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?)\\.log)$"
         },
         "role": {
           "enum": [
@@ -236,7 +236,7 @@
           "then": {
             "properties": {
               "path": {
-                "pattern": "^(?!diagnostics/logs/ckb\\.log$)diagnostics/logs/[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?\\.log$"
+                "pattern": "^diagnostics/logs/node-[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?\\.log$"
               },
               "mediaType": { "const": "text/plain" }
             }

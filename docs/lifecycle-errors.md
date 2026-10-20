@@ -22,6 +22,9 @@ when Fiber Forge can identify a specific target and safe next step.
 
 | Code | Meaning |
 | --- | --- |
+| `BUNDLE_INVALID` | An export input or imported archive failed schema, integrity, size, path, report/scenario, or secret-safety validation. |
+| `BUNDLE_INCOMPATIBLE` | A bundle schema, generator package, image pin, or target host cannot be replayed by this installation. Inspection may still report package/image incompatibility without executing. |
+| `BUNDLE_OUTPUT_EXISTS` | Export refused to replace the requested output file. The existing file is retained unchanged. |
 | `DOCKER_UNAVAILABLE` | The Docker socket is missing, refused the connection, or is inaccessible. |
 | `FAULT_UNSUPPORTED` | The active engine lacks a required portable primitive, or the requested fault kind is unknown. |
 | `FAULT_PRECONDITION_FAILED` | A fault target, process state, or argument does not satisfy the documented precondition. |
@@ -34,7 +37,7 @@ when Fiber Forge can identify a specific target and safe next step.
 | `PORT_IN_USE` | A requested port is occupied or overlaps another requested binding. |
 | `INVALID_PORT` | A requested port or port range is outside the TCP port range. |
 | `INVALID_TIMEOUT` | The requested provisioning timeout is not a positive finite number. |
-| `NETWORK_EXISTS` | A same-name Fiber Forge network still has running containers. |
+| `NETWORK_EXISTS` | A same-name network or replay target has pre-existing state, containers, network, or volume. Replay never replaces it. |
 | `NETWORK_NOT_FOUND` | No readable saved layout exists for the requested network. |
 | `MINING_PAUSED` | A mining-dependent operation was rejected before submission while the mining fault is active. |
 | `NODE_NOT_FOUND` | The saved network has no node with the requested name. |
@@ -61,6 +64,8 @@ These codes describe the CLI and public SDK lifecycle contract. The SDK exports 
 - Exited, Fiber Forge-labeled containers and their stale network, CKB volume, and bind-mounted node
   state are removed before a fresh provisioning attempt.
 - A failure after provisioning begins triggers `down --purge` semantics for that network only.
+- Replay validates the whole bundle before provisioning, requires an absent target, and purges a
+  successfully provisioned target after success, mismatch, later failure, timeout, or cancellation.
 - Teardown continues across individual resource failures and reports every resource it could not
   remove. If a container remains, its bind-mounted state is retained for the next teardown attempt.
   Repeating teardown is safe when containers, networks, volumes, or state are already gone.

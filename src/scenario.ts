@@ -7,6 +7,7 @@ import { parse as parseYaml } from "yaml";
 import {
   errorDetails,
   FORGE_ERROR_CODES,
+  ForgeError,
   type ForgeErrorCode,
   type ForgeErrorDetails,
 } from "./errors.js";
@@ -176,6 +177,11 @@ export interface ScenarioReport {
   passed: boolean;
   summary: { total: number; passed: number; failed: number };
   steps: StepResult[];
+}
+
+export interface ScenarioRunOptions {
+  onStep?: (result: StepResult) => void;
+  signal?: AbortSignal;
 }
 
 /** The live operations used by the scenario runner. Orchestrator satisfies this interface. */
@@ -840,7 +846,9 @@ export async function runScenario(
   net: string,
   scenario: Scenario,
   onStep: (result: StepResult) => void = () => {},
+  signal?: AbortSignal,
 ): Promise<ScenarioReport> {
+  throwIfScenarioAborted(signal, net);
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
   const steps: StepResult[] = [];
@@ -848,7 +856,15 @@ export async function runScenario(
 
   for (let iteration = 0; iteration < scenario.loop; iteration += 1) {
     for (const step of scenario.steps) {
-      const result = await runStep(backend, net, step, index, iteration);
+      throwIfScenarioAborted(signal, net);
+      const result = await runStep(
+        backend,
+        net,
+        step,
+        index,
+        iteration,
+        signal,
+      );
       steps.push(result);
       onStep(result);
       index += 1;
@@ -887,6 +903,7 @@ async function runStep(
   step: ScenarioStep,
   index: number,
   iteration: number,
+  signal?: AbortSignal,
 ): Promise<StepResult> {
   const started = Date.now();
   let execution: ActionExecution | undefined;
@@ -895,7 +912,12 @@ async function runStep(
 
   if (step.action.type === "assert") {
     assertions.push(
-      await runDeclarativeAssertion(backend, net, step.action.assertion),
+      await runDeclarativeAssertion(
+        backend,
+        net,
+        step.action.assertion,
+        signal,
+      ),
     );
     execution = {
       summary: assertionSummary(assertions[0]),
@@ -903,8 +925,9 @@ async function runStep(
     };
   } else {
     try {
-      execution = await executeAction(backend, net, step.action);
+      execution = await executeAction(backend, net, step.action, signal);
     } catch (error) {
+      throwIfScenarioAborted(signal, net);
       failure = safeErrorDetails(error);
     }
 
@@ -954,6 +977,8 @@ async function runStep(
             );
             return { actual, passed: actual === step.expect?.expected };
           },
+          signal,
+          net,
         ),
       );
     }
@@ -992,10 +1017,11 @@ async function executeAction(
   backend: ScenarioBackend,
   net: string,
   action: Exclude<ScenarioAction, { type: "assert" }>,
+  signal?: AbortSignal,
 ): Promise<ActionExecution> {
   switch (action.type) {
     case "wait":
-      await delay(action.durationMs);
+      await delay(action.durationMs, signal, net);
       return {
         summary: `waited ${action.durationMs}ms`,
         actual: { durationMs: action.durationMs },
@@ -1096,6 +1122,7 @@ async function runDeclarativeAssertion(
   backend: ScenarioBackend,
   net: string,
   assertion: ScenarioAssertion,
+  signal?: AbortSignal,
 ): Promise<AssertionResult> {
   if (assertion.type === "node_status") {
     return pollAssertion(
@@ -1108,6 +1135,8 @@ async function runDeclarativeAssertion(
         );
         return { actual, passed: actual === assertion.expected };
       },
+      signal,
+      net,
     );
   }
   if (assertion.type === "channel_state") {
@@ -1133,6 +1162,8 @@ async function runDeclarativeAssertion(
           : null;
         return { actual, passed: channel?.state === assertion.expected };
       },
+      signal,
+      net,
     );
   }
 
@@ -1141,25 +1172,32 @@ async function runDeclarativeAssertion(
     operator: assertion.operator,
     amount: assertion.amount,
   };
-  return pollAssertion(assertion.type, expected, assertion, async () => {
-    const view = await backend.inspect(net);
-    const node = view.nodes.find(
-      (candidate) => candidate.name === assertion.node,
-    );
-    if (!node) return { actual: null, passed: false };
-    const baseUnits = exactBalance(node, assertion.asset);
-    const wanted = BigInt(assertion.amountBaseUnits);
-    const passed =
-      assertion.operator === "eq"
-        ? baseUnits === wanted
-        : assertion.operator === "gte"
-          ? baseUnits >= wanted
-          : baseUnits <= wanted;
-    return {
-      actual: { asset: assertion.asset, amount: formatBaseUnits(baseUnits) },
-      passed,
-    };
-  });
+  return pollAssertion(
+    assertion.type,
+    expected,
+    assertion,
+    async () => {
+      const view = await backend.inspect(net);
+      const node = view.nodes.find(
+        (candidate) => candidate.name === assertion.node,
+      );
+      if (!node) return { actual: null, passed: false };
+      const baseUnits = exactBalance(node, assertion.asset);
+      const wanted = BigInt(assertion.amountBaseUnits);
+      const passed =
+        assertion.operator === "eq"
+          ? baseUnits === wanted
+          : assertion.operator === "gte"
+            ? baseUnits >= wanted
+            : baseUnits <= wanted;
+      return {
+        actual: { asset: assertion.asset, amount: formatBaseUnits(baseUnits) },
+        passed,
+      };
+    },
+    signal,
+    net,
+  );
 }
 
 async function pollAssertion(
@@ -1167,6 +1205,8 @@ async function pollAssertion(
   expected: unknown,
   timing: ScenarioTiming,
   probe: () => Promise<{ actual: unknown; passed: boolean }>,
+  signal?: AbortSignal,
+  net = "scenario",
 ): Promise<AssertionResult> {
   const started = Date.now();
   let attempts = 0;
@@ -1174,6 +1214,7 @@ async function pollAssertion(
   let diagnostic: string | undefined;
 
   while (true) {
+    throwIfScenarioAborted(signal, net);
     attempts += 1;
     try {
       const observation = await probe();
@@ -1190,6 +1231,7 @@ async function pollAssertion(
         };
       }
     } catch (error) {
+      throwIfScenarioAborted(signal, net);
       const details = safeErrorDetails(error);
       actual = { errorCode: details.code };
       diagnostic = `${details.code}: ${details.message}`;
@@ -1208,7 +1250,11 @@ async function pollAssertion(
           diagnostic ?? `expectation was not met within ${timing.timeoutMs}ms`,
       };
     }
-    await delay(Math.min(timing.pollIntervalMs, timing.timeoutMs - elapsed));
+    await delay(
+      Math.min(timing.pollIntervalMs, timing.timeoutMs - elapsed),
+      signal,
+      net,
+    );
   }
 }
 
@@ -1283,8 +1329,48 @@ function sanitizeText(value: string): string {
     .slice(0, MAX_TEXT_LENGTH);
 }
 
-function delay(durationMs: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, durationMs));
+function throwIfScenarioAborted(
+  signal: AbortSignal | undefined,
+  net: string,
+): void {
+  if (!signal?.aborted) return;
+  if (signal.reason instanceof ForgeError) throw signal.reason;
+  throw new ForgeError(
+    "OPERATION_ABORTED",
+    `scenario on "${net}" was aborted`,
+    {
+      resource: net,
+      action: "retry with a fresh AbortSignal when ready",
+      cause: signal.reason,
+    },
+  );
+}
+
+function delay(
+  durationMs: number,
+  signal?: AbortSignal,
+  net = "scenario",
+): Promise<void> {
+  throwIfScenarioAborted(signal, net);
+  if (!signal) {
+    return new Promise((resolve) => setTimeout(resolve, durationMs));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => finish(resolve), durationMs);
+    const onAbort = () => {
+      try {
+        throwIfScenarioAborted(signal, net);
+      } catch (error) {
+        finish(() => reject(error));
+      }
+    };
+    const finish = (complete: () => void) => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      complete();
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

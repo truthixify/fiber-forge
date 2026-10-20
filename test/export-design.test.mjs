@@ -3,12 +3,14 @@ import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { buildBundleArchive, inspectBundleFile } from "../src/bundle";
 import { parseScenario } from "../src/scenario";
 import { parseTopology } from "../src/topology";
 
 const repoDir = fileURLToPath(new URL("..", import.meta.url));
 const sampleDir = join(repoDir, "docs", "examples", "export-v1");
 const allowedSampleFiles = [
+  "failure.ffbundle",
   "manifest.json",
   "report.json",
   "scenario.json",
@@ -114,7 +116,7 @@ describe("export bundle design", () => {
       schema.$defs.artifact.properties.path.pattern,
     );
     expect(allowedPath.test("topology.json")).toBe(true);
-    expect(allowedPath.test("diagnostics/logs/alice.log")).toBe(true);
+    expect(allowedPath.test("diagnostics/logs/node-alice.log")).toBe(true);
     for (const path of [
       "../topology.json",
       "/topology.json",
@@ -161,6 +163,26 @@ describe("export bundle design", () => {
       scenario: artifacts.get("scenario"),
     });
     expect(digest(recipeIdentity)).toBe(manifest.recipeDigest);
+
+    const artifactFiles = new Map(
+      await Promise.all(
+        manifest.artifacts.map(async (artifact) => [
+          artifact.path,
+          await readFile(join(sampleDir, artifact.path)),
+        ]),
+      ),
+    );
+    const checkedArchive = await readFile(join(sampleDir, "failure.ffbundle"));
+    expect(
+      checkedArchive.equals(buildBundleArchive(manifest, artifactFiles)),
+    ).toBe(true);
+    await expect(
+      inspectBundleFile(join(sampleDir, "failure.ffbundle")),
+    ).resolves.toMatchObject({
+      integrity: "verified",
+      redaction: "verified",
+      recipe: { network: "bundle-sample", expectedPassed: true },
+    });
 
     const topology = parseTopology(
       await readFile(join(sampleDir, "topology.json"), "utf8"),

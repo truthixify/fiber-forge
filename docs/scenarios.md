@@ -148,3 +148,9 @@ remain fail-fast because no live operation has started.
 Reports omit generated invoice strings and stack traces. Diagnostics redact invoice-like values,
 credential labels, and long hexadecimal secrets. Scenario files are still source code artifacts:
 do not put wallet seeds, private keys, tokens, or passwords in them.
+
+The SDK's `runScenario` accepts an `AbortSignal`; cancellation interrupts waits and assertion polls
+instead of turning cancellation into a failed assertion. Export bundles apply a tighter replay
+limit of 100 expanded steps and ten minutes of declared waits/polling. They reject cooperative
+close actions and channel-state selectors because source channel IDs and peer public keys are
+regenerated on a fresh network.

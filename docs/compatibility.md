@@ -22,6 +22,12 @@ version and pinned image references. It regenerates keys, ports, chain data, and
 stateful database/volume restore is unsupported. The complete decision table is in the
 [export and replay bundle contract](export-bundles.md).
 
+Replay enforces the supported host families (Linux amd64 or macOS arm64), Node.js 20 or newer, the
+exact generator package version, and exact pinned image references. The dated rows above record the
+exact Node/Docker versions exercised; patch-level Docker differences within a supported host family
+are not encoded into the bundle compatibility decision and still fail normally if the daemon or a
+native image is unavailable.
+
 ## Image Platform Preflight
 
 The repository's live verification checks the Docker daemon OS and architecture, fetches the

@@ -7,8 +7,8 @@ Fiber Forge separates fast unit/package CI from Docker-backed runtime evidence:
   and pull request.
 - [`e2e.yml`](https://github.com/truthixify/fiber-forge/actions/workflows/e2e.yml) installs and checks
   the packed artifact, verifies native manifests for both pinned images before pulling, then runs
-  real CKB/Fiber provisioning, multi-hop CKB payment, relay recovery, rollback, UDT, and cleanup
-  paths.
+  real CKB/Fiber provisioning, multi-hop CKB payment, relay recovery, safe export/fresh replay,
+  force-close settlement, rollback, UDT, and cleanup paths.
 
 ## Trigger And Release Policy
 

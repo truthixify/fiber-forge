@@ -33,6 +33,7 @@ const requiredPackageFiles = [
   "bin/fiber-forge.mjs",
   "dist/sdk.d.ts",
   "dist/sdk.js",
+  "docs/examples/export-v1/failure.ffbundle",
   "docs/examples/export-v1/manifest.json",
   "docs/examples/export-v1/report.json",
   "docs/examples/export-v1/scenario.json",
@@ -326,6 +327,27 @@ async function main() {
     assert.deepEqual(JSON.parse(jsonResult.stdout), []);
     assert.equal(jsonResult.stderr, "");
     assertNoAnsi("CLI JSON output", jsonResult.stdout);
+
+    const bundleResult = await run(
+      bin,
+      [
+        "bundle",
+        "inspect",
+        join(packageDir, "docs", "examples", "export-v1", "failure.ffbundle"),
+        "--json",
+      ],
+      { cwd: consumerDir, env: cliEnv },
+    );
+    requireSuccess("installed CLI bundle inspect", bundleResult);
+    assert.deepEqual(JSON.parse(bundleResult.stdout).recipe, {
+      network: "bundle-sample",
+      nodes: ["alice", "bob", "carol"],
+      channels: 2,
+      executions: 3,
+      expectedPassed: true,
+    });
+    assert.equal(bundleResult.stderr, "");
+    assertNoAnsi("CLI bundle inspect", bundleResult.stdout);
 
     const topologyResult = await run(
       bin,

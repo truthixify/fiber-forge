@@ -8,6 +8,7 @@
 
 import {
   cp,
+  lstat,
   mkdir,
   readFile,
   readdir,
@@ -15,10 +16,20 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import {
+  inspectBundleFile,
+  replayBundleFile,
+  writeExportBundle,
+  type BundleDiagnostics,
+  type BundleInspection,
+  type ExportBundleOptions,
+  type ExportBundleResult,
+  type ReplayBundleOptions,
+  type ReplayBundleResult,
+} from "./bundle.js";
 import {
   type CkbTransactionStatus,
   DevChain,
@@ -55,6 +66,7 @@ import {
   parseFaultFile,
 } from "./faults.js";
 import { encryptKey, generatePrivateKey } from "./keys.js";
+import { runtimeImages } from "./package-metadata.js";
 import { findFreePort, findFreePortBlock, isPortFree } from "./ports.js";
 import {
   type Channel,
@@ -71,15 +83,24 @@ import {
   peerIdOf,
   shannonHexToCkb,
 } from "./rpc.js";
-import { isValidNetworkName, type Topology } from "./topology.js";
+import {
+  parseScenario,
+  runScenario as executeScenario,
+  type Scenario,
+  type ScenarioReport,
+  type ScenarioRunOptions,
+} from "./scenario.js";
+import {
+  isValidNetworkName,
+  parseTopology,
+  validateTopology,
+  type Topology,
+} from "./topology.js";
 
 export const FORGE_LABEL = "fiber-forge";
 const FAULT_NETWORK_LABEL = "fiber-forge.fault";
-const packageMetadata = createRequire(import.meta.url)("../package.json") as {
-  fiberForge: { images: { ckb: string; fiber: string } };
-};
-export const DEFAULT_FNN_IMAGE = packageMetadata.fiberForge.images.fiber;
-export const DEFAULT_CKB_IMAGE = packageMetadata.fiberForge.images.ckb;
+export const DEFAULT_FNN_IMAGE = runtimeImages.fiber;
+export const DEFAULT_CKB_IMAGE = runtimeImages.ckb;
 
 const sleep = (ms: number) =>
   new Promise<void>((resolvePromise) => setTimeout(resolvePromise, ms));
@@ -178,6 +199,8 @@ export interface UpOptions {
   signal?: AbortSignal;
   /** Overall provisioning deadline in milliseconds. Defaults to 10 minutes. */
   timeoutMs?: number;
+  /** Require an entirely absent target instead of replacing stale managed state. Used by replay. */
+  requireClean?: boolean;
   /** If set, issue this many whole UDT to every node and mirror each channel as a UDT channel. */
   udtPerNode?: number;
 }
@@ -245,6 +268,8 @@ export function nodeContainerSpec(
 
 /** The persisted layout of a running network (`~/.fiber-forge/<net>/layout.json`). */
 export interface NetworkState {
+  /** Current layouts persist the normalized recipe needed for safe export. */
+  schemaVersion?: 1;
   net: string;
   network: string;
   ckbHostPort: number;
@@ -260,6 +285,8 @@ export interface NetworkState {
     ckbAddress: string;
   }[];
   channels: { from: string; to: string; capacityCkb: number }[];
+  /** Absent only in legacy layouts, which require an explicit topology during export. */
+  topology?: Topology;
 }
 
 /** A live view of a network for the GUI: block height, node status + balances, live channels. */
@@ -618,8 +645,13 @@ export class Orchestrator {
       options.layout ?? {},
     );
     guard.check("port preflight");
-    await this.prepareNetwork(topology.name);
-    guard.check("stale resource cleanup");
+    if (options.requireClean) {
+      await this.assertReplayTopologyClean(topology);
+      guard.check("clean replay target preflight");
+    } else {
+      await this.prepareNetwork(topology.name);
+      guard.check("stale resource cleanup");
+    }
     if (!layoutOptions.subnetBase) {
       layoutOptions.subnetBase = pickSubnetBase(
         topology.name,
@@ -636,7 +668,9 @@ export class Orchestrator {
       guard.check(phase);
       log(`network ${layout.network} (${layout.subnet})`);
       guard.check(phase);
-      await this.engine.ensureNetwork(layout.network, layout.subnet);
+      await this.engine.ensureNetwork(layout.network, layout.subnet, {
+        labels: { [FORGE_LABEL]: layout.net },
+      });
       guard.check(phase);
 
       phase = `CKB container ${layout.ckbContainer}`;
@@ -825,6 +859,7 @@ export class Orchestrator {
       }
 
       const state: NetworkState = {
+        schemaVersion: 1,
         net: layout.net,
         network: layout.network,
         ckbHostPort: layout.ckbHostPort,
@@ -843,6 +878,12 @@ export class Orchestrator {
           to: c.to,
           capacityCkb: c.capacityCkb,
         })),
+        topology: {
+          name: topology.name,
+          nodes: topology.nodes.map((node) => ({ ...node })),
+          channels: topology.channels.map((channel) => ({ ...channel })),
+          funding: { ...topology.funding },
+        },
       };
       await writeFile(
         join(netDir, "layout.json"),
@@ -1999,6 +2040,206 @@ export class Orchestrator {
         : this.requireNode(state, node).container;
     const raw = await this.engine.logs(container, tailLines);
     return level ? filterLogsByLevel(raw, level) : raw;
+  }
+
+  /** Run a validated scenario through the supported SDK surface. */
+  async runScenario(
+    net: string,
+    scenario: Scenario | string,
+    options: ScenarioRunOptions = {},
+  ): Promise<ScenarioReport> {
+    const parsed =
+      typeof scenario === "string" ? parseScenario(scenario) : scenario;
+    return executeScenario(this, net, parsed, options.onStep, options.signal);
+  }
+
+  /** Export a canonical recipe and optional bounded diagnostics without copying node state. */
+  async exportBundle(
+    net: string,
+    options: ExportBundleOptions,
+  ): Promise<ExportBundleResult> {
+    const state = await this.readState(net);
+    const topology = this.topologyForExport(state, options.topology);
+    let diagnostics: BundleDiagnostics | undefined;
+    if (options.diagnostics) {
+      const logs: Record<string, string> = {
+        ckb: await this.logs(net, "ckb", 2_000),
+      };
+      for (const node of state.nodes) {
+        logs[`node-${node.name}`] = await this.engine.logs(
+          node.container,
+          2_000,
+        );
+      }
+      const [network, channels, faults] = await Promise.all([
+        this.inspect(net),
+        this.channels(net),
+        this.faultStatus(net),
+      ]);
+      diagnostics = {
+        network,
+        channels,
+        faults,
+        logs,
+        privatePaths: [this.stateDir],
+      };
+    }
+    return writeExportBundle({
+      topology,
+      scenario: options.scenario,
+      report: options.report,
+      output: options.output,
+      sourceHost: { docker: await this.engine.version() },
+      ...(diagnostics ? { diagnostics } : {}),
+    });
+  }
+
+  /** Inspect and verify an untrusted bundle without contacting Docker. */
+  async inspectBundle(path: string): Promise<BundleInspection> {
+    return inspectBundleFile(path);
+  }
+
+  /** Replay a bundle on a fresh network and purge that network before returning. */
+  async replayBundle(
+    path: string,
+    options: ReplayBundleOptions,
+  ): Promise<ReplayBundleResult> {
+    return replayBundleFile(this, path, options);
+  }
+
+  /** Replay must never inherit, replace, or clean resources that existed before it started. */
+  async assertReplayTargetClean(net: string): Promise<void> {
+    this.requireNetworkName(net);
+    let stateExists = false;
+    try {
+      await lstat(join(this.stateDir, net));
+      stateExists = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const [containers, networkExists, volumeExists] = await Promise.all([
+      this.engine.listByLabel(FORGE_LABEL, net),
+      this.engine.networkExists(`forge-${net}`),
+      this.engine.volumeExists(`forge-${net}-ckb-data`),
+    ]);
+    const resources = [
+      ...(stateExists ? [`state ${join(this.stateDir, net)}`] : []),
+      ...containers.map((container) => `container ${container}`),
+      ...(networkExists ? [`network forge-${net}`] : []),
+      ...(volumeExists ? [`volume forge-${net}-ckb-data`] : []),
+    ];
+    if (resources.length > 0) {
+      throw new ForgeError(
+        "NETWORK_EXISTS",
+        `replay target "${net}" is not clean: ${resources.join(", ")}`,
+        {
+          resource: net,
+          action:
+            "choose a fresh replay network name; existing resources are never replaced",
+        },
+      );
+    }
+  }
+
+  private async assertReplayTopologyClean(topology: Topology): Promise<void> {
+    await this.assertReplayTargetClean(topology.name);
+    const names = [
+      `forge-${topology.name}-ckb`,
+      ...topology.nodes.map(
+        (_node, index) => `forge-${topology.name}-node-${index + 1}`,
+      ),
+    ];
+    const faultNetworks = topology.nodes.map(
+      (_node, index) => `ffault-${topology.name}-${index + 1}`,
+    );
+    const [occupied, existingFaultNetworks] = await Promise.all([
+      Promise.all(
+        names.map(async (name) => ({
+          name,
+          status: await this.engine.status(name),
+        })),
+      ).then((entries) => entries.filter((entry) => entry.status !== "absent")),
+      Promise.all(
+        faultNetworks.map(async (name) => ({
+          name,
+          exists: await this.engine.networkExists(name),
+        })),
+      ).then((entries) => entries.filter((entry) => entry.exists)),
+    ]);
+    if (occupied.length > 0 || existingFaultNetworks.length > 0) {
+      const conflicts = [
+        ...occupied.map((entry) => `container ${entry.name} (${entry.status})`),
+        ...existingFaultNetworks.map((entry) => `network ${entry.name}`),
+      ];
+      throw new ForgeError(
+        "NETWORK_EXISTS",
+        `replay target "${topology.name}" has conflicting resources: ${conflicts.join(", ")}`,
+        {
+          resource: topology.name,
+          action:
+            "choose a fresh replay network name; external containers are never replaced",
+        },
+      );
+    }
+  }
+
+  private topologyForExport(
+    state: NetworkState,
+    fallback?: Topology | string,
+  ): Topology {
+    const normalize = (value: Topology): Topology =>
+      validateTopology({
+        name: value.name,
+        nodes: value.nodes.map((node) => ({ name: node.name })),
+        channels: value.channels.map((channel) => ({
+          from: channel.from,
+          to: channel.to,
+          capacity_ckb: channel.capacityCkb,
+        })),
+        funding: { per_node_ckb: value.funding.perNodeCkb },
+      });
+    const topology = state.topology
+      ? normalize(state.topology)
+      : fallback
+        ? typeof fallback === "string"
+          ? parseTopology(fallback)
+          : normalize(fallback)
+        : undefined;
+    if (!topology) {
+      throw new ForgeError(
+        "BUNDLE_INVALID",
+        `legacy network "${state.net}" does not record its original funding topology`,
+        {
+          resource: state.net,
+          action: "provide the original topology with --topology and retry",
+        },
+      );
+    }
+    const expectedNodes = state.nodes.map((node) => node.name);
+    const actualNodes = topology.nodes.map((node) => node.name);
+    const expectedChannels = state.channels.map(
+      (channel) =>
+        `${channel.from}\0${channel.to}\0${String(channel.capacityCkb)}`,
+    );
+    const actualChannels = topology.channels.map(
+      (channel) =>
+        `${channel.from}\0${channel.to}\0${String(channel.capacityCkb)}`,
+    );
+    if (
+      topology.name !== state.net ||
+      expectedNodes.join("\0") !== actualNodes.join("\0") ||
+      expectedChannels.join("\n") !== actualChannels.join("\n")
+    ) {
+      throw new ForgeError(
+        "BUNDLE_INVALID",
+        `topology does not match the recorded nodes and channels for "${state.net}"`,
+        {
+          resource: state.net,
+          action: "use the exact topology that created this network",
+        },
+      );
+    }
+    return topology;
   }
 
   private queueFault<T>(net: string, operation: () => Promise<T>): Promise<T> {

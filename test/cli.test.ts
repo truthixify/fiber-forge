@@ -140,6 +140,34 @@ describe("resolveTopology", () => {
     ).toBe(true);
   });
 
+  it("registers export, inert bundle inspection, and replay commands", async () => {
+    const cli = buildCli();
+    expect(cli.commands.map((command) => command.name())).toEqual(
+      expect.arrayContaining(["export", "bundle", "replay"]),
+    );
+    const bundle = cli.commands.find((command) => command.name() === "bundle");
+    expect(bundle?.commands.map((command) => command.name())).toEqual([
+      "inspect",
+    ]);
+
+    const stdout = vi.spyOn(console, "log").mockImplementation(() => {});
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+    await main([
+      "node",
+      "fiber-forge",
+      "bundle",
+      "inspect",
+      "docs/examples/export-v1/failure.ffbundle",
+      "--json",
+    ]);
+    expect(stderr).not.toHaveBeenCalled();
+    expect(JSON.parse(String(stdout.mock.calls[0][0]))).toMatchObject({
+      integrity: "verified",
+      redaction: "verified",
+      recipe: { network: "bundle-sample", executions: 3 },
+    });
+  });
+
   it("emits a structured force-close confirmation failure in JSON mode", async () => {
     const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
 

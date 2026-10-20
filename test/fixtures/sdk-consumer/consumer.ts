@@ -18,10 +18,18 @@ import {
   type NetworkLayout,
   type NetworkView,
   type ChannelSettlementReport,
+  type BundleInspection,
+  type ExportBundleOptions,
+  type ExportBundleResult,
   type MineReport,
   type NodeLifecycleOptions,
   type NodeLifecycleReport,
   type Topology,
+  type ReplayBundleOptions,
+  type ReplayBundleResult,
+  type Scenario,
+  type ScenarioReport,
+  type ScenarioRunOptions,
   type UpOptions,
 } from "@truthixify/fiber-forge/sdk";
 
@@ -44,6 +52,7 @@ type ExpectedUpOptions = {
   onProgress?: (message: string) => void;
   signal?: AbortSignal;
   timeoutMs?: number;
+  requireClean?: boolean;
   udtPerNode?: number;
 };
 type ExpectedDownOptions = { purge?: boolean; keep?: boolean };
@@ -64,6 +73,9 @@ type ExpectedNetworkLayout = {
   }[];
 };
 type ExpectedForgeErrorCode =
+  | "BUNDLE_INCOMPATIBLE"
+  | "BUNDLE_INVALID"
+  | "BUNDLE_OUTPUT_EXISTS"
   | "CHANNEL_NOT_FOUND"
   | "CHANNEL_STATE_MISMATCH"
   | "CONTAINER_NOT_FOUND"
@@ -126,6 +138,10 @@ const planned: NetworkLayout = planNetwork(topology, {
 type AppForge = Pick<
   FiberForge,
   | "up"
+  | "runScenario"
+  | "exportBundle"
+  | "inspectBundle"
+  | "replayBundle"
   | "inspect"
   | "inspectNode"
   | "stopNode"
@@ -188,3 +204,11 @@ void planned;
 void exerciseContract;
 void classify;
 void new ForgeError("OPERATION_ABORTED", "aborted");
+void ({} as BundleInspection);
+void ({} as ExportBundleOptions);
+void ({} as ExportBundleResult);
+void ({} as ReplayBundleOptions);
+void ({} as ReplayBundleResult);
+void ({} as Scenario);
+void ({} as ScenarioReport);
+void ({} as ScenarioRunOptions);

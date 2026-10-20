@@ -54,6 +54,8 @@ export interface ContainerSpec {
 }
 
 export interface ContainerEngine {
+  /** Docker daemon version used for compatibility evidence. */
+  version(): Promise<string>;
   /** Create the network with the given subnet if it does not already exist. */
   ensureNetwork(
     name: string,
@@ -107,6 +109,10 @@ export class FakeEngine implements ContainerEngine {
     { spec: ContainerSpec; status: ContainerStatus }
   >();
   readonly log: string[] = [];
+
+  async version(): Promise<string> {
+    return "fake";
+  }
 
   async ensureNetwork(
     name: string,
@@ -298,6 +304,21 @@ export class DockerEngine implements ContainerEngine {
 
   constructor(docker?: Docker) {
     this.docker = docker ?? new Docker();
+  }
+
+  async version(): Promise<string> {
+    try {
+      const info = await this.docker.version();
+      return String(info.Version ?? "unknown");
+    } catch (error) {
+      throw dockerFailure(
+        error,
+        "DOCKER_OPERATION_FAILED",
+        "could not read the Docker daemon version",
+        "docker",
+        "start Docker and retry",
+      );
+    }
   }
 
   async ensureNetwork(

@@ -1,5 +1,8 @@
 /** Stable failures used by machine-readable CLI output and scenario expectations. */
 export const FORGE_ERROR_CODES = [
+  "BUNDLE_INCOMPATIBLE",
+  "BUNDLE_INVALID",
+  "BUNDLE_OUTPUT_EXISTS",
   "CHANNEL_NOT_FOUND",
   "CHANNEL_STATE_MISMATCH",
   "CONTAINER_NOT_FOUND",

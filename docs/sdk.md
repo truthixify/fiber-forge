@@ -45,6 +45,7 @@ The SDK exports:
 - `createFiberForge`, `FiberForge`, and the high-level lifecycle option/result types;
 - `planNetwork`, which validates and plans deterministic names, ports, and addresses without Docker;
 - topology parsing, validation, limits, and topology types;
+- scenario parsing/running plus typed recipe export, inert bundle inspection, and fresh replay;
 - the `duo`, `trio`, and `hub` resolver plus line, ring, and star builders;
 - `ForgeError`, `errorDetails`, and the stable `ForgeErrorCode`/`ForgeErrorDetails` types;
 - layout, network view, channel, payment, and lifecycle option types; and
@@ -60,6 +61,10 @@ unsupported.
 | --- | --- | --- |
 | `planNetwork(topology, layout?)` | A `Topology`; returns a deterministic `NetworkLayout` without I/O. | Synchronous. It does not reserve ports or inspect Docker, so `up` can resolve conflicts differently when ports/subnets are omitted. |
 | `up(topology, options?)` | Returns the created `NetworkLayout` after every declared channel is ready and routing gossip is visible. | Ten-minute overall default (`DEFAULT_PROVISION_TIMEOUT_MS`), configurable with `timeoutMs`; accepts `signal`. Abort/timeout is cooperative, and rollback completes before rejection. |
+| `runScenario(net, scenario, options?)` | Accepts parsed `Scenario` or JSON/YAML source and returns a `ScenarioReport`. | The parser bounds actions and waits; `signal` interrupts waits/polling and rejects with `OPERATION_ABORTED`. |
+| `exportBundle(net, options)` | Writes a new recipe or diagnostic `.ffbundle`; returns its path, level, size, artifact count, and semantic digest. | Refuses overwrite. It canonicalizes topology/scenario/report data, omits descriptions, excludes all keys/databases/volumes, and bounds/redacts diagnostics. Legacy layouts require their original topology source. |
+| `inspectBundle(path)` | Returns verified manifest, recipe summary, and compatibility without exposing artifact contents. | Read-only: no Docker call, image pull, extraction, adjacent file, or scenario execution. The complete archive is validated first. |
+| `replayBundle(path, options)` | Provisions `options.network`, runs the recipe, compares portable outcomes, and returns `ReplayBundleResult`. | Requires an absent caller-selected target, exact package/image pins, a supported host, and a bounded timeout. Success, mismatch, cancellation, and post-provision failure all purge the target before return/rejection. |
 | `inspect(net)` / `list()` | Return `NetworkView` or `NetworkSummary[]`. | Best-effort inspection: unreachable nodes/chains are represented as stopped, zero, or omitted live data instead of making the whole view unavailable. RPC calls have a ten-second request bound. |
 | `inspectNode(net, node)` | Returns a `NodeLifecycleReport` without mutation. | Reads actual Docker state. A running node is checked for RPC identity, peers, and channels; stopped or externally removed containers remain explicit states. |
 | `stopNode` / `startNode` / `restartNode` | Return a shared `NodeLifecycleReport`; start/restart accept `NodeLifecycleOptions`. | Operations on the same node are serialized. Stop retains the exact container and mounted state. Start/restart wait up to 60 seconds for RPC and identity, then observe automatic peer/channel recovery for up to 10 seconds. Repeats return `changed: false` when already in the requested state. |
@@ -140,8 +145,9 @@ Fiber Forge does not provide.
 
 ## Stability Levels
 
-**Stable:** the `./sdk` export path; topology parsing/builders; `planNetwork`; `createFiberForge`;
-the `FiberForge` lifecycle methods; documented option/result types; and structured error codes.
+**Stable:** the `./sdk` export path; topology/scenario parsing; topology builders; `planNetwork`;
+`createFiberForge`; the `FiberForge` lifecycle and bundle methods; documented option/result types;
+and structured error codes.
 
 **Experimental:** overriding `ckbImage` or `fnnImage`, UDT issuance/channel behavior, and the exact
 human-readable progress messages. These are typed for current consumers but can change in a minor

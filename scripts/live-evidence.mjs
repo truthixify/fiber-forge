@@ -41,6 +41,7 @@ const FORGE_LABEL = "fiber-forge";
 const TEST_NETWORKS = [
   "e2e-multihop",
   "e2e-recovery",
+  "e2e-replay",
   "e2e-rollback-node",
   "e2e-rollback-peer",
   "e2e-rollback-channel",
@@ -607,7 +608,7 @@ function testDescriptor(name) {
   if (name.includes("relay node recovery")) {
     return {
       topology: "trio (3-node line)",
-      paths: ["recovery", "force-close"],
+      paths: ["recovery", "replay", "force-close"],
     };
   }
   if (name.includes("partial provisioning rollback")) {
@@ -681,6 +682,7 @@ export function buildEvidence({
     ["provisioning", "Real CKB/Fiber provisioning"],
     ["multi-hop-ckb", "Three-node multi-hop CKB payment"],
     ["recovery", "Stopped relay recovery + payment"],
+    ["replay", "Secret-safe outage export + fresh replay"],
     ["force-close", "Failed-peer recovery + terminal force-close settlement"],
     ["rollback", "Node/peer/channel rollback"],
     ["udt", "UDT issue/channel/payment regression"],

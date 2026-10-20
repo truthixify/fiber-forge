@@ -107,7 +107,10 @@ fiber-forge pay trio feynman galileo 100 --udt
 
 # traffic and scripting
 fiber-forge run my-net ./examples/payments.yml   # checked actions and assertions
-fiber-forge run my-net ./examples/outage-recovery.yml --json
+fiber-forge run my-net ./examples/outage-recovery.yml --json > report.json
+fiber-forge export my-net --scenario ./examples/outage-recovery.yml --report report.json --output outage.ffbundle
+fiber-forge bundle inspect outage.ffbundle --json # validates without Docker access
+fiber-forge replay outage.ffbundle --network outage-replay --json # always purges the replay network
 fiber-forge status trio --json | jq              # every data command accepts --json
 ```
 
@@ -121,7 +124,9 @@ payment/balance assertions, sanitized JSON reports, and CI exit codes. The check
 
 The accepted [export and replay bundle contract](docs/export-bundles.md) limits shareable artifacts
 to validated recipes and bounded diagnostics. Raw node keys, databases, and Docker volumes are
-excluded; exact channel-state restoration is explicitly unsupported.
+excluded; exact channel-state restoration is explicitly unsupported. A checked
+[`failure.ffbundle`](docs/examples/export-v1/failure.ffbundle) reproduces the documented relay
+outage without carrying source-machine state.
 
 ## Library API
 
@@ -221,9 +226,9 @@ also checks the Docker daemon architecture and both image manifest lists before 
 - **Richer assets** — xUDT with RCE rules, a stablecoin preset, and multiple named assets per node.
 - **Resilience** — stuck HTLC simulation and force-close/on-chain settlement visibility.
 - **Routing** — multi-path payments, per-hop fee and route inspection, and a view of the gossip graph.
-- **Scenarios** — shareable topology and traffic bundles with expected-outcome assertions.
+- **Scenarios** — a curated library of portable failure and recovery recipes.
 - **Cross-chain** — `cch` (Fiber ↔ Lightning) hub demos and BTC bridging.
-- **Reproducibility** — snapshot a network and its channel state so someone can replay a bug or demo.
+- **Reproducibility** — signed bundle provenance and broader cross-host replay evidence.
 
 Force-close is an explicit local-dev operation with full-ID confirmation and terminal settlement
 checks. See [Force-close and settlement](docs/force-close.md) for the RPC/state mapping and timeout
