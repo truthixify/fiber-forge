@@ -1,8 +1,13 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { type NetworkLayout } from "./config.js";
+import {
+  type LayoutOptions,
+  type NetworkLayout,
+  planLayout,
+} from "./config.js";
 import { DockerEngine } from "./engine.js";
+import { type ForgeErrorDetails } from "./errors.js";
 import {
   type ChannelRow,
   type DownOptions,
@@ -12,9 +17,11 @@ import {
   type PaymentReport,
   type UpOptions,
 } from "./orchestrator.js";
-import { type Topology } from "./topology.js";
+import { type Topology, validateTopology } from "./topology.js";
 
 export { version } from "./version.js";
+export { ForgeError, errorDetails } from "./errors.js";
+export type { ForgeErrorCode, ForgeErrorDetails } from "./errors.js";
 export {
   FUNDING_BUFFER_CKB,
   MAX_NODES,
@@ -32,6 +39,7 @@ export type {
 } from "./topology.js";
 export { line, preset, presetNames, ring, star } from "./presets.js";
 export type { LayoutOptions, NetworkLayout, NodeLayout } from "./config.js";
+export { DEFAULT_PROVISION_TIMEOUT_MS } from "./orchestrator.js";
 export type {
   ChannelRow,
   DownOptions,
@@ -46,6 +54,27 @@ export type {
 export interface FiberForgeOptions {
   /** Directory used for persisted network layouts. Defaults to `~/.fiber-forge`. */
   stateDir?: string;
+}
+
+/**
+ * Validate a topology and compute its deterministic names, subnet, and ports without accessing
+ * Docker or persisted state. Runtime port/subnet conflict resolution still occurs during `up`.
+ */
+export function planNetwork(
+  topology: Topology,
+  options: LayoutOptions = {},
+): NetworkLayout {
+  const validated = validateTopology({
+    name: topology.name,
+    nodes: topology.nodes,
+    channels: topology.channels.map((channel) => ({
+      from: channel.from,
+      to: channel.to,
+      capacity_ckb: channel.capacityCkb,
+    })),
+    funding: { per_node_ckb: topology.funding.perNodeCkb },
+  });
+  return planLayout(validated, options);
 }
 
 /**
@@ -97,6 +126,9 @@ export interface FiberForge {
     level?: string,
   ): Promise<string>;
 }
+
+/** A narrow, stable error result suitable for logging or serialization across app boundaries. */
+export type FiberForgeError = ForgeErrorDetails;
 
 /** Create a Docker-backed client using the assets bundled with the installed package. */
 export function createFiberForge(options: FiberForgeOptions = {}): FiberForge {

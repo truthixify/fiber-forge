@@ -29,15 +29,19 @@ when Fiber Forge can identify a specific target and safe next step.
 | `INVALID_NETWORK_NAME` | A network name is not safe for Docker resources or local state paths. |
 | `PORT_IN_USE` | A requested port is occupied or overlaps another requested binding. |
 | `INVALID_PORT` | A requested port or port range is outside the TCP port range. |
+| `INVALID_TIMEOUT` | The requested provisioning timeout is not a positive finite number. |
 | `NETWORK_EXISTS` | A same-name Fiber Forge network still has running containers. |
 | `NETWORK_NOT_FOUND` | No readable saved layout exists for the requested network. |
+| `OPERATION_ABORTED` | The caller's abort signal stopped provisioning; automatic rollback completed first. |
+| `OPERATION_TIMEOUT` | The overall provisioning deadline elapsed; automatic rollback completed first. |
 | `PROVISION_FAILED` | Provisioning failed at a named node, peer, channel, or routing phase. |
 | `ROLLBACK_FAILED` | Provisioning failed and automatic cleanup also encountered an error. |
 | `DOCKER_OPERATION_FAILED` | Another named Docker inspection or cleanup operation failed. |
 | `UNEXPECTED` | A failure outside the classified lifecycle paths. |
 
-These codes currently describe the CLI and internal orchestration contract. They are not added to
-the public SDK export surface in this release.
+These codes describe the CLI and public SDK lifecycle contract. The SDK exports `ForgeError`,
+`ForgeErrorCode`, `ForgeErrorDetails`, and `errorDetails` from
+`@truthixify/fiber-forge/sdk`.
 
 ## Cleanup Rules
 

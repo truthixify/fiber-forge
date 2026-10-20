@@ -51,14 +51,98 @@ const packageMetadata = createRequire(import.meta.url)("../package.json") as {
 export const DEFAULT_FNN_IMAGE = packageMetadata.fiberForge.images.fiber;
 export const DEFAULT_CKB_IMAGE = packageMetadata.fiberForge.images.ckb;
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) =>
+  new Promise<void>((resolvePromise) => setTimeout(resolvePromise, ms));
 const hex = (bytes: Uint8Array) => "0x" + Buffer.from(bytes).toString("hex");
+export const DEFAULT_PROVISION_TIMEOUT_MS = 10 * 60_000;
+
+class ProvisionGuard {
+  private readonly deadline: number;
+
+  constructor(
+    private readonly net: string,
+    private readonly timeoutMs: number,
+    private readonly signal?: AbortSignal,
+  ) {
+    this.deadline = Date.now() + timeoutMs;
+  }
+
+  check(resource: string): void {
+    if (this.signal?.aborted) {
+      throw new ForgeError(
+        "OPERATION_ABORTED",
+        `provisioning network "${this.net}" was aborted at ${resource}`,
+        {
+          resource,
+          action: "retry with a fresh AbortSignal when ready",
+          cause: this.signal.reason,
+        },
+      );
+    }
+    if (Date.now() >= this.deadline) {
+      throw new ForgeError(
+        "OPERATION_TIMEOUT",
+        `provisioning network "${this.net}" exceeded its ${this.timeoutMs}ms timeout at ${resource}`,
+        {
+          resource,
+          action: "increase UpOptions.timeoutMs or inspect the named resource",
+        },
+      );
+    }
+  }
+
+  remaining(limitMs: number, resource: string): number {
+    this.check(resource);
+    return Math.max(1, Math.min(limitMs, this.deadline - Date.now()));
+  }
+
+  async wait(delayMs: number, resource: string): Promise<void> {
+    this.check(resource);
+    const timeoutMs = Math.max(
+      0,
+      Math.min(delayMs, this.deadline - Date.now()),
+    );
+    await new Promise<void>((resolvePromise, rejectPromise) => {
+      let settled = false;
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.signal?.removeEventListener("abort", onAbort);
+        callback();
+      };
+      const onAbort = () =>
+        finish(() => {
+          try {
+            this.check(resource);
+          } catch (error) {
+            rejectPromise(error);
+          }
+        });
+      const timer = setTimeout(() => finish(resolvePromise), timeoutMs);
+      this.signal?.addEventListener("abort", onAbort, { once: true });
+    });
+    this.check(resource);
+  }
+}
+
+function waitWithGuard(
+  delayMs: number,
+  guard: ProvisionGuard | undefined,
+  resource: string,
+): Promise<void> {
+  return guard ? guard.wait(delayMs, resource) : sleep(delayMs);
+}
 
 export interface UpOptions {
   fnnImage?: string;
   ckbImage?: string;
   layout?: LayoutOptions;
   onProgress?: (message: string) => void;
+  /** Cancel provisioning cooperatively. Rollback finishes before the promise rejects. */
+  signal?: AbortSignal;
+  /** Overall provisioning deadline in milliseconds. Defaults to 10 minutes. */
+  timeoutMs?: number;
   /** If set, issue this many whole UDT to every node and mirror each channel as a UDT channel. */
   udtPerNode?: number;
 }
@@ -372,16 +456,32 @@ export class Orchestrator {
     options: UpOptions = {},
   ): Promise<NetworkLayout> {
     this.requireNetworkName(topology.name);
+    const timeoutMs = options.timeoutMs ?? DEFAULT_PROVISION_TIMEOUT_MS;
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      throw new ForgeError(
+        "INVALID_TIMEOUT",
+        "UpOptions.timeoutMs must be a positive finite number",
+        {
+          resource: "UpOptions.timeoutMs",
+          action: "provide a positive timeout in milliseconds",
+        },
+      );
+    }
+    const guard = new ProvisionGuard(topology.name, timeoutMs, options.signal);
+    guard.check("preflight");
     const layoutOptions = await this.resolvePorts(
       topology,
       options.layout ?? {},
     );
+    guard.check("port preflight");
     await this.prepareNetwork(topology.name);
+    guard.check("stale resource cleanup");
     if (!layoutOptions.subnetBase) {
       layoutOptions.subnetBase = pickSubnetBase(
         topology.name,
         await this.engine.usedSubnets(),
       );
+      guard.check("Docker subnet discovery");
     }
     const layout = planLayout(topology, layoutOptions);
     const log = options.onProgress ?? (() => {});
@@ -389,19 +489,28 @@ export class Orchestrator {
     let phase = `Docker network ${layout.network}`;
 
     try {
+      guard.check(phase);
       log(`network ${layout.network} (${layout.subnet})`);
+      guard.check(phase);
       await this.engine.ensureNetwork(layout.network, layout.subnet);
+      guard.check(phase);
 
       phase = `CKB container ${layout.ckbContainer}`;
+      guard.check(phase);
       log(`ckb dev chain ${layout.ckbContainer}`);
+      guard.check(phase);
       await this.engine.run(
         ckbContainerSpec(layout, this.assetsDir, options.ckbImage),
       );
+      guard.check(phase);
       const chain = new DevChain(`http://127.0.0.1:${layout.ckbHostPort}`);
-      await chain.waitReady();
+      await chain.waitReady(guard.remaining(60_000, phase));
+      guard.check(phase);
       await chain.generateBlocks(2);
+      guard.check(phase);
 
       const udtDep = await chain.udtDep();
+      guard.check(phase);
       const udtWhitelist: UdtWhitelistInfo = {
         codeHash: SIMPLE_UDT_CODE_HASH,
         depTxHash: udtDep.txHash,
@@ -411,6 +520,7 @@ export class Orchestrator {
       const privateKeys = new Map<string, string>();
       for (const node of layout.nodes) {
         phase = `Fiber container ${node.container}`;
+        guard.check(phase);
         const nodeDir = join(netDir, node.container);
         const privateKey = generatePrivateKey();
         privateKeys.set(node.name, hex(privateKey));
@@ -421,22 +531,27 @@ export class Orchestrator {
           privateKey,
           udtWhitelist,
         );
+        guard.check(phase);
         log(`node ${node.name} (${node.ip})`);
+        guard.check(phase);
         await this.engine.run(
           nodeContainerSpec(layout, node, nodeDir, options.fnnImage),
         );
+        guard.check(phase);
       }
 
       const rpcByName = new Map<string, FnnRpc>();
       const infoByName = new Map<string, { pubkey: string; peerId: string }>();
       for (const node of layout.nodes) {
         phase = `Fiber RPC for node ${node.name}`;
+        guard.check(phase);
         const rpc = new FnnRpc(
           new HttpTransport(`http://127.0.0.1:${node.rpcHostPort}`),
         );
         rpcByName.set(node.name, rpc);
         log(`waiting for ${node.name} rpc`);
-        const info = await this.waitNodeInfo(rpc);
+        guard.check(phase);
+        const info = await this.waitNodeInfo(rpc, 60_000, guard, phase);
         const peerId = peerIdOf(info);
         if (!peerId) {
           throw new Error(`node ${node.name} did not announce a peer address`);
@@ -447,34 +562,50 @@ export class Orchestrator {
       const addressByName = new Map<string, string>();
       for (const node of layout.nodes) {
         phase = `funding node ${node.name}`;
+        guard.check(phase);
         const address = await chain.addressOfPrivateKey(
           privateKeys.get(node.name)!,
         );
         addressByName.set(node.name, address);
         log(`funding ${node.name} ${topology.funding.perNodeCkb} CKB`);
+        guard.check(phase);
         await chain.fund(address, topology.funding.perNodeCkb);
+        guard.check(phase);
       }
       await chain.generateBlocks(4);
+      guard.check(phase);
 
       for (const channel of topology.channels) {
         phase = `peer connection ${channel.from}->${channel.to}`;
+        guard.check(phase);
         const from = rpcByName.get(channel.from)!;
         const to = infoByName.get(channel.to)!;
         const toLayout = layout.nodes.find((n) => n.name === channel.to)!;
         log(`connect ${channel.from} -> ${channel.to}`);
+        guard.check(phase);
         await from.connectPeer(
           dialAddress(toLayout.ip, to.peerId, FNN_P2P_PORT),
         );
-        await this.waitPeerConnected(from, to.pubkey);
+        guard.check(phase);
+        await this.waitPeerConnected(from, to.pubkey, 30_000, guard, phase);
         phase = `channel ${channel.from}->${channel.to}`;
+        guard.check(phase);
         log(
           `open channel ${channel.from} -> ${channel.to} (${channel.capacityCkb} CKB)`,
         );
+        guard.check(phase);
         const priorReady = await this.readyChannelCount(from, to.pubkey);
-        await this.openChannel(from, {
-          pubkey: to.pubkey,
-          fundingAmount: ckbToShannonHex(channel.capacityCkb),
-        });
+        guard.check(phase);
+        await this.openChannel(
+          from,
+          {
+            pubkey: to.pubkey,
+            fundingAmount: ckbToShannonHex(channel.capacityCkb),
+          },
+          15,
+          guard,
+          phase,
+        );
         await this.waitChannelReady(
           from,
           to.pubkey,
@@ -482,6 +613,8 @@ export class Orchestrator {
           `${channel.from}->${channel.to}`,
           log,
           priorReady + 1,
+          120_000,
+          guard,
         );
       }
 
@@ -489,26 +622,39 @@ export class Orchestrator {
         const amountUdt = options.udtPerNode;
         for (const node of layout.nodes) {
           phase = `UDT issuance for node ${node.name}`;
+          guard.check(phase);
           log(`issuing ${amountUdt} UDT to ${node.name}`);
+          guard.check(phase);
           await chain.issueUdt(
             addressByName.get(node.name)!,
             BigInt(Math.round(amountUdt * 1e8)),
           );
+          guard.check(phase);
         }
         const udtTypeScript = await chain.udtScript();
+        guard.check(phase);
         for (const channel of topology.channels) {
           phase = `UDT channel ${channel.from}->${channel.to}`;
+          guard.check(phase);
           const from = rpcByName.get(channel.from)!;
           const to = infoByName.get(channel.to)!;
           log(
             `open UDT channel ${channel.from} -> ${channel.to} (${channel.capacityCkb} UDT)`,
           );
+          guard.check(phase);
           const priorReady = await this.readyChannelCount(from, to.pubkey);
-          await this.openChannel(from, {
-            pubkey: to.pubkey,
-            fundingAmount: ckbToShannonHex(channel.capacityCkb),
-            udtTypeScript,
-          });
+          guard.check(phase);
+          await this.openChannel(
+            from,
+            {
+              pubkey: to.pubkey,
+              fundingAmount: ckbToShannonHex(channel.capacityCkb),
+              udtTypeScript,
+            },
+            15,
+            guard,
+            phase,
+          );
           await this.waitChannelReady(
             from,
             to.pubkey,
@@ -516,14 +662,22 @@ export class Orchestrator {
             `${channel.from}->${channel.to} (UDT)`,
             log,
             priorReady + 1,
+            120_000,
+            guard,
           );
         }
       }
 
       if (topology.channels.length > 0) {
         phase = "routing graph propagation";
+        guard.check(phase);
         log("propagating routing graph");
-        await this.waitGraphPropagated(rpcByName, topology.channels.length);
+        guard.check(phase);
+        await this.waitGraphPropagated(
+          rpcByName,
+          topology.channels.length,
+          guard,
+        );
       }
 
       const state: NetworkState = {
@@ -548,22 +702,32 @@ export class Orchestrator {
         join(netDir, "layout.json"),
         JSON.stringify(state, null, 2),
       );
+      guard.check("persisting network state");
 
       log(`network ${layout.net} ready`);
+      guard.check("network ready");
       return layout;
     } catch (error) {
+      let controlError: unknown;
+      try {
+        guard.check(phase);
+      } catch (guardError) {
+        controlError = guardError;
+      }
       const primary =
-        error instanceof ForgeError
-          ? error
-          : new ForgeError(
-              "PROVISION_FAILED",
-              `failed to provision network "${layout.net}" at ${phase}: ${errorDetails(error).message}`,
-              {
-                resource: phase,
-                action: "inspect the named resource, then retry provisioning",
-                cause: error,
-              },
-            );
+        controlError instanceof ForgeError
+          ? controlError
+          : error instanceof ForgeError
+            ? error
+            : new ForgeError(
+                "PROVISION_FAILED",
+                `failed to provision network "${layout.net}" at ${phase}: ${errorDetails(error).message}`,
+                {
+                  resource: phase,
+                  action: "inspect the named resource, then retry provisioning",
+                  cause: error,
+                },
+              );
       try {
         await this.down(layout.net, { purge: true });
       } catch (rollbackError) {
@@ -587,10 +751,14 @@ export class Orchestrator {
   private async waitGraphPropagated(
     rpcByName: Map<string, FnnRpc>,
     expected: number,
+    guard?: ProvisionGuard,
   ): Promise<void> {
-    const deadline = Date.now() + 180_000;
+    const resource = "routing graph propagation";
+    const timeoutMs = guard?.remaining(180_000, resource) ?? 180_000;
+    const deadline = Date.now() + timeoutMs;
     let counts = new Map<string, number>();
     for (;;) {
+      guard?.check(resource);
       counts = new Map(
         await Promise.all(
           [...rpcByName].map(
@@ -599,10 +767,12 @@ export class Orchestrator {
           ),
         ),
       );
+      guard?.check(resource);
       if ([...counts.values()].every((count) => count >= expected)) {
         return;
       }
       if (Date.now() > deadline) {
+        guard?.check(resource);
         const observed = [...counts]
           .map(([name, count]) => `${name}=${count}/${expected}`)
           .join(", ");
@@ -610,7 +780,7 @@ export class Orchestrator {
           `routing graph did not propagate in 180s (${observed})`,
         );
       }
-      await sleep(1500);
+      await waitWithGuard(1500, guard, resource);
     }
   }
 
@@ -1135,21 +1305,27 @@ export class Orchestrator {
   private async waitNodeInfo(
     rpc: FnnRpc,
     timeoutMs = 60_000,
+    guard?: ProvisionGuard,
+    resource = "Fiber RPC readiness",
   ): Promise<NodeInfo> {
-    const deadline = Date.now() + timeoutMs;
+    const boundedTimeout = guard?.remaining(timeoutMs, resource) ?? timeoutMs;
+    const deadline = Date.now() + boundedTimeout;
     for (;;) {
+      guard?.check(resource);
       try {
         const info = await rpc.nodeInfo();
+        guard?.check(resource);
         if (peerIdOf(info)) {
           return info;
         }
       } catch {
         // node not ready yet
       }
+      guard?.check(resource);
       if (Date.now() > deadline) {
         throw new Error("node did not announce its RPC + peer address in time");
       }
-      await sleep(1000);
+      await waitWithGuard(1000, guard, resource);
     }
   }
 
@@ -1158,17 +1334,23 @@ export class Orchestrator {
     rpc: FnnRpc,
     pubkey: string,
     timeoutMs = 30_000,
+    guard?: ProvisionGuard,
+    resource = `peer ${pubkey}`,
   ): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
+    const boundedTimeout = guard?.remaining(timeoutMs, resource) ?? timeoutMs;
+    const deadline = Date.now() + boundedTimeout;
     for (;;) {
+      guard?.check(resource);
       const peers = await rpc.listPeers();
+      guard?.check(resource);
       if (peers.some((peer) => peer.pubkey === pubkey)) {
         return;
       }
       if (Date.now() > deadline) {
+        guard?.check(resource);
         throw new Error(`peer ${pubkey} did not connect in time`);
       }
-      await sleep(1000);
+      await waitWithGuard(1000, guard, resource);
     }
   }
 
@@ -1180,16 +1362,21 @@ export class Orchestrator {
     rpc: FnnRpc,
     params: OpenChannelParams,
     attempts = 15,
+    guard?: ProvisionGuard,
+    resource = "channel open",
   ): Promise<void> {
     for (let attempt = 0; ; attempt += 1) {
+      guard?.check(resource);
       try {
         await rpc.openChannel(params);
+        guard?.check(resource);
         return;
       } catch (error) {
+        guard?.check(resource);
         if (attempt >= attempts) {
           throw error;
         }
-        await sleep(2000);
+        await waitWithGuard(2000, guard, resource);
       }
     }
   }
@@ -1210,12 +1397,18 @@ export class Orchestrator {
     log: (message: string) => void,
     minReady = 1,
     timeoutMs = 120_000,
+    guard?: ProvisionGuard,
   ): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
+    const resource = `channel ${label}`;
+    const boundedTimeout = guard?.remaining(timeoutMs, resource) ?? timeoutMs;
+    const deadline = Date.now() + boundedTimeout;
     for (;;) {
+      guard?.check(resource);
       // Mine a few blocks each pass so the funding tx proposes+commits quickly (CKB is two-step).
       await chain.generateBlocks(3);
+      guard?.check(resource);
       const channels = await rpc.listChannels(peerPubkey);
+      guard?.check(resource);
       // Count ready channels, not "any ready" — else a new channel to an already-connected peer
       // is reported ready the instant its sibling is, and the new one is left half-open.
       if (channels.filter(isChannelReady).length >= minReady) {
@@ -1223,9 +1416,10 @@ export class Orchestrator {
         return;
       }
       if (Date.now() > deadline) {
+        guard?.check(resource);
         throw new Error(`channel ${label} did not reach CHANNEL_READY in time`);
       }
-      await sleep(1000);
+      await waitWithGuard(1000, guard, resource);
     }
   }
 }

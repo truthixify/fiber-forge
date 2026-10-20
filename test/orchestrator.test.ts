@@ -304,6 +304,67 @@ describe("Orchestrator.down", () => {
 });
 
 describe("Orchestrator.up preflight and rollback", () => {
+  it("rejects an already-aborted operation before touching Docker", async () => {
+    const engine = new FakeEngine();
+    const controller = new AbortController();
+    controller.abort("test cancellation");
+
+    await expect(
+      new Orchestrator(engine, "/assets").up(duo, {
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({
+      code: "OPERATION_ABORTED",
+      resource: "preflight",
+    });
+
+    expect(engine.log).toEqual([]);
+  });
+
+  it("rolls back when a progress callback aborts provisioning", async () => {
+    const engine = new FakeEngine();
+    const controller = new AbortController();
+
+    await expect(
+      new Orchestrator(engine, "/assets").up(duo, {
+        signal: controller.signal,
+        onProgress(message) {
+          if (message.startsWith("network ")) controller.abort();
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "OPERATION_ABORTED",
+      resource: "Docker network forge-duo",
+    });
+
+    expect(engine.containers.size).toBe(0);
+    expect(engine.networks.size).toBe(0);
+  });
+
+  it("rejects invalid provisioning timeouts before touching Docker", async () => {
+    const engine = new FakeEngine();
+
+    await expect(
+      new Orchestrator(engine, "/assets").up(duo, { timeoutMs: Number.NaN }),
+    ).rejects.toMatchObject({
+      code: "INVALID_TIMEOUT",
+      resource: "UpOptions.timeoutMs",
+    });
+
+    expect(engine.log).toEqual([]);
+  });
+
+  it("reports an overall provisioning timeout with a stable code", async () => {
+    const engine = new FakeEngine();
+
+    await expect(
+      new Orchestrator(engine, "/assets").up(duo, { timeoutMs: 1 }),
+    ).rejects.toMatchObject({ code: "OPERATION_TIMEOUT" });
+
+    expect(engine.containers.size).toBe(0);
+    expect(engine.networks.size).toBe(0);
+  });
+
   it("rejects an occupied requested port before creating resources", async () => {
     const occupied = await occupyFreePort();
     const engine = new FakeEngine();
