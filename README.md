@@ -125,7 +125,9 @@ try {
 
 The SDK exposes high-level network lifecycle and topology operations. Docker internals, generated
 keys, raw RPC helpers, and source-file imports are not public API. See [the SDK contract](docs/sdk.md)
-for the complete surface and compatibility policy.
+for the complete surface and compatibility policy. The [integration guide](docs/integration.md)
+connects the CLI, SDK, GitHub Action, standalone example, sandbox, release status, and current
+verification evidence without assuming repository internals.
 
 ## Topologies
 

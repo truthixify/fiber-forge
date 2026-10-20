@@ -34,9 +34,13 @@ npm test
 
 The application entry point accepts the Action's structured output unchanged:
 
+This example becomes externally runnable when `0.4.0-rc.1` is published. Until then, the exact
+commit and packed candidate are exercised only by the repository's public
+[Action evidence workflow](https://github.com/truthixify/fiber-forge/actions/runs/39373696256).
+
 ```yaml
 - id: forge
-  uses: truthixify/fiber-forge@<full-commit-sha>
+  uses: truthixify/fiber-forge@a34cc3cac1f034404a16d9597d41b002789331d6
   with:
     package-version: 0.4.0-rc.1
     topology: trio

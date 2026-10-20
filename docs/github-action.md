@@ -5,6 +5,13 @@ registers a job-final post hook that removes the exact network, volume, containe
 state. Use a full Action commit SHA and an exact npm package version; those are separate trust and
 compatibility decisions.
 
+The Action and SDK are verified together at candidate commit
+`a34cc3cac1f034404a16d9597d41b002789331d6`, but package `0.4.0-rc.1` is not yet published on npm.
+The workflow below is therefore release-ready reference, not a currently runnable external install.
+The [candidate Action run](https://github.com/truthixify/fiber-forge/actions/runs/39373696256)
+uses the exact packed artifact through a repository-only override. Do not substitute released CLI
+version `0.2.9`; it predates the public SDK and loopback-binding hardening required by this Action.
+
 ```yaml
 permissions:
   contents: read
@@ -12,7 +19,7 @@ permissions:
 steps:
   - uses: actions/checkout@v7
   - id: forge
-    uses: truthixify/fiber-forge@<full-commit-sha>
+    uses: truthixify/fiber-forge@a34cc3cac1f034404a16d9597d41b002789331d6
     with:
       package-version: 0.4.0-rc.1
       topology: trio

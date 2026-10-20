@@ -29,7 +29,7 @@ permissions:
 steps:
   - uses: actions/checkout@v7
   - id: forge
-    uses: truthixify/fiber-forge@<immutable-action-sha>
+    uses: truthixify/fiber-forge@a34cc3cac1f034404a16d9597d41b002789331d6
     with:
       package-version: 0.4.0-rc.1
       topology: trio
