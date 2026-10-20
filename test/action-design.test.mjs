@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  buildPrototypeOutputs,
+  buildActionOutputs,
   simulatePostActionJob,
-  validatePrototypeInputs,
-} from "../action/prototype.mjs";
+  validateActionInputs,
+} from "../action/contract.mjs";
 
 describe("GitHub Action lifecycle design", () => {
   it("accepts an exact package version plus presets or workspace topology files", () => {
     expect(
-      validatePrototypeInputs(
+      validateActionInputs(
         {
           packageVersion: "0.3.0-rc.1",
           topology: "trio",
@@ -29,7 +29,7 @@ describe("GitHub Action lifecycle design", () => {
       diagnostics: "failure",
     });
     expect(
-      validatePrototypeInputs(
+      validateActionInputs(
         { packageVersion: "0.2.9", topology: "fixtures/network.yaml" },
         "/work/repository",
       ),
@@ -41,27 +41,46 @@ describe("GitHub Action lifecycle design", () => {
 
   it("rejects floating versions and topology paths outside the workspace", () => {
     expect(() =>
-      validatePrototypeInputs(
+      validateActionInputs(
         { packageVersion: "latest", topology: "trio" },
         "/work/repository",
       ),
     ).toThrow(/exact semver/);
     expect(() =>
-      validatePrototypeInputs(
+      validateActionInputs(
         { packageVersion: "^0.2.9", topology: "trio" },
         "/work/repository",
       ),
     ).toThrow(/exact semver/);
     expect(() =>
-      validatePrototypeInputs(
+      validateActionInputs(
         { packageVersion: "0.2.9", topology: "../network.yml" },
         "/work/repository",
       ),
     ).toThrow(/inside GITHUB_WORKSPACE/);
+    expect(() =>
+      validateActionInputs(
+        {
+          packageVersion: "0.4.0-01",
+          topology: "trio",
+        },
+        "/work/repository",
+      ),
+    ).toThrow(/exact semver/);
+    expect(() =>
+      validateActionInputs(
+        {
+          packageVersion: "0.4.0-rc.1",
+          topology: "trio",
+          startupTimeoutMs: "1e3",
+        },
+        "/work/repository",
+      ),
+    ).toThrow(/integer/);
   });
 
   it("emits loopback-only structured outputs without internal passwords", () => {
-    const outputs = buildPrototypeOutputs(
+    const outputs = buildActionOutputs(
       {
         network: "trio",
         ckbRpc: "http://127.0.0.1:8114",
@@ -85,7 +104,7 @@ describe("GitHub Action lifecycle design", () => {
     });
     expect(JSON.stringify(outputs)).not.toContain("must-not-leak");
     expect(() =>
-      buildPrototypeOutputs(
+      buildActionOutputs(
         {
           network: "trio",
           ckbRpc: "http://token@127.0.0.1:8114",

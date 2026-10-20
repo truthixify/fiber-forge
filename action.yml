@@ -1,0 +1,52 @@
+name: Fiber Forge network
+description: Start an isolated local CKB Fiber network and clean it up at the end of the job
+author: truthixify
+
+inputs:
+  package-version:
+    description: Exact @truthixify/fiber-forge package version
+    required: true
+  topology:
+    description: Preset, shape:N, or workspace-relative YAML topology
+    required: true
+  ckb-port:
+    description: Optional loopback CKB RPC port
+    required: false
+  rpc-port-base:
+    description: Optional first loopback Fiber RPC port
+    required: false
+  startup-timeout-ms:
+    description: Provisioning deadline from 1000 through 1800000 milliseconds
+    required: false
+    default: "600000"
+  udt-per-node:
+    description: Optional positive whole UDT amount issued to every node
+    required: false
+  diagnostics:
+    description: Bounded diagnostics policy (failure, always, or never)
+    required: false
+    default: failure
+
+outputs:
+  network:
+    description: Fiber Forge network name
+  ckb-rpc:
+    description: Loopback CKB JSON-RPC URL
+  nodes-json:
+    description: JSON array of node names, public keys, and loopback RPC URLs
+  connection-json:
+    description: Versioned connection document for consumer tests
+  report-path:
+    description: Absolute setup report path, available until job-final cleanup
+  startup-duration-ms:
+    description: Setup duration in milliseconds
+
+runs:
+  using: node24
+  main: action/main.mjs
+  post: action/post.mjs
+  post-if: always()
+
+branding:
+  icon: activity
+  color: orange

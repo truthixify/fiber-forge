@@ -31,7 +31,7 @@ steps:
   - id: forge
     uses: truthixify/fiber-forge@<immutable-action-sha>
     with:
-      package-version: 0.2.9
+      package-version: 0.4.0-rc.1
       topology: trio
   - run: npm test
     env:
@@ -93,7 +93,8 @@ node key passwords, Docker paths, and raw container configuration are never outp
    topology files inside the workspace and reject traversal or symlink escape.
 2. Create an action-specific install directory and state directory under `RUNNER_TEMP`. Save both to
    `GITHUB_STATE` before provisioning can create resources.
-3. Install the exact npm package with scripts disabled. Import only its public `./sdk` export.
+3. Install the exact npm package with scripts disabled. Resolve only the installed package's
+   declared public `./sdk` import export, verify that it stays inside the package, then import it.
 4. Resolve and validate the topology, save its network name to action state before Docker changes,
    then call `up` with the isolated state directory, deadline, optional ports, and an abort signal
    tied to process signals.
@@ -130,11 +131,11 @@ can upload `report-path` explicitly.
   dependencies are reviewed and updated with normal dependency automation.
 - Logs and outputs exclude node passwords, generated key material, environment secrets, Docker
   authentication, and unbounded container output.
-- The implementation lives at root `action.yml` plus committed bundled JavaScript in this repository.
-  No second repository or external service is required. Releases document both the immutable SHA and
-  compatible npm package versions.
+- The implementation lives at root `action.yml` plus committed dependency-free runtime JavaScript in
+  this repository. No second repository or external service is required. Releases document both the
+  immutable SHA and compatible npm package versions.
 
-The design prototype is exercised by `test/action-design.test.mjs`. It validates both target forms,
+The executable contract is exercised by `test/action-design.test.mjs`. It validates both target forms,
 exact version selection, loopback/secret-free output construction, post cleanup after a deliberately
 failing consumer, and post execution after setup failure. Real Docker and runner behavior are the
 acceptance gate for the implementation task, not inferred from the prototype.

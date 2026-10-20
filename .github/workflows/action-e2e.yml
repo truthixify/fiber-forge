@@ -1,0 +1,116 @@
+name: action-e2e
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/action-e2e.yml"
+      - "action.yml"
+      - "action/**"
+      - "package.json"
+      - "package-lock.json"
+      - "src/**"
+      - "test/fixtures/action-cleanup-probe/**"
+      - "test/fixtures/action-consumer/**"
+  pull_request:
+    paths:
+      - ".github/workflows/action-e2e.yml"
+      - "action.yml"
+      - "action/**"
+      - "package.json"
+      - "package-lock.json"
+      - "src/**"
+      - "test/fixtures/action-cleanup-probe/**"
+      - "test/fixtures/action-consumer/**"
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    outputs:
+      filename: ${{ steps.metadata.outputs.filename }}
+      version: ${{ steps.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - id: metadata
+        name: Pack exact candidate
+        run: |
+          mkdir candidate
+          npm pack --json --pack-destination candidate > candidate/pack.json
+          node --input-type=module - <<'NODE'
+          import { appendFileSync, readFileSync } from "node:fs";
+          const [packed] = JSON.parse(readFileSync("candidate/pack.json", "utf8"));
+          const metadata = JSON.parse(readFileSync("package.json", "utf8"));
+          appendFileSync(process.env.GITHUB_OUTPUT, `filename=${packed.filename}\nversion=${metadata.version}\n`);
+          NODE
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fiber-forge-action-candidate
+          path: candidate/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  consumer:
+    needs: candidate
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [success, deliberate-failure]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: fiber-forge-action-candidate
+          path: ${{ runner.temp }}/fiber-forge-candidate
+      - name: Register independent cleanup verifier
+        uses: ./test/fixtures/action-cleanup-probe
+        with:
+          network: trio
+      - id: forge
+        name: Start a trio from the packed candidate
+        uses: ./
+        env:
+          FIBER_FORGE_ACTION_PACKAGE_TARBALL: ${{ runner.temp }}/fiber-forge-candidate/${{ needs.candidate.outputs.filename }}
+        with:
+          package-version: ${{ needs.candidate.outputs.version }}
+          topology: trio
+          diagnostics: failure
+      - id: consumer
+        name: Run a real multi-hop payment assertion
+        continue-on-error: ${{ matrix.mode == 'deliberate-failure' }}
+        env:
+          FIBER_FORGE_CONNECTION: ${{ steps.forge.outputs.connection-json }}
+          FIBER_FORGE_FAIL_AFTER_PAYMENT: ${{ matrix.mode == 'deliberate-failure' && '1' || '0' }}
+        run: node test/fixtures/action-consumer/payment.mjs
+      - name: Confirm the deliberate consumer failure occurred
+        if: matrix.mode == 'deliberate-failure' && steps.consumer.outcome != 'failure'
+        run: |
+          echo "The deliberate consumer failure did not occur" >&2
+          exit 1
+      - name: Validate the bounded setup report
+        if: always() && steps.forge.outputs.report-path != ''
+        env:
+          REPORT_PATH: ${{ steps.forge.outputs.report-path }}
+        run: |
+          node --input-type=module - <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFile } from "node:fs/promises";
+          const report = JSON.parse(await readFile(process.env.REPORT_PATH, "utf8"));
+          assert.equal(report.schemaVersion, 1);
+          assert.equal(report.result, "success");
+          assert.equal(report.connection.nodes.length, 3);
+          assert.equal(JSON.stringify(report).includes("password"), false);
+          NODE

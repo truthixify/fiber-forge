@@ -1,0 +1,11 @@
+name: Fiber Forge cleanup probe
+description: Test-only post action that independently verifies exact Docker cleanup
+inputs:
+  network:
+    description: Expected Fiber Forge network name
+    required: true
+runs:
+  using: node24
+  main: main.mjs
+  post: post.mjs
+  post-if: always()

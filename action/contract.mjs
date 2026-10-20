@@ -1,13 +1,14 @@
 import { extname, relative, resolve, sep } from "node:path";
 
 const exactVersionPattern =
-  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const presetPattern = /^(?:duo|trio|hub|(?:line|ring|star):(?:[2-9]|10))$/;
 const diagnosticsModes = new Set(["failure", "always", "never"]);
 
 function optionalPort(value, name) {
   if (value === undefined || value === "") return undefined;
-  const port = Number(value);
+  const text = String(value);
+  const port = /^\d+$/.test(text) ? Number(text) : Number.NaN;
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error(`${name} must be an integer between 1 and 65535`);
   }
@@ -16,19 +17,20 @@ function optionalPort(value, name) {
 
 function optionalPositiveInteger(value, name) {
   if (value === undefined || value === "") return undefined;
-  const amount = Number(value);
+  const text = String(value);
+  const amount = /^\d+$/.test(text) ? Number(text) : Number.NaN;
   if (!Number.isSafeInteger(amount) || amount <= 0) {
     throw new Error(`${name} must be a positive integer`);
   }
   return amount;
 }
 
-/** Normalize the proposed Action interface without touching GitHub or Docker. */
-export function validatePrototypeInputs(input, workspace) {
+/** Normalize the Action interface without touching GitHub or Docker. */
+export function validateActionInputs(input, workspace) {
   const packageVersion = String(input.packageVersion ?? "").trim();
   if (!exactVersionPattern.test(packageVersion)) {
     throw new Error(
-      "package-version must be an exact semver such as 0.2.9 or 0.3.0-rc.1",
+      "package-version must be an exact semver such as 0.4.0 or 0.4.0-rc.1",
     );
   }
 
@@ -56,7 +58,10 @@ export function validatePrototypeInputs(input, workspace) {
     topologyKind = "file";
   }
 
-  const startupTimeoutMs = Number(input.startupTimeoutMs ?? 600_000);
+  const startupTimeoutText = String(input.startupTimeoutMs ?? 600_000);
+  const startupTimeoutMs = /^\d+$/.test(startupTimeoutText)
+    ? Number(startupTimeoutText)
+    : Number.NaN;
   if (
     !Number.isInteger(startupTimeoutMs) ||
     startupTimeoutMs < 1_000 ||
@@ -104,8 +109,8 @@ function requireLoopbackUrl(value, label) {
   return url.toString().replace(/\/$/, "");
 }
 
-/** Build the structured, secret-free outputs accepted for the Action implementation. */
-export function buildPrototypeOutputs(connection, metadata) {
+/** Build the structured, secret-free outputs exposed by the Action. */
+export function buildActionOutputs(connection, metadata) {
   const network = String(connection.network ?? "");
   if (!/^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$/.test(network)) {
     throw new Error("network must be a safe Fiber Forge network name");
