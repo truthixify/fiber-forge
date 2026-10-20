@@ -17,6 +17,11 @@ Both supported rows used `@truthixify/fiber-forge@0.2.9`, `nervos/ckb:v0.201.0`,
 `nervos/fiber:0.9.0-rc7`. The evidence records include the exact image IDs and the result of each
 required path.
 
+Recipe-bundle replay is portable only between supported rows using the exact exporter package
+version and pinned image references. It regenerates keys, ports, chain data, and channel identifiers;
+stateful database/volume restore is unsupported. The complete decision table is in the
+[export and replay bundle contract](export-bundles.md).
+
 ## Image Platform Preflight
 
 The repository's live verification checks the Docker daemon OS and architecture, fetches the

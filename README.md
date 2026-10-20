@@ -119,6 +119,10 @@ Scenarios are versioned declarative test specifications with bounded polling, ty
 payment/balance assertions, sanitized JSON reports, and CI exit codes. The checked examples pair with
 `examples/topology.yml`; see [Checked scenarios](docs/scenarios.md) for the complete schema.
 
+The accepted [export and replay bundle contract](docs/export-bundles.md) limits shareable artifacts
+to validated recipes and bounded diagnostics. Raw node keys, databases, and Docker volumes are
+excluded; exact channel-state restoration is explicitly unsupported.
+
 ## Library API
 
 Automation that needs more than the CLI can import the supported ESM API from

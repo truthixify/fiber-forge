@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "loop": 1,
+  "steps": [
+    {
+      "fault": { "action": "apply", "kind": "node-kill", "target": "bob" },
+      "expect": { "node_status": "stopped", "timeout_ms": 10000 }
+    },
+    {
+      "pay": { "from": "alice", "to": "carol", "amount": 10 },
+      "expect": { "error_code": "PAYMENT_FAILED" }
+    },
+    {
+      "fault": { "action": "reset", "kind": "node-kill", "target": "bob" },
+      "expect": { "node_status": "running", "timeout_ms": 60000 }
+    }
+  ]
+}

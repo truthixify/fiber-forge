@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/truthixify/fiber-forge/blob/main/docs/schema/export-manifest-v1.schema.json",
+  "title": "Fiber Forge export manifest version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema",
+    "level",
+    "createdAt",
+    "generator",
+    "runtime",
+    "sourceHost",
+    "capabilities",
+    "recipeDigest",
+    "artifacts"
+  ],
+  "properties": {
+    "format": { "const": "fiber-forge-export" },
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["major", "minor"],
+      "properties": {
+        "major": { "const": 1 },
+        "minor": { "const": 0 }
+      }
+    },
+    "level": { "enum": ["recipe", "diagnostic"] },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "version"],
+      "properties": {
+        "package": { "const": "@truthixify/fiber-forge" },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["images"],
+      "properties": {
+        "images": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ckb", "fiber"],
+          "properties": {
+            "ckb": { "$ref": "#/$defs/imageReference" },
+            "fiber": { "$ref": "#/$defs/imageReference" }
+          }
+        }
+      }
+    },
+    "sourceHost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "architecture", "node", "docker"],
+      "properties": {
+        "os": { "$ref": "#/$defs/boundedString" },
+        "architecture": { "$ref": "#/$defs/boundedString" },
+        "node": { "$ref": "#/$defs/boundedString" },
+        "docker": { "$ref": "#/$defs/boundedString" }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exactStateRestore", "containsSecrets"],
+      "properties": {
+        "exactStateRestore": { "const": false },
+        "containsSecrets": { "const": false }
+      }
+    },
+    "recipeDigest": { "$ref": "#/$defs/digest" },
+    "artifacts": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 63,
+      "items": { "$ref": "#/$defs/artifact" },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "required": ["role"],
+            "properties": { "role": { "const": "topology" } }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": ["role"],
+            "properties": { "role": { "const": "scenario" } }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": ["role"],
+            "properties": { "role": { "const": "scenario-report" } }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "boundedString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "imageReference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*:[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "role", "mediaType", "bytes", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "pattern": "^(?:topology\\.json|scenario\\.json|report\\.json|diagnostics/(?:network|channels|faults)\\.json|diagnostics/logs/(?:ckb|[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?)\\.log)$"
+        },
+        "role": {
+          "enum": [
+            "topology",
+            "scenario",
+            "scenario-report",
+            "network-inspection",
+            "channel-inspection",
+            "fault-inspection",
+            "ckb-log",
+            "node-log"
+          ]
+        },
+        "mediaType": { "enum": ["application/json", "text/plain"] },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 1048576 },
+        "sha256": { "$ref": "#/$defs/digest" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "role": { "const": "topology" } } },
+          "then": {
+            "properties": {
+              "path": { "const": "topology.json" },
+              "mediaType": { "const": "application/json" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "role": { "const": "scenario" } } },
+          "then": {
+            "properties": {
+              "path": { "const": "scenario.json" },
+              "mediaType": { "const": "application/json" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "role": { "const": "scenario-report" } }
+          },
+          "then": {
+            "properties": {
+              "path": { "const": "report.json" },
+              "mediaType": { "const": "application/json" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "role": { "const": "network-inspection" } }
+          },
+          "then": {
+            "properties": {
+              "path": { "const": "diagnostics/network.json" },
+              "mediaType": { "const": "application/json" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "role": { "const": "channel-inspection" } }
+          },
+          "then": {
+            "properties": {
+              "path": { "const": "diagnostics/channels.json" },
+              "mediaType": { "const": "application/json" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "role": { "const": "fault-inspection" } }
+          },
+          "then": {
+            "properties": {
+              "path": { "const": "diagnostics/faults.json" },
+              "mediaType": { "const": "application/json" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "role": { "const": "ckb-log" } } },
+          "then": {
+            "properties": {
+              "path": { "const": "diagnostics/logs/ckb.log" },
+              "mediaType": { "const": "text/plain" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "role": { "const": "node-log" } } },
+          "then": {
+            "properties": {
+              "path": {
+                "pattern": "^(?!diagnostics/logs/ckb\\.log$)diagnostics/logs/[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?\\.log$"
+              },
+              "mediaType": { "const": "text/plain" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

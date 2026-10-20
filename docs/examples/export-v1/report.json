@@ -1,0 +1,79 @@
+{
+  "format": "fiber-forge-scenario-report",
+  "version": 1,
+  "scenarioVersion": 1,
+  "network": "bundle-sample",
+  "startedAt": "2026-10-20T00:00:00.000Z",
+  "finishedAt": "2026-10-20T00:00:02.000Z",
+  "durationMs": 2000,
+  "passed": true,
+  "summary": { "total": 3, "passed": 3, "failed": 0 },
+  "steps": [
+    {
+      "index": 0,
+      "iteration": 0,
+      "action": "fault",
+      "passed": true,
+      "summary": "node-kill bob apply: active",
+      "startedAt": "2026-10-20T00:00:00.000Z",
+      "finishedAt": "2026-10-20T00:00:00.500Z",
+      "durationMs": 500,
+      "assertions": [
+        {
+          "type": "node_status",
+          "passed": true,
+          "expected": "stopped",
+          "actual": "stopped",
+          "attempts": 1,
+          "durationMs": 1
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "iteration": 0,
+      "action": "pay",
+      "passed": true,
+      "summary": "pay produced expected PAYMENT_FAILED",
+      "startedAt": "2026-10-20T00:00:00.500Z",
+      "finishedAt": "2026-10-20T00:00:01.000Z",
+      "durationMs": 500,
+      "assertions": [
+        {
+          "type": "error_code",
+          "passed": true,
+          "expected": "PAYMENT_FAILED",
+          "actual": "PAYMENT_FAILED",
+          "attempts": 1,
+          "durationMs": 0
+        }
+      ],
+      "error": {
+        "code": "PAYMENT_FAILED",
+        "message": "payment from alice to carol failed",
+        "resource": "bundle-sample/alice/carol",
+        "action": "inspect node connectivity and channel balances, then retry"
+      }
+    },
+    {
+      "index": 2,
+      "iteration": 0,
+      "action": "fault",
+      "passed": true,
+      "summary": "node-kill bob reset: inactive",
+      "startedAt": "2026-10-20T00:00:01.000Z",
+      "finishedAt": "2026-10-20T00:00:02.000Z",
+      "durationMs": 1000,
+      "assertions": [
+        {
+          "type": "node_status",
+          "passed": true,
+          "expected": "running",
+          "actual": "running",
+          "attempts": 2,
+          "durationMs": 500
+        }
+      ]
+    }
+  ]
+}

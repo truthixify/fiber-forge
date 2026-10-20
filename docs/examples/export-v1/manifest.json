@@ -1,0 +1,50 @@
+{
+  "format": "fiber-forge-export",
+  "schema": { "major": 1, "minor": 0 },
+  "level": "recipe",
+  "createdAt": "2026-10-20T00:00:02.000Z",
+  "generator": {
+    "package": "@truthixify/fiber-forge",
+    "version": "0.4.0-rc.1"
+  },
+  "runtime": {
+    "images": {
+      "ckb": "nervos/ckb:v0.201.0",
+      "fiber": "nervos/fiber:0.9.0-rc7"
+    }
+  },
+  "sourceHost": {
+    "os": "Darwin",
+    "architecture": "arm64",
+    "node": "v24.13.0",
+    "docker": "29.3.1"
+  },
+  "capabilities": {
+    "exactStateRestore": false,
+    "containsSecrets": false
+  },
+  "recipeDigest": "sha256:0c9b5936a74def5b2b5e16b6cfd59199641fd46cdb6ad691157d3657eb1cdb33",
+  "artifacts": [
+    {
+      "path": "report.json",
+      "role": "scenario-report",
+      "mediaType": "application/json",
+      "bytes": 2061,
+      "sha256": "sha256:c19aea6bb8538037cb93f28040896dea026931e22d4e6a3b76db61c780f87924"
+    },
+    {
+      "path": "scenario.json",
+      "role": "scenario",
+      "mediaType": "application/json",
+      "bytes": 486,
+      "sha256": "sha256:49286ce9eadcb21a57f7c9a5e03e75d077a0da6ca610ad2b3b6a04d16c8e397d"
+    },
+    {
+      "path": "topology.json",
+      "role": "topology",
+      "mediaType": "application/json",
+      "bytes": 285,
+      "sha256": "sha256:961cf9e3e40c770fe90427d160a3a04f87c444fe54e4e485bd4abc0b133a3850"
+    }
+  ]
+}

@@ -61,6 +61,9 @@ GUI (React/vite, served on localhost) ──► fiber-forge daemon HTTP+WS API (
   read from the node after boot.
 - Node data dirs are host mounts, so stopping and starting the same container preserves Fiber state.
   `down` removes containers; `--keep` retains the CKB volume but is not a supported Fiber resume path.
+- Portable exports contain validated topology/scenario inputs, reports, and optionally bounded
+  diagnostics. Replay always creates fresh keys, node stores, and chain state; exact channel-state
+  restore is unsupported. See [the bundle contract](export-bundles.md).
 
 ## 5. Fiber integration points
 
