@@ -19,6 +19,7 @@ import { type FaultKind, type FaultReport } from "./faults.js";
 import {
   type ChannelRow,
   type ChannelSettlementReport,
+  type CchTopologyStatus,
   type DownOptions,
   type MineReport,
   type NetworkSummary,
@@ -80,6 +81,7 @@ export {
   validateTopology,
 } from "./topology.js";
 export type {
+  CchTopologySpec,
   ChannelSpec,
   FundingSpec,
   NodeSpec,
@@ -110,6 +112,8 @@ export type {
 export type { LayoutOptions, NetworkLayout, NodeLayout } from "./config.js";
 export { DEFAULT_PROVISION_TIMEOUT_MS } from "./orchestrator.js";
 export type {
+  CchReadinessState,
+  CchTopologyStatus,
   ChannelRow,
   ChannelSettlementPhase,
   ChannelSettlementReport,
@@ -151,6 +155,16 @@ export function planNetwork(
       capacity_ckb: channel.capacityCkb,
     })),
     funding: { per_node_ckb: topology.funding.perNodeCkb },
+    ...(topology.cch
+      ? {
+          cch: {
+            hub_node: topology.cch.hubNode,
+            user_node: topology.cch.userNode,
+            wrapped_channel_base_units: topology.cch.wrappedChannelBaseUnits,
+            issued_base_units: topology.cch.issuedBaseUnits,
+          },
+        }
+      : {}),
   });
   return planLayout(validated, options);
 }
@@ -176,6 +190,7 @@ export interface FiberForge {
     options: ReplayBundleOptions,
   ): Promise<ReplayBundleResult>;
   inspect(net: string): Promise<NetworkView>;
+  cchStatus(net: string): Promise<CchTopologyStatus>;
   inspectNode(net: string, node: string): Promise<NodeLifecycleReport>;
   stopNode(net: string, node: string): Promise<NodeLifecycleReport>;
   startNode(

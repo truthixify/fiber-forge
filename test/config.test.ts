@@ -97,4 +97,15 @@ describe("fnnConfigYaml", () => {
     expect(yaml).toContain('index: "0x8"');
     expect(yaml).toMatch(/auto_accept_amount: \d/);
   });
+
+  it("enables pubsub only for an explicitly selected CCH hub", () => {
+    const layout = planLayout(trio, { subnetBase: "10.5.7" });
+    const ordinary = fnnConfigYaml(layout, layout.nodes[0]);
+    const hub = fnnConfigYaml(layout, layout.nodes[1], undefined, {
+      pubsub: true,
+    });
+
+    expect(ordinary).not.toContain("pubsub");
+    expect(hub).toContain("dev, pubsub]");
+  });
 });

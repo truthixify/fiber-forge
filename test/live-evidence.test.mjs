@@ -62,7 +62,11 @@ describe("runtime image platform preflight", () => {
     const packageJson = {
       fiberForge: {
         images: { ckb: "core-ckb", fiber: "core-fiber" },
-        cchImages: { bitcoin: "optional-bitcoin", lnd: "optional-lnd" },
+        cchImages: {
+          cch: "optional-cch",
+          bitcoin: "optional-bitcoin",
+          lnd: "optional-lnd",
+        },
       },
     };
 
@@ -71,6 +75,7 @@ describe("runtime image platform preflight", () => {
       "core-fiber",
     ]);
     expect(imageGroupReferences(packageJson, "cchImages")).toEqual([
+      "optional-cch",
       "optional-bitcoin",
       "optional-lnd",
     ]);

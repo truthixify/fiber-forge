@@ -1,7 +1,6 @@
 name: cch-e2e
 
-# Optional CCH dependencies are isolated from the ordinary Fiber live gate. This job currently
-# proves the disposable Bitcoin/LND lifecycle; the integrated CCH flow extends the same gate.
+# Optional CCH dependencies are isolated from the ordinary Fiber live gate.
 on:
   workflow_dispatch:
   push:
@@ -12,9 +11,22 @@ on:
       - "package.json"
       - "package-lock.json"
       - "scripts/live-evidence.mjs"
+      - "assets/**"
+      - "src/cch.ts"
+      - "src/ckb.ts"
+      - "src/config.ts"
       - "src/engine.ts"
       - "src/lightning.ts"
+      - "src/orchestrator.ts"
+      - "src/package-metadata.ts"
+      - "src/ports.ts"
+      - "src/presets.ts"
+      - "src/rpc.ts"
+      - "src/topology.ts"
+      - "test/cch.test.ts"
+      - "test/cch-status.test.ts"
       - "test/lightning-e2e.test.ts"
+      - "test/cch-topology-e2e.test.ts"
 
 permissions:
   contents: read
@@ -24,9 +36,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  lightning-backend:
+  cch-topology:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -43,3 +55,8 @@ jobs:
         env:
           FORGE_LIGHTNING_E2E: "1"
         run: npx vitest run test/lightning-e2e.test.ts --reporter=verbose
+      - name: Verify the integrated CCH topology and cleanup
+        timeout-minutes: 12
+        env:
+          FORGE_CCH_TOPOLOGY_E2E: "1"
+        run: npx vitest run test/cch-topology-e2e.test.ts --reporter=verbose

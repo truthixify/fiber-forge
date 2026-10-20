@@ -33,6 +33,7 @@
       "fiber": "nervos/fiber:0.9.0-rc7"
     },
     "cchImages": {
+      "cch": "nervos/fiber:0.9.0-rc7@sha256:827d2eb4f557811c0f0f81268f993aae73d979eacfe48d36bd41d9041fe36081",
       "bitcoin": "bitcoin/bitcoin:27.0@sha256:bf3748000b46aa9515f856326abbe61ce9f4f7af2ebf9da38930974323634f30",
       "lnd": "lightninglabs/lnd:v0.18.0-beta@sha256:dab0f5ae09615066d4c0f29f6f7444ab7e6c8a2548f56ea50288236b542095d4"
     }
@@ -98,6 +99,7 @@
     "docs/lifecycle-errors.md",
     "docs/verification.md",
     "docs/compatibility.md",
+    "docs/cch-topology.md",
     "docs/lightning-backend.md",
     "docs/github-action.md",
     "docs/integration.md",

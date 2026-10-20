@@ -76,6 +76,18 @@ const NAMED: Record<string, () => Topology> = {
   duo: () => ({ ...line(2), name: "duo" }),
   trio: () => ({ ...line(3), name: "trio" }),
   hub: () => ({ ...star(5), name: "hub" }),
+  cch: () => ({
+    name: "cch",
+    nodes: [{ name: "user" }, { name: "hub" }],
+    channels: [],
+    funding: FUNDING,
+    cch: {
+      userNode: "user",
+      hubNode: "hub",
+      wrappedChannelBaseUnits: 200_000,
+      issuedBaseUnits: 100_000_000,
+    },
+  }),
 };
 
 const SHAPES: Record<string, (n: number) => Topology> = { line, ring, star };

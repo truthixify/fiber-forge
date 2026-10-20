@@ -18,6 +18,7 @@ import {
   type NetworkLayout,
   type NetworkView,
   type ChannelSettlementReport,
+  type CchTopologyStatus,
   type BundleInspection,
   type ExportBundleOptions,
   type ExportBundleResult,
@@ -48,6 +49,7 @@ type Assert<Condition extends true> = Condition;
 type ExpectedUpOptions = {
   fnnImage?: string;
   ckbImage?: string;
+  cchImage?: string;
   layout?: LayoutOptions;
   onProgress?: (message: string) => void;
   signal?: AbortSignal;
@@ -143,6 +145,7 @@ type AppForge = Pick<
   | "inspectBundle"
   | "replayBundle"
   | "inspect"
+  | "cchStatus"
   | "inspectNode"
   | "stopNode"
   | "startNode"
@@ -161,6 +164,7 @@ type AppForge = Pick<
 async function exerciseContract(client: AppForge): Promise<void> {
   const layout: NetworkLayout = await client.up(topology, upOptions);
   const view: NetworkView = await client.inspect(layout.net);
+  const cch: CchTopologyStatus = await client.cchStatus(layout.net);
   const lifecycleOptions: NodeLifecycleOptions = {
     timeoutMs: 60_000,
     reconcileTimeoutMs: 10_000,
@@ -184,6 +188,7 @@ async function exerciseContract(client: AppForge): Promise<void> {
       "0xchannel",
     );
   void applied;
+  void cch;
   void mined;
   void forceOptions;
   void settlement;

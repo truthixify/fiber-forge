@@ -125,7 +125,8 @@ async function spawnTopology(
 ): Promise<Topology> {
   const shape = str(body.preset || "trio");
   const count = num(body.nodes || 3);
-  const named = shape === "duo" || shape === "trio" || shape === "hub";
+  const named =
+    shape === "duo" || shape === "trio" || shape === "hub" || shape === "cch";
   const base = named ? preset(shape) : preset(`${shape}:${count}`);
   if (!base) {
     throw new Error(`unknown preset "${shape}"`);
@@ -156,6 +157,15 @@ async function spawnTopology(
         to: remap[c.to],
       })),
       funding: { perNodeCkb },
+      ...(base.cch
+        ? {
+            cch: {
+              ...base.cch,
+              hubNode: remap[base.cch.hubNode],
+              userNode: remap[base.cch.userNode],
+            },
+          }
+        : {}),
     };
   }
   return { ...base, name, funding: { perNodeCkb } };

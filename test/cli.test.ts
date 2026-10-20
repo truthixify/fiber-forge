@@ -196,6 +196,28 @@ describe("resolveTopology", () => {
     });
   });
 
+  it("registers the CCH boundary status command and structured failures", async () => {
+    const cch = buildCli().commands.find((command) => command.name() === "cch");
+    expect(cch?.commands.map((command) => command.name())).toEqual(["status"]);
+
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+    await main([
+      "node",
+      "fiber-forge",
+      "cch",
+      "status",
+      "missing-cch",
+      "--json",
+    ]);
+    expect(JSON.parse(String(stderr.mock.calls[0][0]))).toMatchObject({
+      ok: false,
+      error: {
+        code: "NETWORK_NOT_FOUND",
+        resource: "missing-cch",
+      },
+    });
+  });
+
   it("emits a structured force-close confirmation failure in JSON mode", async () => {
     const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
 

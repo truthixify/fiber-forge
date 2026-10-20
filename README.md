@@ -117,6 +117,11 @@ fiber-forge status trio --json | jq              # every data command accepts --
 fiber-forge lightning up trio
 fiber-forge lightning status trio --json
 fiber-forge lightning down trio
+
+# complete Fiber / CCH / Lightning topology
+fiber-forge up cch
+fiber-forge cch status cch --json
+fiber-forge down cch --purge
 ```
 
 Failures from `--json` commands are emitted as one parseable object with a stable `error.code`, the
@@ -161,7 +166,8 @@ verification evidence without assuming repository internals.
 
 ## Topologies
 
-Use a **preset** — `duo` (2 nodes), `trio` (3 nodes in an A—B—C line), or `hub` (a 5-node star) — or
+Use a **preset** — `duo` (2 nodes), `trio` (3 nodes in an A—B—C line), `hub` (a 5-node star), or
+the opt-in [`cch` cross-network topology](docs/cch-topology.md) — or
 a **parametric shape** for any node count: `line:N` (a chain), `ring:N` (a loop), or `star:N` (a hub
 with N−1 spokes), where N is 2 to 10. For a specific layout, pass `up` a **topology file**:
 
@@ -236,7 +242,8 @@ also checks the Docker daemon architecture and both image manifest lists before 
 - **Scenarios** — a curated library of portable failure and recovery recipes.
 - **Cross-chain** — the local-only [CCH compatibility and trust boundary](docs/cch-feasibility.md)
   is proven in both directions, and the [disposable Lightning backend](docs/lightning-backend.md) is
-  automated; the integrated CCH workflow and independent cross-network CI remain roadmap work.
+  automated. The [integrated CCH topology](docs/cch-topology.md) now provisions and reports the full
+  boundary; the packed-artifact two-direction CI proof remains the next step.
 - **Reproducibility** — signed bundle provenance and broader cross-host replay evidence.
 
 Force-close is an explicit local-dev operation with full-ID confirmation and terminal settlement

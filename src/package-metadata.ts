@@ -9,6 +9,7 @@ interface PackageMetadata {
       fiber: string;
     };
     cchImages: {
+      cch: string;
       bitcoin: string;
       lnd: string;
     };
@@ -26,7 +27,8 @@ if (!metadata.fiberForge?.images?.ckb || !metadata.fiberForge.images.fiber) {
   throw new Error("package.json does not contain the pinned runtime images");
 }
 if (
-  !metadata.fiberForge.cchImages?.bitcoin ||
+  !metadata.fiberForge.cchImages?.cch ||
+  !metadata.fiberForge.cchImages.bitcoin ||
   !metadata.fiberForge.cchImages.lnd
 ) {
   throw new Error("package.json does not contain the pinned CCH images");
@@ -39,6 +41,7 @@ export const runtimeImages = Object.freeze({
   fiber: metadata.fiberForge.images.fiber,
 });
 export const cchImages = Object.freeze({
+  cch: metadata.fiberForge.cchImages.cch,
   bitcoin: metadata.fiberForge.cchImages.bitcoin,
   lnd: metadata.fiberForge.cchImages.lnd,
 });

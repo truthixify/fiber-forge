@@ -34,12 +34,22 @@ import {
   type CkbTransactionStatus,
   DevChain,
   SIMPLE_UDT_CODE_HASH,
+  type UdtScript,
 } from "./ckb.js";
+import {
+  CchOperator,
+  type CchOperatorController,
+  type CchOperatorPlan,
+  type CchOperatorStatus,
+  cchDataVolumeName,
+  planCchOperator,
+} from "./cch.js";
 import {
   CKB_RPC_PORT,
   FNN_P2P_PORT,
   FNN_RPC_PORT,
   type LayoutOptions,
+  type FnnConfigOptions,
   type NetworkLayout,
   type NodeLayout,
   type UdtWhitelistInfo,
@@ -68,6 +78,7 @@ import {
 import { encryptKey, generatePrivateKey } from "./keys.js";
 import {
   LightningBackend,
+  type LightningBackendController,
   type LightningBackendPlan,
   type LightningBackendStartOptions,
   type LightningBackendStatus,
@@ -99,6 +110,7 @@ import {
   type ScenarioRunOptions,
 } from "./scenario.js";
 import {
+  type CchTopologySpec,
   isValidNetworkName,
   parseTopology,
   validateTopology,
@@ -118,6 +130,24 @@ export const DEFAULT_FORCE_CLOSE_TIMEOUT_MS = 7 * 60_000;
 
 function nodeRuntimeStatus(status: ContainerStatus): NodeRuntimeStatus {
   return status === "exited" ? "stopped" : status;
+}
+
+function scriptsEqual(value: unknown, expected: UdtScript): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const script = value as Record<string, unknown>;
+  return (
+    script.code_hash === expected.code_hash &&
+    script.hash_type === expected.hash_type &&
+    script.args === expected.args
+  );
+}
+
+function baseUnitsOf(value?: string): bigint {
+  try {
+    return BigInt(value ?? "0x0");
+  } catch {
+    return 0n;
+  }
 }
 
 class ProvisionGuard {
@@ -201,6 +231,8 @@ function waitWithGuard(
 export interface UpOptions {
   fnnImage?: string;
   ckbImage?: string;
+  /** Override only the opt-in standalone CCH image. Production callers should use the pin. */
+  cchImage?: string;
   layout?: LayoutOptions;
   onProgress?: (message: string) => void;
   /** Cancel provisioning cooperatively. Rollback finishes before the promise rejects. */
@@ -292,14 +324,70 @@ export interface NetworkState {
     pubkey: string;
     ckbAddress: string;
   }[];
-  channels: { from: string; to: string; capacityCkb: number }[];
+  channels: {
+    from: string;
+    to: string;
+    capacityCkb: number;
+    asset?: "ckb" | "simple_udt";
+    capacityBaseUnits?: string;
+  }[];
   /** Absent only in legacy layouts, which require an explicit topology during export. */
   topology?: Topology;
+  /** Versioned, public CCH metadata. Credentials remain only in a disposable Docker volume. */
+  cch?: PersistedCchState;
+}
+
+export interface PersistedCchState {
+  schemaVersion: 1;
+  hubNode: string;
+  userNode: string;
+  wrappedChannelBaseUnits: string;
+  issuedBaseUnits: string;
+  wrappedTypeScript: UdtScript;
+  operator: {
+    image: string;
+    container: string;
+    ip: string;
+    rpcHostPort: number;
+    dataVolume: string;
+  };
+}
+
+export type CchReadinessState =
+  "ready" | "degraded" | "settling" | "failed" | "unsupported";
+
+export interface CchTopologyStatus {
+  schemaVersion: 1;
+  kind: "cch-topology";
+  net: string;
+  state: CchReadinessState;
+  operator:
+    (CchOperatorStatus & { containerName: string; rpcUrl: string }) | null;
+  lightning: LightningBackendStatus | null;
+  fiber: {
+    hubNode: string;
+    userNode: string;
+    hubStatus: string;
+    userStatus: string;
+    wrappedChannel: {
+      state: string;
+      capacityBaseUnits: string;
+      typeScriptMatches: boolean;
+    } | null;
+  } | null;
+  boundary: {
+    fiberAsset: "simple_udt";
+    lightningAsset: "regtest_btc";
+    testRate: "1:1 base units to satoshis";
+    trustedOperator: true;
+  } | null;
 }
 
 /** A live view of a network for the GUI: block height, node status + balances, live channels. */
 export interface NetworkView {
   net: string;
+  /** Present only for the opt-in CCH profile so Fiber-only JSON stays backward compatible. */
+  profile?: "fiber" | "cch";
   block: number;
   nodes: {
     name: string;
@@ -323,7 +411,14 @@ export interface NetworkView {
     remoteCkb: number;
     channelId: string;
     udt: boolean;
+    /** Exact units are provided because wrapped-satoshi channels are sub-token sized. */
+    capacityBaseUnits?: string;
+    localBaseUnits?: string;
+    remoteBaseUnits?: string;
+    udtTypeScript?: UdtScript;
   }[];
+  /** Present only for a CCH-enabled topology. */
+  cch?: CchTopologyStatus;
 }
 
 /** A supported operation on one persisted Fiber node container. */
@@ -437,6 +532,7 @@ export interface NetworkSummary {
   net: string;
   nodeCount: number;
   running: boolean;
+  profile?: "fiber" | "cch";
 }
 
 const LOG_LEVEL_RANK: Record<string, number> = {
@@ -471,6 +567,12 @@ export class Orchestrator {
     private readonly makeChain: (ckbHostPort: number) => DevChain = (
       ckbHostPort,
     ) => new DevChain(`http://127.0.0.1:${ckbHostPort}`),
+    private readonly makeLightningBackend: (
+      engine: ContainerEngine,
+    ) => LightningBackendController = (engine) => new LightningBackend(engine),
+    private readonly makeCchOperator: (
+      engine: ContainerEngine,
+    ) => CchOperatorController = (engine) => new CchOperator(engine),
   ) {}
 
   /** Serializes channel opens per network: two fundings must not race for the same wallet cell. */
@@ -617,6 +719,7 @@ export class Orchestrator {
     for (const volume of Object.values(backendVolumes)) {
       await this.engine.removeVolume(volume);
     }
+    await this.engine.removeVolume(cchDataVolumeName(net));
     const netDir = join(this.stateDir, net);
     try {
       await rm(netDir, { recursive: true, force: true });
@@ -675,6 +778,7 @@ export class Orchestrator {
     const log = options.onProgress ?? (() => {});
     const netDir = join(this.stateDir, layout.net);
     let phase = `Docker network ${layout.network}`;
+    let persistedCch: PersistedCchState | undefined;
 
     try {
       guard.check(phase);
@@ -720,6 +824,7 @@ export class Orchestrator {
           node,
           privateKey,
           udtWhitelist,
+          { pubsub: topology.cch?.hubNode === node.name },
         );
         guard.check(phase);
         log(`node ${node.name} (${node.ip})`);
@@ -858,6 +963,24 @@ export class Orchestrator {
         }
       }
 
+      if (topology.cch) {
+        phase = "CCH topology";
+        guard.check(phase);
+        persistedCch = await this.provisionCchTopology({
+          cch: topology.cch,
+          layout,
+          netDir,
+          chain,
+          rpcByName,
+          infoByName,
+          addressByName,
+          guard,
+          options,
+          log,
+        });
+        guard.check(phase);
+      }
+
       if (topology.channels.length > 0) {
         phase = "routing graph propagation";
         guard.check(phase);
@@ -885,17 +1008,36 @@ export class Orchestrator {
           pubkey: infoByName.get(n.name)!.pubkey,
           ckbAddress: addressByName.get(n.name)!,
         })),
-        channels: topology.channels.map((c) => ({
-          from: c.from,
-          to: c.to,
-          capacityCkb: c.capacityCkb,
-        })),
+        channels: [
+          ...topology.channels.map((c) => ({
+            from: c.from,
+            to: c.to,
+            capacityCkb: c.capacityCkb,
+            asset: "ckb" as const,
+          })),
+          ...(topology.cch
+            ? [
+                {
+                  from: topology.cch.userNode,
+                  to: topology.cch.hubNode,
+                  capacityCkb:
+                    topology.cch.wrappedChannelBaseUnits / 100_000_000,
+                  asset: "simple_udt" as const,
+                  capacityBaseUnits: String(
+                    topology.cch.wrappedChannelBaseUnits,
+                  ),
+                },
+              ]
+            : []),
+        ],
         topology: {
           name: topology.name,
           nodes: topology.nodes.map((node) => ({ ...node })),
           channels: topology.channels.map((channel) => ({ ...channel })),
           funding: { ...topology.funding },
+          ...(topology.cch ? { cch: { ...topology.cch } } : {}),
         },
+        ...(persistedCch ? { cch: persistedCch } : {}),
       };
       await writeFile(
         join(netDir, "layout.json"),
@@ -941,6 +1083,196 @@ export class Orchestrator {
         );
       }
       throw primary;
+    }
+  }
+
+  private async provisionCchTopology(input: {
+    cch: CchTopologySpec;
+    layout: NetworkLayout;
+    netDir: string;
+    chain: DevChain;
+    rpcByName: Map<string, FnnRpc>;
+    infoByName: Map<string, { pubkey: string; peerId: string }>;
+    addressByName: Map<string, string>;
+    guard: ProvisionGuard;
+    options: UpOptions;
+    log: (message: string) => void;
+  }): Promise<PersistedCchState> {
+    const {
+      cch: spec,
+      layout,
+      netDir,
+      chain,
+      rpcByName,
+      infoByName,
+      addressByName,
+      guard,
+      options,
+      log,
+    } = input;
+    const userLayout = layout.nodes.find(
+      (node) => node.name === spec.userNode,
+    )!;
+    const hubLayout = layout.nodes.find((node) => node.name === spec.hubNode)!;
+    const userRpc = rpcByName.get(spec.userNode)!;
+    const hubRpc = rpcByName.get(spec.hubNode)!;
+    const userInfo = infoByName.get(spec.userNode)!;
+    const hubInfo = infoByName.get(spec.hubNode)!;
+
+    let resource = `CCH Fiber peer ${spec.userNode}->${spec.hubNode}`;
+    guard.check(resource);
+    log(`connect ${spec.userNode} -> ${spec.hubNode} for cch`);
+    await userRpc.connectPeer(
+      dialAddress(hubLayout.ip, hubInfo.peerId, FNN_P2P_PORT),
+    );
+    await this.waitPeerConnected(
+      userRpc,
+      hubInfo.pubkey,
+      30_000,
+      guard,
+      resource,
+    );
+
+    resource = `CCH wrapped liquidity for ${spec.userNode}`;
+    guard.check(resource);
+    log(
+      `issuing ${spec.issuedBaseUnits} wrapped base units to ${spec.userNode}`,
+    );
+    await chain.issueUdt(
+      addressByName.get(spec.userNode)!,
+      BigInt(spec.issuedBaseUnits),
+    );
+    guard.check(resource);
+    const wrappedTypeScript = await chain.udtScript();
+
+    resource = `CCH wrapped channel ${spec.userNode}->${spec.hubNode}`;
+    const priorUserReady = await this.readyChannelCount(
+      userRpc,
+      hubInfo.pubkey,
+    );
+    const priorHubReady = await this.readyChannelCount(hubRpc, userInfo.pubkey);
+    log(
+      `open wrapped channel ${spec.userNode} -> ${spec.hubNode} (${spec.wrappedChannelBaseUnits} base units)`,
+    );
+    await this.openChannel(
+      userRpc,
+      {
+        pubkey: hubInfo.pubkey,
+        fundingAmount: `0x${BigInt(spec.wrappedChannelBaseUnits).toString(16)}`,
+        udtTypeScript: wrappedTypeScript,
+      },
+      15,
+      guard,
+      resource,
+    );
+    await this.waitChannelReady(
+      userRpc,
+      hubInfo.pubkey,
+      chain,
+      `${spec.userNode}->${spec.hubNode} (wrapped)`,
+      log,
+      priorUserReady + 1,
+      120_000,
+      guard,
+    );
+    await this.waitChannelReady(
+      hubRpc,
+      userInfo.pubkey,
+      chain,
+      `${spec.hubNode}->${spec.userNode} (wrapped)`,
+      log,
+      priorHubReady + 1,
+      120_000,
+      guard,
+    );
+    await this.assertWrappedChannel(
+      userRpc,
+      hubInfo.pubkey,
+      wrappedTypeScript,
+      spec.wrappedChannelBaseUnits,
+      resource,
+    );
+
+    resource = "CCH Lightning backend";
+    guard.check(resource);
+    const subnetBase = this.subnetBaseOf(layout.ckbIp, layout.net);
+    const lightningPlan = planLightningBackend(
+      layout.net,
+      layout.network,
+      subnetBase,
+    );
+    await this.makeLightningBackend(this.engine).start(lightningPlan, {
+      timeoutMs: guard.remaining(5 * 60_000, resource),
+      signal: options.signal,
+      onProgress: log,
+    });
+    guard.check(resource);
+
+    resource = "CCH operator RPC port";
+    const operatorRpcHostPort = await findFreePort(8_400);
+    guard.check(resource);
+    const operatorPlan = planCchOperator({
+      net: layout.net,
+      network: layout.network,
+      subnetBase,
+      rpcHostPort: operatorRpcHostPort,
+      hubFiberIp: hubLayout.ip,
+      wrappedTypeScript,
+      image: options.cchImage,
+    });
+    resource = `CCH operator ${operatorPlan.container}`;
+    await this.makeCchOperator(this.engine).start(
+      operatorPlan,
+      join(netDir, "cch"),
+      {
+        timeoutMs: guard.remaining(60_000, resource),
+        signal: options.signal,
+        onProgress: log,
+      },
+    );
+    guard.check(resource);
+
+    return {
+      schemaVersion: 1,
+      hubNode: spec.hubNode,
+      userNode: spec.userNode,
+      wrappedChannelBaseUnits: String(spec.wrappedChannelBaseUnits),
+      issuedBaseUnits: String(spec.issuedBaseUnits),
+      wrappedTypeScript,
+      operator: {
+        image: operatorPlan.image,
+        container: operatorPlan.container,
+        ip: operatorPlan.ip,
+        rpcHostPort: operatorPlan.rpcHostPort,
+        dataVolume: operatorPlan.dataVolume,
+      },
+    };
+  }
+
+  private async assertWrappedChannel(
+    rpc: FnnRpc,
+    peerPubkey: string,
+    expectedScript: UdtScript,
+    expectedBaseUnits: number,
+    resource: string,
+  ): Promise<void> {
+    const channel = (await rpc.listChannels(peerPubkey)).find(
+      (candidate) =>
+        isChannelReady(candidate) &&
+        scriptsEqual(candidate.funding_udt_type_script, expectedScript) &&
+        BigInt(candidate.local_balance ?? "0x0") +
+          BigInt(candidate.remote_balance ?? "0x0") ===
+          BigInt(expectedBaseUnits),
+    );
+    if (!channel) {
+      throw new ForgeError(
+        "CHANNEL_STATE_MISMATCH",
+        "wrapped channel did not match the configured type script and capacity",
+        {
+          resource,
+          action: "inspect both Fiber nodes and recreate the CCH topology",
+        },
+      );
     }
   }
 
@@ -1040,8 +1372,15 @@ export class Orchestrator {
           continue;
         }
         seen.add(channel.channel_id);
-        const localCkb = shannonHexToCkb(channel.local_balance);
-        const remoteCkb = shannonHexToCkb(channel.remote_balance);
+        const udt = Boolean(channel.funding_udt_type_script);
+        const localBaseUnits = baseUnitsOf(channel.local_balance);
+        const remoteBaseUnits = baseUnitsOf(channel.remote_balance);
+        const localCkb = udt
+          ? Number(localBaseUnits) / 100_000_000
+          : shannonHexToCkb(channel.local_balance);
+        const remoteCkb = udt
+          ? Number(remoteBaseUnits) / 100_000_000
+          : shannonHexToCkb(channel.remote_balance);
         channels.push({
           from: node.name,
           to: nameByPubkey.get(channel.pubkey ?? "") ?? "?",
@@ -1050,12 +1389,125 @@ export class Orchestrator {
           localCkb,
           remoteCkb,
           channelId: channel.channel_id,
-          udt: Boolean(channel.funding_udt_type_script),
+          udt,
+          ...(udt
+            ? {
+                capacityBaseUnits: (
+                  localBaseUnits + remoteBaseUnits
+                ).toString(),
+                localBaseUnits: localBaseUnits.toString(),
+                remoteBaseUnits: remoteBaseUnits.toString(),
+                ...(typeof channel.funding_udt_type_script === "object" &&
+                channel.funding_udt_type_script !== null
+                  ? {
+                      udtTypeScript:
+                        channel.funding_udt_type_script as UdtScript,
+                    }
+                  : {}),
+              }
+            : {}),
         });
       }
     }
 
-    return { net, block, nodes, channels };
+    const view: NetworkView = { net, block, nodes, channels };
+    if (!state.cch) return view;
+    return {
+      ...view,
+      profile: "cch",
+      cch: await this.buildCchStatus({ ...state, cch: state.cch }, view),
+    };
+  }
+
+  /** Cross-network status is explicit; ordinary networks report `unsupported` without mutation. */
+  async cchStatus(net: string): Promise<CchTopologyStatus> {
+    const state = await this.readState(net);
+    if (!state.cch) {
+      return {
+        schemaVersion: 1,
+        kind: "cch-topology",
+        net,
+        state: "unsupported",
+        operator: null,
+        lightning: null,
+        fiber: null,
+        boundary: null,
+      };
+    }
+    const view = await this.inspect(net);
+    return view.cch!;
+  }
+
+  private async buildCchStatus(
+    state: NetworkState & { cch: PersistedCchState },
+    view: NetworkView,
+  ): Promise<CchTopologyStatus> {
+    const operatorPlan = this.cchPlan(state);
+    const [operator, lightning] = await Promise.all([
+      this.makeCchOperator(this.engine).status(operatorPlan),
+      this.makeLightningBackend(this.engine).status(this.lightningPlan(state)),
+    ]);
+    const hub = view.nodes.find((node) => node.name === state.cch.hubNode);
+    const user = view.nodes.find((node) => node.name === state.cch.userNode);
+    const wrapped = view.channels.find(
+      (channel) =>
+        channel.udt &&
+        ((channel.from === state.cch.userNode &&
+          channel.to === state.cch.hubNode) ||
+          (channel.from === state.cch.hubNode &&
+            channel.to === state.cch.userNode)),
+    );
+    const wrappedChannel = wrapped
+      ? {
+          state: wrapped.state,
+          capacityBaseUnits: wrapped.capacityBaseUnits ?? "0",
+          typeScriptMatches: scriptsEqual(
+            wrapped.udtTypeScript,
+            state.cch.wrappedTypeScript,
+          ),
+        }
+      : null;
+    const ready =
+      operator.container === "running" &&
+      operator.rpcReady &&
+      lightning.state === "ready" &&
+      hub?.status === "running" &&
+      user?.status === "running" &&
+      wrappedChannel?.state === "ChannelReady" &&
+      wrappedChannel.capacityBaseUnits === state.cch.wrappedChannelBaseUnits &&
+      wrappedChannel.typeScriptMatches;
+    const status: CchReadinessState =
+      operator.container === "exited" || operator.container === "absent"
+        ? "failed"
+        : ready
+          ? "ready"
+          : "degraded";
+
+    return {
+      schemaVersion: 1,
+      kind: "cch-topology",
+      net: state.net,
+      state: status,
+      operator: {
+        ...operator,
+        containerName: operatorPlan.container,
+        rpcUrl: `http://127.0.0.1:${operatorPlan.rpcHostPort}`,
+      },
+      lightning,
+      fiber: {
+        hubNode: state.cch.hubNode,
+        userNode: state.cch.userNode,
+        hubStatus: hub?.status ?? "absent",
+        userStatus: user?.status ?? "absent",
+        wrappedChannel,
+      },
+      boundary: {
+        fiberAsset: "simple_udt",
+        lightningAsset: "regtest_btc",
+        testRate: "1:1 base units to satoshis",
+        trustedOperator: true,
+      },
+    };
   }
 
   /** Inspect one recorded node without changing its container state. */
@@ -1383,7 +1835,7 @@ export class Orchestrator {
   ): Promise<LightningBackendStatus> {
     const state = await this.readState(net);
     const plan = this.lightningPlan(state);
-    const backend = new LightningBackend(this.engine);
+    const backend = this.makeLightningBackend(this.engine);
     const status = await backend.start(plan, options);
     try {
       await writeFile(
@@ -1421,13 +1873,15 @@ export class Orchestrator {
   /** Return a sanitized, JSON-safe view of the optional Bitcoin/LND backend. */
   async lightningBackendStatus(net: string): Promise<LightningBackendStatus> {
     const state = await this.readState(net);
-    return new LightningBackend(this.engine).status(this.lightningPlan(state));
+    return this.makeLightningBackend(this.engine).status(
+      this.lightningPlan(state),
+    );
   }
 
   /** Remove every optional Bitcoin/LND container and data volume for a managed network. */
   async stopLightningBackend(net: string): Promise<LightningBackendStatus> {
     const state = await this.readState(net);
-    const backend = new LightningBackend(this.engine);
+    const backend = this.makeLightningBackend(this.engine);
     const plan = this.lightningPlan(state);
     await backend.down(plan);
     await rm(join(this.stateDir, net, "lightning.json"), { force: true });
@@ -1507,6 +1961,13 @@ export class Orchestrator {
         );
       }
     }
+    try {
+      await this.engine.removeVolume(cchDataVolumeName(net));
+    } catch (error) {
+      failures.push(
+        `remove volume ${cchDataVolumeName(net)}: ${errorDetails(error).message}`,
+      );
+    }
     if (failures.length === 0) {
       try {
         await rm(join(this.stateDir, net, "faults.json"), { force: true });
@@ -1583,6 +2044,7 @@ export class Orchestrator {
           net,
           nodeCount: state.nodes.length,
           running: (await this.engine.status(`forge-${net}-ckb`)) === "running",
+          ...(state.cch ? { profile: "cch" as const } : {}),
         });
       } catch {
         // not a network directory
@@ -2139,6 +2601,17 @@ export class Orchestrator {
     options: ExportBundleOptions,
   ): Promise<ExportBundleResult> {
     const state = await this.readState(net);
+    if (state.cch) {
+      throw new ForgeError(
+        "BUNDLE_INCOMPATIBLE",
+        "CCH networks cannot be exported because credentials and external-chain state are intentionally excluded",
+        {
+          resource: net,
+          action:
+            "export a Fiber-only topology or capture sanitized CCH evidence",
+        },
+      );
+    }
     const topology = this.topologyForExport(state, options.topology);
     let diagnostics: BundleDiagnostics | undefined;
     if (options.diagnostics) {
@@ -3262,18 +3735,54 @@ export class Orchestrator {
   }
 
   private lightningPlan(state: NetworkState): LightningBackendPlan {
-    const match = state.ckbIp?.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/);
+    const subnetBase = this.subnetBaseOf(state.ckbIp, state.net);
+    return planLightningBackend(state.net, state.network, subnetBase);
+  }
+
+  private cchPlan(
+    state: NetworkState & { cch: PersistedCchState },
+  ): CchOperatorPlan {
+    const hub = this.requireNode(state, state.cch.hubNode);
+    const plan = planCchOperator({
+      net: state.net,
+      network: state.network,
+      subnetBase: this.subnetBaseOf(state.ckbIp, state.net),
+      rpcHostPort: state.cch.operator.rpcHostPort,
+      hubFiberIp: hub.ip,
+      wrappedTypeScript: state.cch.wrappedTypeScript,
+      image: state.cch.operator.image,
+    });
+    const persisted = state.cch.operator;
+    if (
+      persisted.container !== plan.container ||
+      persisted.ip !== plan.ip ||
+      persisted.dataVolume !== plan.dataVolume
+    ) {
+      throw new ForgeError(
+        "PROVISION_FAILED",
+        `network "${state.net}" contains inconsistent CCH operator state`,
+        {
+          resource: state.net,
+          action: "purge and recreate the CCH topology",
+        },
+      );
+    }
+    return plan;
+  }
+
+  private subnetBaseOf(ip: string | undefined, net: string): string {
+    const match = ip?.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/);
     if (!match) {
       throw new ForgeError(
         "PROVISION_FAILED",
-        `network "${state.net}" does not record a supported IPv4 layout`,
+        `network "${net}" does not record a supported IPv4 layout`,
         {
-          resource: state.net,
+          resource: net,
           action: "recreate the network with the current Fiber Forge version",
         },
       );
     }
-    return planLightningBackend(state.net, state.network, match[1]);
+    return match[1];
   }
 
   private requireNode(
@@ -3315,6 +3824,7 @@ export class Orchestrator {
     node: NodeLayout,
     privateKey: Uint8Array,
     udt?: UdtWhitelistInfo,
+    configOptions: FnnConfigOptions = {},
   ): Promise<void> {
     await rm(dir, { recursive: true, force: true });
     await mkdir(join(dir, "ckb"), { recursive: true });
@@ -3322,7 +3832,10 @@ export class Orchestrator {
       join(dir, "ckb", "key"),
       encryptKey(privateKey, node.password),
     );
-    await writeFile(join(dir, "config.yml"), fnnConfigYaml(layout, node, udt));
+    await writeFile(
+      join(dir, "config.yml"),
+      fnnConfigYaml(layout, node, udt, configOptions),
+    );
     // dev.toml references the contracts relatively; sitting beside them in /fiber it is `contracts`.
     const devToml = await readFile(join(this.assetsDir, "dev.toml"), "utf8");
     await writeFile(

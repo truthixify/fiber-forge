@@ -13,6 +13,7 @@ import { errorDetails } from "./errors.js";
 import { type FaultKind, type FaultReport } from "./faults.js";
 import { type LightningBackendStatus } from "./lightning.js";
 import {
+  type CchTopologyStatus,
   DEFAULT_FORCE_CLOSE_TIMEOUT_MS,
   type ChannelSettlementReport,
   type NetworkView,
@@ -128,6 +129,14 @@ const UP_STEPS: ui.Step[] = [
   { key: "ready", label: "ready" },
 ];
 
+const CCH_UP_STEPS: ui.Step[] = [
+  ...UP_STEPS.slice(0, -1),
+  { key: "wrapped", label: "wrapped liquidity" },
+  { key: "lightning", label: "lightning" },
+  { key: "cch", label: "cch operator" },
+  UP_STEPS.at(-1)!,
+];
+
 function upHandler(
   progress: ui.Progress,
   totals: { nodes: number; channels: number },
@@ -138,6 +147,17 @@ function upHandler(
   return (message) => {
     if (/^network .+ ready$/.test(message)) {
       progress.enter("ready");
+    } else if (message.startsWith("cch operator")) {
+      progress.enter("cch", message);
+    } else if (/^Lightning backend/i.test(message)) {
+      progress.enter("lightning", message);
+    } else if (
+      message.startsWith("issuing ") &&
+      message.includes("wrapped base units")
+    ) {
+      progress.enter("wrapped", message);
+    } else if (message.startsWith("open wrapped channel")) {
+      progress.enter("wrapped", message);
     } else if (message.startsWith("propagating")) {
       progress.enter("ready");
     } else if (message.startsWith("network ")) {
@@ -182,6 +202,14 @@ function printUpCard(layout: NetworkLayout, topology: Topology): void {
       `${ui.text(channel.from)} ${ui.muted("→")} ${ui.text(channel.to)}   ${ui.success("●")} ${ui.text("ChannelReady")}   ${ui.gold(channel.capacityCkb + " CKB")}`,
     );
   }
+  if (topology.cch) {
+    body.push(
+      `${ui.text(topology.cch.userNode)} ${ui.muted("→")} ${ui.text(topology.cch.hubNode)}   ${ui.success("●")} ${ui.text("wrapped ChannelReady")}   ${ui.flux(topology.cch.wrappedChannelBaseUnits + " base units")}`,
+      "",
+      ui.muted(ui.caps("cross-network boundary")),
+      `${ui.text("Fiber simple_udt")} ${ui.muted("⇄ trusted CCH operator ⇄")} ${ui.text("Bitcoin regtest")}`,
+    );
+  }
   console.log("\n" + ui.box(layout.net, "ready", ui.success, body));
   const someNode = layout.nodes[0]?.name ?? "a";
   const otherNode = layout.nodes[layout.nodes.length - 1]?.name ?? "b";
@@ -212,7 +240,33 @@ function printStatus(view: NetworkView): void {
       `  ${ui.channelGlyph(channel.state)} ${ui.text(channel.from)} ${ui.muted("→")} ${ui.text(channel.to)}   ${detail}`,
     );
   }
+  if (view.cch) printCchStatus(view.cch);
   console.log("");
+}
+
+function printCchStatus(status: CchTopologyStatus): void {
+  const state =
+    status.state === "ready"
+      ? ui.success(status.state)
+      : status.state === "unsupported"
+        ? ui.muted(status.state)
+        : status.state === "settling"
+          ? ui.gold(status.state)
+          : ui.error(status.state);
+  console.log(ui.heading2("cross-network boundary"));
+  console.log(
+    `  ${ui.muted("state")}      ${state}   ${ui.muted("trusted local operator")}`,
+  );
+  if (!status.operator || !status.lightning || !status.fiber) return;
+  console.log(
+    `  ${ui.muted("operator")}   ${ui.text(status.operator.containerName)}   ${status.operator.rpcReady ? ui.success("rpc ready") : ui.error(status.operator.container)}`,
+  );
+  console.log(
+    `  ${ui.muted("fiber")}      ${ui.text(`${status.fiber.userNode} → ${status.fiber.hubNode}`)}   ${status.fiber.wrappedChannel?.state === "ChannelReady" ? ui.success("wrapped ready") : ui.error("wrapped unavailable")}`,
+  );
+  console.log(
+    `  ${ui.muted("lightning")}  ${ui.text("Bitcoin + LND")}   ${status.lightning.state === "ready" ? ui.success("ready") : ui.error(status.lightning.state)}`,
+  );
 }
 
 function printNodeLifecycle(report: NodeLifecycleReport): void {
@@ -375,24 +429,32 @@ export function buildCli(): Command {
           rpcHostPortBase: options.rpcBase,
         };
         if (options.json) {
-          const layout = await orchestrator().up(topology, {
-            layout: layoutOptions,
-          });
+          const forge = orchestrator();
+          const layout = await withProcessAbort((signal) =>
+            forge.up(topology, {
+              layout: layoutOptions,
+              signal,
+            }),
+          );
           printJson(upResult(layout));
           return;
         }
         const progress = new ui.Progress(
           `spinning up ${topology.name}`,
-          UP_STEPS,
+          topology.cch ? CCH_UP_STEPS : UP_STEPS,
         );
         try {
-          const layout = await orchestrator().up(topology, {
-            layout: layoutOptions,
-            onProgress: upHandler(progress, {
-              nodes: topology.nodes.length,
-              channels: topology.channels.length,
+          const forge = orchestrator();
+          const layout = await withProcessAbort((signal) =>
+            forge.up(topology, {
+              layout: layoutOptions,
+              signal,
+              onProgress: upHandler(progress, {
+                nodes: topology.nodes.length,
+                channels: topology.channels.length + (topology.cch ? 1 : 0),
+              }),
             }),
-          });
+          );
           progress.finish();
           printUpCard(layout, topology);
           if (options.gui !== false) {
@@ -1162,6 +1224,24 @@ export function buildCli(): Command {
           const status = await orchestrator().stopLightningBackend(net);
           if (options.json) printJson(status);
           else printLightningStatus(status);
+        }),
+    );
+
+  program
+    .command("cch")
+    .description("inspect the explicit Fiber/CCH/Lightning boundary")
+    .addCommand(
+      new Command("status")
+        .argument("<net>", "managed Fiber network")
+        .option("--json", "print machine-readable JSON")
+        .action(async (net: string, options: { json?: boolean }) => {
+          const status = await orchestrator().cchStatus(net);
+          if (options.json) printJson(status);
+          else {
+            console.log("");
+            printCchStatus(status);
+            console.log("");
+          }
         }),
     );
 

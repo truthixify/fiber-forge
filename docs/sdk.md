@@ -46,7 +46,7 @@ The SDK exports:
 - `planNetwork`, which validates and plans deterministic names, ports, and addresses without Docker;
 - topology parsing, validation, limits, and topology types;
 - scenario parsing/running plus typed recipe export, inert bundle inspection, and fresh replay;
-- the `duo`, `trio`, and `hub` resolver plus line, ring, and star builders;
+- the `duo`, `trio`, `hub`, and opt-in `cch` resolver plus line, ring, and star builders;
 - `ForgeError`, `errorDetails`, and the stable `ForgeErrorCode`/`ForgeErrorDetails` types;
 - layout, network view, channel, payment, and lifecycle option types; and
 - `version`, read from the installed package metadata.
@@ -66,6 +66,7 @@ unsupported.
 | `inspectBundle(path)` | Returns verified manifest, recipe summary, and compatibility without exposing artifact contents. | Read-only: no Docker call, image pull, extraction, adjacent file, or scenario execution. The complete archive is validated first. |
 | `replayBundle(path, options)` | Provisions `options.network`, runs the recipe, compares portable outcomes, and returns `ReplayBundleResult`. | Requires an absent caller-selected target, exact package/image pins, a supported host, and a bounded timeout. Success, mismatch, cancellation, and post-provision failure all purge the target before return/rejection. |
 | `inspect(net)` / `list()` | Return `NetworkView` or `NetworkSummary[]`. | Best-effort inspection: unreachable nodes/chains are represented as stopped, zero, or omitted live data instead of making the whole view unavailable. RPC calls have a ten-second request bound. |
+| `cchStatus(net)` | Returns the versioned Fiber/CCH/Lightning boundary status for an integrated CCH topology. | Reports `unsupported` for an ordinary Fiber network without pulling or starting any CCH dependency. CCH readiness is derived from the operator RPC, private Lightning backend, both Fiber nodes, and the exact wrapped channel. |
 | `inspectNode(net, node)` | Returns a `NodeLifecycleReport` without mutation. | Reads actual Docker state. A running node is checked for RPC identity, peers, and channels; stopped or externally removed containers remain explicit states. |
 | `stopNode` / `startNode` / `restartNode` | Return a shared `NodeLifecycleReport`; start/restart accept `NodeLifecycleOptions`. | Operations on the same node are serialized. Stop retains the exact container and mounted state. Start/restart wait up to 60 seconds for RPC and identity, then observe automatic peer/channel recovery for up to 10 seconds. Repeats return `changed: false` when already in the requested state. |
 | `applyFault` / `faultStatus` / `resetFault` / `resetAllFaults` | Apply, inspect, or reset a portable `FaultKind`; return `FaultReport` values. | Fault transitions are serialized per network and atomically persisted. Node kill and network isolation require matching engine capabilities. Reset waits for the relevant RPC and reports incomplete channel recovery honestly. |

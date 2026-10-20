@@ -64,6 +64,25 @@
   @keyframes drift{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
   @keyframes bootFlick{0%,100%{box-shadow:0 0 10px rgba(240,169,60,.35)}50%{box-shadow:0 0 20px rgba(240,169,60,.6)}}
   @media (prefers-reduced-motion: reduce){*{animation-duration:.001ms !important;animation-iteration-count:1 !important}}
+  .cch-boundary{position:absolute;top:92px;left:50%;transform:translateX(-50%);width:min(720px,calc(100vw - 440px));min-width:560px;z-index:8;background:var(--panel);border:1px solid var(--border);}
+  @media (max-width:900px){
+    .floor-rig{transform:scale(.72);transform-origin:top left}
+    .floor-vitals{top:72px!important;left:20px!important;transform:none!important}
+    .floor-actions{transform:scale(.8);transform-origin:top right}
+    .cch-boundary{top:132px;left:20px;right:20px;transform:none;width:auto;min-width:0}
+    .floor-map{bottom:146px!important}
+    .floor-zoom{bottom:146px!important;left:auto!important;right:20px}
+    .floor-timeline{left:20px;right:20px!important;width:auto!important}
+  }
+  @media (max-width:600px){
+    .floor-rig{top:16px!important;left:16px!important;transform:scale(.64)}
+    .floor-actions{top:16px!important;right:16px!important;transform:scale(.68)}
+    .floor-vitals{top:68px!important;left:16px!important;transform:scale(.82)!important;transform-origin:top left}
+    .cch-boundary{top:126px;left:16px;right:16px}
+    .cch-boundary-flow{grid-template-columns:1fr!important}
+    .cch-boundary-arrow{display:none!important}
+    .floor-map,.floor-zoom,.floor-timeline{display:none!important}
+  }
 </style>
 </helmet>
 <div style="position:fixed;inset:0;background:var(--void);overflow:hidden;">
@@ -125,7 +144,7 @@
   <!-- ============ FLOOR CHROME ============ -->
   <sc-if value="{{ isFloor }}" hint-placeholder-val="{{ false }}">
   <div>
-    <div style="position:absolute;top:20px;left:20px;display:flex;align-items:stretch;gap:1px;background:var(--border);border:1px solid var(--border);">
+    <div class="floor-rig" style="position:absolute;top:20px;left:20px;display:flex;align-items:stretch;gap:1px;background:var(--border);border:1px solid var(--border);">
       <div onClick="{{ forgeCycle }}" title="switch network (n)" style="background:var(--panel);padding:10px 16px;display:flex;flex-direction:column;gap:5px;cursor:pointer;">
         <div style="display:flex;align-items:center;gap:9px;">
           <span class="mc">RIG ⇄</span>
@@ -142,7 +161,7 @@
       </div>
     </div>
 
-    <div style="position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:1px;background:var(--border);border:1px solid var(--border);">
+    <div class="floor-vitals" style="position:absolute;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:1px;background:var(--border);border:1px solid var(--border);">
       <sc-for list="{{ vitals }}" as="v" hint-placeholder-count="4">
         <div style="background:var(--panel);padding:8px 15px;display:flex;flex-direction:column;gap:3px;align-items:center;min-width:64px;">
           <span class="mc">{{ v.k }}</span>
@@ -152,17 +171,45 @@
     </div>
 
 
-    <div style="position:absolute;top:20px;right:20px;display:flex;gap:1px;background:var(--border);border:1px solid var(--border);">
+    <div class="floor-actions" style="position:absolute;top:20px;right:20px;display:flex;gap:1px;background:var(--border);border:1px solid var(--border);">
       <button onClick="{{ enterWizard }}" style="background:var(--panel);color:var(--text);border:none;padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;"><span style="color:var(--gold);">⚒</span> SPAWN</button>
       <button onClick="{{ openPay }}" style="background:var(--ember);color:#1a0b06;border:none;padding:10px 18px;cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;">⚡ PAY</button>
     </div>
 
-    <div style="position:absolute;bottom:20px;left:20px;width:190px;height:118px;background:var(--panel);border:1px solid var(--border);">
+    <sc-if value="{{ cchVisible }}" hint-placeholder-val="{{ false }}">
+      <div class="cch-boundary" role="status" aria-label="Cross-network boundary status">
+        <div style="padding:7px 12px;border-bottom:1px solid var(--hairline);display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <span class="mc" style="color:var(--bone);">CROSS-NETWORK BOUNDARY</span>
+          <span class="mc" style="color:{{ cchStateColor }};">● {{ cchStateLabel }}</span>
+        </div>
+        <div class="cch-boundary-flow" style="display:grid;grid-template-columns:1fr 22px 1fr 22px 1fr;align-items:stretch;">
+          <div style="padding:10px 12px;border-top:2px solid var(--flux);">
+            <span class="mc" style="display:block;color:var(--flux);margin-bottom:4px;">FIBER · SIMPLE UDT</span>
+            <span class="num" style="font-size:12px;color:var(--bone);">{{ cchFiberLabel }}</span>
+            <span class="mc" style="display:block;margin-top:4px;color:{{ cchFiberColor }};">{{ cchFiberState }}</span>
+          </div>
+          <div class="cch-boundary-arrow" style="display:flex;align-items:center;justify-content:center;color:var(--faint);">⇄</div>
+          <div style="padding:10px 12px;border-top:2px solid var(--gold);background:var(--inset);">
+            <span class="mc" style="display:block;color:var(--gold);margin-bottom:4px;">TRUSTED CCH OPERATOR</span>
+            <span class="num" style="font-size:12px;color:var(--bone);">{{ cchOperatorLabel }}</span>
+            <span class="mc" style="display:block;margin-top:4px;color:{{ cchOperatorColor }};">{{ cchOperatorState }}</span>
+          </div>
+          <div class="cch-boundary-arrow" style="display:flex;align-items:center;justify-content:center;color:var(--faint);">⇄</div>
+          <div style="padding:10px 12px;border-top:2px solid var(--signal);">
+            <span class="mc" style="display:block;color:var(--signal);margin-bottom:4px;">LIGHTNING · REGTEST BTC</span>
+            <span class="num" style="font-size:12px;color:var(--bone);">BITCOIN + 2 LND</span>
+            <span class="mc" style="display:block;margin-top:4px;color:{{ cchLightningColor }};">{{ cchLightningState }}</span>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <div class="floor-map" style="position:absolute;bottom:20px;left:20px;width:190px;height:118px;background:var(--panel);border:1px solid var(--border);">
       <div style="padding:6px 10px;border-bottom:1px solid var(--hairline);"><span class="mc">▖ MAP</span></div>
       <div style="position:relative;height:82px;">{{ miniMap }}</div>
     </div>
 
-    <div style="position:absolute;bottom:20px;left:222px;display:flex;gap:1px;background:var(--border);border:1px solid var(--border);height:fit-content;">
+    <div class="floor-zoom" style="position:absolute;bottom:20px;left:222px;display:flex;gap:1px;background:var(--border);border:1px solid var(--border);height:fit-content;">
       <div style="background:var(--panel);padding:8px 14px;"><span class="mc" style="color:var(--ember);">RADIAL</span></div>
       <button onClick="{{ zoomOut }}" style="background:var(--panel);border:none;color:var(--text);padding:8px 13px;cursor:pointer;font-size:14px;line-height:1;">−</button>
       <div style="background:var(--panel);padding:8px 6px;min-width:48px;text-align:center;"><span class="num" style="font-size:11px;color:var(--text);">{{ zoomPct }}%</span></div>
@@ -170,7 +217,7 @@
       <button onClick="{{ zoomFit }}" style="background:var(--panel);border:none;color:var(--muted);padding:8px 12px;cursor:pointer;"><span class="mc">⤢ FIT</span></button>
     </div>
 
-    <div style="position:absolute;bottom:20px;right:20px;width:320px;background:var(--panel);border:1px solid var(--border);display:flex;flex-direction:column;">
+    <div class="floor-timeline" style="position:absolute;bottom:20px;right:20px;width:320px;background:var(--panel);border:1px solid var(--border);display:flex;flex-direction:column;">
       <div style="padding:6px 12px;border-bottom:1px solid var(--hairline);display:flex;justify-content:space-between;align-items:center;">
         <span class="mc">TIMELINE</span><span class="mc" style="color:var(--faint);">LOGS · PAY · CONSOLE · TERMINAL</span>
       </div>
@@ -678,7 +725,7 @@ class Component extends DCLogic {
     nodeTab: 'overview', invoiceOpen: false, invoiceAmt: 100, invoiceAddr: '', invoiceBusy: false, nodeLogs: '', nodeLogEntries: [], logLevel: 'ALL', copyFlash: null,
     nodeAction: null, nodeActionBusy: false, nodeActionError: '', nodeActionResult: '',
     forceCloseOpen: false, forceCloseTarget: null, forceCloseConfirm: '', forceCloseBusy: false, forceCloseError: '', forceCloseReport: null,
-    payUdt: false, capUdt: false, invoiceUdt: false, fundUdt: false, pendingOpens: [], nets: [],
+    payUdt: false, capUdt: false, invoiceUdt: false, fundUdt: false, pendingOpens: [], nets: [], cch: null,
   };
 
   constructor(props) {
@@ -697,11 +744,11 @@ class Component extends DCLogic {
   mkHash(j) { const pad = (n) => (n % 65536).toString(16).padStart(4, '0'); return '0x' + pad(j * 2749 + 5231) + '…' + pad(j * 911 + 77); }
 
   build(preset, nRaw, funding) {
-    const minMap = { duo: 2, trio: 3, line: 2, ring: 3, star: 3, hub: 3 };
-    const n = preset === 'duo' ? 2 : preset === 'trio' ? 3 : Math.max(minMap[preset] || 2, Math.min(10, nRaw || 3));
+    const minMap = { duo: 2, trio: 3, cch: 2, line: 2, ring: 3, star: 3, hub: 3 };
+    const n = preset === 'duo' || preset === 'cch' ? 2 : preset === 'trio' ? 3 : Math.max(minMap[preset] || 2, Math.min(10, nRaw || 3));
     const cx = 720, scale = n <= 4 ? 1 : n <= 6 ? 0.85 : n <= 8 ? 0.74 : 0.64, cw = this.CW * scale;
     let pos = [], core;
-    if (preset === 'line' || preset === 'duo' || preset === 'trio') {
+    if (preset === 'line' || preset === 'duo' || preset === 'trio' || preset === 'cch') {
       const cy = 448, amp = n > 6 ? 24 : 44, gap = Math.min(262, Math.max(cw * 1.16, 1000 / Math.max(1, n - 1)));
       const x0 = cx - (n - 1) * gap / 2;
       for (let i = 0; i < n; i++) pos.push({ x: x0 + i * gap, y: cy + (i % 2 ? amp : -amp) });
@@ -719,18 +766,18 @@ class Component extends DCLogic {
     }
     const nodes = pos.map((p, i) => ({ id: 'n' + i, name: (this._nameOrder || this.NAMES)[i % this.NAMES.length], port: 8300 + i, p2p: 8228 + i, x: Math.round(p.x), y: Math.round(p.y), hue: this.HUES[i % this.HUES.length], pubkey: this.mkPub(i) }));
     const pairs = [];
-    if (preset === 'duo') pairs.push([0, 1]);
+    if (preset === 'duo' || preset === 'cch') pairs.push([0, 1]);
     else if (preset === 'trio') pairs.push([0, 1], [1, 2]);
     else if (preset === 'line') for (let i = 0; i < n - 1; i++) pairs.push([i, i + 1]);
     else if (preset === 'ring') { for (let i = 0; i < n - 1; i++) pairs.push([i, i + 1]); if (n > 2) pairs.push([n - 1, 0]); }
     else for (let i = 1; i < n; i++) pairs.push([0, i]);
-    const channels = pairs.map((pr, j) => ({ id: 'c' + j, from: nodes[pr[0]].id, to: nodes[pr[1]].id, cap: 1000, hash: this.mkHash(j), channelId: this.demoChannelId(j) }));
+    const channels = pairs.map((pr, j) => ({ id: 'c' + j, from: nodes[pr[0]].id, to: nodes[pr[1]].id, cap: preset === 'cch' ? 0.002 : 1000, hash: this.mkHash(j), channelId: this.demoChannelId(j), udt: preset === 'cch' }));
     const chState = {}, balances = {}, onchain = {};
     channels.forEach((c, j) => { chState[c.id] = 'ready'; balances[c.id] = Math.round(1000 * (0.5 + 0.17 * Math.sin(j * 1.7 + 0.4))); });
     nodes.forEach((nd, i) => { onchain[nd.id] = (funding || 10000) - 150 - i * 40; });
     const dp = this._diameter(nodes, channels);
     const name = 'forge-' + preset + (['line', 'ring', 'star', 'hub'].includes(preset) ? (':' + n) : '');
-    return { nodes, channels, chState, balances, onchain, core, name, payFrom: dp[0], payTo: dp[1] };
+    return { nodes, channels, chState, balances, onchain, core, name, payFrom: dp[0], payTo: dp[1], cch: null };
   }
 
   // ---------------- graph helpers ----------------
@@ -820,7 +867,7 @@ class Component extends DCLogic {
   goFloor = () => { clearInterval(this._boot); this.setState(s => ({ screen: 'floor', bootStep: s.nodes.length + 1 + s.channels.length, chState: Object.fromEntries(s.channels.map(c => [c.id, 'ready'])) })); };
 
   // ---------------- wizard ----------------
-  setPreset = (p) => { const nc = p === 'duo' ? 2 : p === 'trio' ? 3 : ['hub', 'star'].includes(p) ? 6 : p === 'ring' ? 6 : 5; this.setState({ preset: p, nodeCount: nc, ...this.build(p, nc, this.state.funding) }); };
+  setPreset = (p) => { const nc = p === 'duo' || p === 'cch' ? 2 : p === 'trio' ? 3 : ['hub', 'star'].includes(p) ? 6 : p === 'ring' ? 6 : 5; this.setState({ preset: p, nodeCount: nc, udtFunding: p === 'cch' ? 0 : this.state.udtFunding, ...this.build(p, nc, this.state.funding) }); };
   incN = () => this.setState(s => { const nc = Math.min(10, s.nodeCount + 1); return { nodeCount: nc, ...this.build(s.preset, nc, s.funding) }; });
   decN = () => this.setState(s => { const nc = Math.max(2, s.nodeCount - 1); return { nodeCount: nc, ...this.build(s.preset, nc, s.funding) }; });
   setFunding = (v) => this.setState({ funding: v });
@@ -828,7 +875,7 @@ class Component extends DCLogic {
   wizNext = () => this.setState(s => ({ wizardStep: Math.min(3, s.wizardStep + 1) }));
   wizBack = () => this.setState(s => (s.wizardStep === 1 ? { screen: 'empty' } : { wizardStep: s.wizardStep - 1 }));
   forgeIt = () => this.startForge();
-  effN() { const p = this.state.preset; return p === 'duo' ? 2 : p === 'trio' ? 3 : this.state.nodeCount; }
+  effN() { const p = this.state.preset; return p === 'duo' || p === 'cch' ? 2 : p === 'trio' ? 3 : this.state.nodeCount; }
 
   startForge = () => {
     if (window.__FORGE__) { this._forgeSpawn(); return; }
@@ -1150,8 +1197,8 @@ class Component extends DCLogic {
     fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(function () {});
   }
   _forgeMap(v) {
-    var preset = (v.net.match(/^[a-z]+/) || ['line'])[0];
-    if (['duo', 'trio', 'line', 'ring', 'star', 'hub'].indexOf(preset) < 0) preset = 'line';
+    var preset = v.profile === 'cch' ? 'cch' : (v.net.match(/^[a-z]+/) || ['line'])[0];
+    if (['duo', 'trio', 'cch', 'line', 'ring', 'star', 'hub'].indexOf(preset) < 0) preset = 'line';
     var g = this.build(preset, v.nodes.length, 10000);
     var idOf = {};
     v.nodes.forEach(function (nd, i) { idOf[nd.name] = 'n' + i; });
@@ -1178,7 +1225,7 @@ class Component extends DCLogic {
       return !channels.some(function (c) { return (!!c.udt === !!po.udt) && ((c.from === po.from && c.to === po.to) || (c.from === po.to && c.to === po.from)); });
     });
     pend.forEach(function (po, k) { var id = 'pending' + k; channels.push({ id: id, from: po.from, to: po.to, cap: po.cap, channelId: null, udt: po.udt, pending: true }); chState[id] = 'pending'; balances[id] = Math.round(po.cap / 2); });
-    return { nodes: nodes, channels: channels, chState: chState, balances: balances, onchain: onchain, udt: udt, core: g.core, name: 'forge-' + v.net, block: v.block || 0, payFrom: pf, payTo: pt, pendingOpens: pend };
+    return { nodes: nodes, channels: channels, chState: chState, balances: balances, onchain: onchain, udt: udt, core: g.core, name: 'forge-' + v.net, block: v.block || 0, payFrom: pf, payTo: pt, pendingOpens: pend, cch: v.cch || null };
   }
   _forgeSelect(net) {
     var F = this;
@@ -1398,6 +1445,7 @@ class Component extends DCLogic {
     if (id === 'duo') return h('svg', { style: s }, ln(18, 20, 46, 20, 0), dot(18, 20, 'var(--ember)'), dot(46, 20, 'var(--flux)'));
     if (id === 'trio') return h('svg', { style: s }, ln(14, 28, 32, 10, 0), ln(32, 10, 50, 28, 1), dot(14, 28, 'var(--ember)'), dot(32, 10, 'var(--flux)'), dot(50, 28, 'var(--violet)'));
     if (id === 'hub') return h('svg', { style: s }, ln(32, 20, 12, 8, 0), ln(32, 20, 52, 8, 1), ln(32, 20, 12, 32, 2), ln(32, 20, 52, 32, 3), dot(12, 8, 'var(--ember)'), dot(52, 8, 'var(--flux)'), dot(12, 32, 'var(--violet)'), dot(52, 32, 'var(--signal)'), dot(32, 20, 'var(--gold)', 4.5));
+    if (id === 'cch') return h('svg', { style: s }, ln(10, 20, 27, 20, 0), ln(37, 20, 54, 20, 1), dot(10, 20, 'var(--flux)'), h('rect', { x: 27, y: 15, width: 10, height: 10, fill: 'var(--gold)' }), dot(54, 20, 'var(--signal)'));
     if (id === 'line') return h('svg', { style: s }, ln(10, 20, 54, 20, 0), dot(10, 20, 'var(--ember)'), dot(25, 20, 'var(--flux)'), dot(40, 20, 'var(--violet)'), dot(54, 20, 'var(--signal)'));
     if (id === 'ring') return h('svg', { style: s }, h('circle', { cx: 32, cy: 20, r: 15, fill: 'none', stroke: 'var(--faint)', strokeWidth: 1.4 }), dot(32, 5, 'var(--ember)'), dot(47, 20, 'var(--flux)'), dot(32, 35, 'var(--violet)'), dot(17, 20, 'var(--signal)'));
     return h('svg', { style: s }, ln(32, 20, 32, 6, 0), ln(32, 20, 50, 30, 1), ln(32, 20, 14, 30, 2), dot(32, 6, 'var(--ember)'), dot(50, 30, 'var(--flux)'), dot(14, 30, 'var(--violet)'), dot(32, 20, 'var(--gold)', 4));
@@ -1585,7 +1633,7 @@ class Component extends DCLogic {
     else if (bs <= N) bootLabel = 'BOOTING ' + (S.nodes[bs - 1] ? S.nodes[bs - 1].name : '');
     else if (bs < total) { const cc = S.channels[bs - 1 - N]; bootLabel = cc ? ('OPENING ' + this.node(cc.from).name + '⇄' + this.node(cc.to).name) : 'OPENING'; }
 
-    const presetDefs = [['duo', 'Duo', '2 nodes · 1 channel'], ['trio', 'Trio', '3 nodes · line'], ['hub', 'Hub', 'star · 1 center'], ['line', 'Line : N', 'chain of N'], ['ring', 'Ring : N', 'closed loop'], ['star', 'Star : N', 'N spokes']];
+    const presetDefs = [['duo', 'Duo', '2 nodes · 1 channel'], ['trio', 'Trio', '3 nodes · line'], ['hub', 'Hub', 'star · 1 center'], ['cch', 'CCH', 'Fiber ⇄ Lightning'], ['line', 'Line : N', 'chain of N'], ['ring', 'Ring : N', 'closed loop'], ['star', 'Star : N', 'N spokes']];
     const presets = presetDefs.map(([id, label, desc]) => { const on = S.preset === id; return { set: () => this.setPreset(id), glyph: this.glyph(id), label, desc, accent: on ? 'var(--ember)' : 'transparent', bg: on ? 'var(--panel-2)' : 'var(--panel)', name: on ? 'var(--ember)' : 'var(--bone)' }; });
     const emptyNets = (S.nets || []).map(nw => ({ go: () => this._forgeSelect(nw.net), name: nw.net, sub: nw.nodeCount + (nw.nodeCount === 1 ? ' node' : ' nodes'), state: nw.running ? 'RUNNING' : 'STOPPED', dot: nw.running ? 'var(--flux)' : 'var(--faint)' }));
     const fundPreset = (v) => ({ label: v >= 1000 ? (v / 1000) + 'k' : String(v), set: () => this.setFundAmt(v), bg: S.fundAmt === v ? 'var(--gold)' : 'var(--panel-2)', fg: S.fundAmt === v ? '#1a1206' : 'var(--text)' });
@@ -1593,9 +1641,15 @@ class Component extends DCLogic {
     const udtFundingPreset = (v) => ({ label: v === 0 ? 'NONE' : (v / 1000) + 'k', set: () => this.setUdtFunding(v), bg: S.udtFunding === v ? 'var(--flux)' : 'var(--panel-2)', fg: S.udtFunding === v ? '#04201c' : 'var(--text)' });
     const wizStep = (i, label) => ({ label, bg: S.wizardStep === i ? 'var(--panel-2)' : 'var(--panel)', fg: S.wizardStep === i ? 'var(--ember)' : 'var(--faint)' });
     const showN = ['line', 'ring', 'star', 'hub'].includes(S.preset);
-    const presetName = { duo: 'Duo', trio: 'Trio', hub: 'Hub', line: 'Line', ring: 'Ring', star: 'Star' }[S.preset];
+    const presetName = { duo: 'Duo', trio: 'Trio', hub: 'Hub', cch: 'CCH', line: 'Line', ring: 'Ring', star: 'Star' }[S.preset];
     const eN = this.effN(), reviewCmd = showN ? (S.preset + ':' + eN) : S.preset;
-    const reviewCh = S.preset === 'duo' ? 1 : S.preset === 'trio' ? 2 : S.preset === 'line' ? eN - 1 : S.preset === 'ring' ? eN : eN - 1;
+    const reviewCh = S.preset === 'duo' || S.preset === 'cch' ? 1 : S.preset === 'trio' ? 2 : S.preset === 'line' ? eN - 1 : S.preset === 'ring' ? eN : eN - 1;
+
+    const cch = S.cch;
+    const cchFiberReady = !!(cch && cch.fiber && cch.fiber.wrappedChannel && cch.fiber.wrappedChannel.state === 'ChannelReady');
+    const cchOperatorReady = !!(cch && cch.operator && cch.operator.rpcReady);
+    const cchLightningReady = !!(cch && cch.lightning && cch.lightning.state === 'ready');
+    const cchStateColor = !cch ? 'var(--faint)' : cch.state === 'ready' ? 'var(--flux)' : cch.state === 'settling' ? 'var(--amber)' : 'var(--alarm)';
 
     const pf = this.node(S.payFrom), pt = this.node(S.payTo);
     // A payment can only route over channels of its own asset, so filter before pathfinding.
@@ -1622,6 +1676,10 @@ class Component extends DCLogic {
       vitals: [{ k: 'CAPACITY', val: this.fmt(totalCap), c: 'var(--flux)' }, { k: 'ON-CHAIN', val: this.fmt(totalOnchain), c: 'var(--gold)' }, { k: 'BLOCK', val: '#' + (S.block || 0), c: 'var(--text)' }],
       vNodes: String(N), vChannels: String(readyChans.length),
       events: S.events, lastCmd: S.lastCmd,
+      cchVisible: !!cch, cchStateLabel: cch ? String(cch.state || 'unknown').toUpperCase() : '', cchStateColor,
+      cchFiberLabel: cch && cch.fiber ? cch.fiber.userNode + ' → ' + cch.fiber.hubNode : 'UNAVAILABLE', cchFiberState: cchFiberReady ? 'CHANNEL READY' : 'ACTION REQUIRED', cchFiberColor: cchFiberReady ? 'var(--flux)' : 'var(--alarm)',
+      cchOperatorLabel: cch && cch.operator ? cch.operator.containerName : 'UNAVAILABLE', cchOperatorState: cchOperatorReady ? 'RPC READY' : 'ACTION REQUIRED', cchOperatorColor: cchOperatorReady ? 'var(--gold)' : 'var(--alarm)',
+      cchLightningState: cchLightningReady ? 'LIQUIDITY READY' : 'ACTION REQUIRED', cchLightningColor: cchLightningReady ? 'var(--signal)' : 'var(--alarm)',
       enterWizard: this.enterWizard, openPay: this.openPay, openFund: this.openFund, openCap: this.openCap, clearSel: this.clearSel, goFloor: this.goFloor, confirmCloseChannel: this.confirmCloseChannel, requestForceClose: this.requestForceClose, forgeCycle: () => this._forgeCycle(), cyclePayFrom: this.cyclePayFrom, cyclePayTo: this.cyclePayTo,
       zoomPct: String(S.zoomPct), zoomIn: this.zoomIn, zoomOut: this.zoomOut, zoomFit: this.fitView,
       bootSteps, bootLabel, bootPctW: Math.round(bs / total * 100) + '%',

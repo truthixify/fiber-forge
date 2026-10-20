@@ -11,6 +11,7 @@ import { type FaultKind, type FaultReport } from "./faults.js";
 import {
   type ChannelRow,
   type ChannelSettlementReport,
+  type CchTopologyStatus,
   type DownOptions,
   type MineReport,
   type NetworkSummary,
@@ -70,6 +71,7 @@ export {
   validateTopology,
 } from "./topology.js";
 export type {
+  CchTopologySpec,
   ChannelSpec,
   FundingSpec,
   NodeSpec,
@@ -100,6 +102,8 @@ export type {
 export type { LayoutOptions, NetworkLayout, NodeLayout } from "./config.js";
 export { DEFAULT_PROVISION_TIMEOUT_MS } from "./orchestrator.js";
 export type {
+  CchReadinessState,
+  CchTopologyStatus,
   ChannelRow,
   ChannelSettlementPhase,
   ChannelSettlementReport,
@@ -151,6 +155,7 @@ export interface FiberForge {
     options: ReplayBundleOptions,
   ): Promise<ReplayBundleResult>;
   inspect(net: string): Promise<NetworkView>;
+  cchStatus(net: string): Promise<CchTopologyStatus>;
   inspectNode(net: string, node: string): Promise<NodeLifecycleReport>;
   stopNode(net: string, node: string): Promise<NodeLifecycleReport>;
   startNode(

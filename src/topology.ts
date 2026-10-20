@@ -25,12 +25,26 @@ export interface FundingSpec {
   perNodeCkb: number;
 }
 
+/** Extra services and wrapped-asset liquidity required by a standalone CCH topology. */
+export interface CchTopologySpec {
+  /** Fiber node connected to the standalone CCH operator. */
+  hubNode: string;
+  /** Fiber node holding the initial wrapped-BTC test liquidity. */
+  userNode: string;
+  /** Base units locked into the public simple-UDT channel. */
+  wrappedChannelBaseUnits: number;
+  /** Base units minted to the user before the wrapped channel opens. */
+  issuedBaseUnits: number;
+}
+
 /** A fully validated network topology. */
 export interface Topology {
   name: string;
   nodes: NodeSpec[];
   channels: ChannelSpec[];
   funding: FundingSpec;
+  /** Present only for the opt-in cross-network topology. */
+  cch?: CchTopologySpec;
 }
 
 export const MIN_NODES = 2;
@@ -95,6 +109,7 @@ export function validateTopology(raw: unknown): Topology {
   const nodeNames = new Set(nodes.map((n) => n.name));
   const channels = parseChannels(root.channels, nodeNames, issues);
   const funding = parseFunding(root.funding, issues);
+  const cch = parseCch(root.cch, nodeNames, issues);
 
   if (funding && channels.length > 0 && issues.length === 0) {
     checkFundingSufficiency(nodes, channels, funding, issues);
@@ -103,7 +118,72 @@ export function validateTopology(raw: unknown): Topology {
   if (issues.length > 0) {
     throw new TopologyError(issues);
   }
-  return { name, nodes, channels, funding: funding as FundingSpec };
+  return {
+    name,
+    nodes,
+    channels,
+    funding: funding as FundingSpec,
+    ...(cch ? { cch } : {}),
+  };
+}
+
+function parseCch(
+  raw: unknown,
+  nodeNames: Set<string>,
+  issues: string[],
+): CchTopologySpec | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!isRecord(raw)) {
+    issues.push("cch must be a mapping");
+    return undefined;
+  }
+  const hubNode = typeof raw.hub_node === "string" ? raw.hub_node : "";
+  const userNode = typeof raw.user_node === "string" ? raw.user_node : "";
+  const wrappedChannelBaseUnits = raw.wrapped_channel_base_units;
+  const issuedBaseUnits = raw.issued_base_units;
+
+  if (!hubNode || !nodeNames.has(hubNode)) {
+    issues.push(`cch.hub_node references unknown node "${hubNode}"`);
+  }
+  if (!userNode || !nodeNames.has(userNode)) {
+    issues.push(`cch.user_node references unknown node "${userNode}"`);
+  }
+  if (hubNode && hubNode === userNode) {
+    issues.push("cch.hub_node and cch.user_node must be different nodes");
+  }
+  if (
+    !Number.isSafeInteger(wrappedChannelBaseUnits) ||
+    Number(wrappedChannelBaseUnits) <= 0
+  ) {
+    issues.push(
+      "cch.wrapped_channel_base_units must be a positive safe integer",
+    );
+  }
+  if (!Number.isSafeInteger(issuedBaseUnits) || Number(issuedBaseUnits) <= 0) {
+    issues.push("cch.issued_base_units must be a positive safe integer");
+  } else if (
+    Number.isSafeInteger(wrappedChannelBaseUnits) &&
+    Number(issuedBaseUnits) < Number(wrappedChannelBaseUnits)
+  ) {
+    issues.push(
+      "cch.issued_base_units must cover cch.wrapped_channel_base_units",
+    );
+  }
+
+  if (
+    !hubNode ||
+    !userNode ||
+    !Number.isSafeInteger(wrappedChannelBaseUnits) ||
+    !Number.isSafeInteger(issuedBaseUnits)
+  ) {
+    return undefined;
+  }
+  return {
+    hubNode,
+    userNode,
+    wrappedChannelBaseUnits: Number(wrappedChannelBaseUnits),
+    issuedBaseUnits: Number(issuedBaseUnits),
+  };
 }
 
 function parseNodes(raw: unknown, issues: string[]): NodeSpec[] {

@@ -143,11 +143,27 @@ export interface UdtWhitelistInfo {
   depIndex: number;
 }
 
+export interface FnnConfigOptions {
+  /** CCH's store subscription requires the hub's pubsub RPC module. */
+  pubsub?: boolean;
+}
+
 export function fnnConfigYaml(
   layout: NetworkLayout,
   node: NodeLayout,
   udt?: UdtWhitelistInfo,
+  options: FnnConfigOptions = {},
 ): string {
+  const modules = [
+    "channel",
+    "payment",
+    "graph",
+    "info",
+    "invoice",
+    "peer",
+    "dev",
+    ...(options.pubsub ? ["pubsub"] : []),
+  ];
   const lines = [
     "fiber:",
     "  chain: dev.toml",
@@ -155,7 +171,7 @@ export function fnnConfigYaml(
     "  announce_private_addr: true",
     "rpc:",
     `  listening_addr: ${node.ip}:${FNN_RPC_PORT}`,
-    "  enabled_modules: [channel, payment, graph, info, invoice, peer, dev]",
+    `  enabled_modules: [${modules.join(", ")}]`,
     "ckb:",
     `  rpc_url: http://${layout.ckbContainer}:${CKB_RPC_PORT}`,
   ];

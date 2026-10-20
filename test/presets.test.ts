@@ -13,7 +13,9 @@ function assertNames(topology: Topology): void {
   const names = topology.nodes.map((n) => n.name);
   expect(new Set(names).size).toBe(names.length);
   for (const name of names) {
-    expect(pool.has(name) || /^node\d+$/.test(name)).toBe(true);
+    expect(
+      pool.has(name) || /^node\d+$/.test(name) || /^(?:user|hub)$/.test(name),
+    ).toBe(true);
   }
 }
 
@@ -30,8 +32,22 @@ function assertSound(topology: Topology): void {
 }
 
 describe("named presets", () => {
-  it("exposes duo, trio, and hub", () => {
-    expect(presetNames()).toEqual(["duo", "trio", "hub"]);
+  it("exposes Fiber presets plus the opt-in CCH topology", () => {
+    expect(presetNames()).toEqual(["duo", "trio", "hub", "cch"]);
+  });
+
+  it("defines the accepted wrapped channel and service roles", () => {
+    expect(preset("cch")).toMatchObject({
+      name: "cch",
+      nodes: [{ name: "user" }, { name: "hub" }],
+      channels: [],
+      cch: {
+        userNode: "user",
+        hubNode: "hub",
+        wrappedChannelBaseUnits: 200000,
+        issuedBaseUnits: 100000000,
+      },
+    });
   });
 
   it("every named preset is sound and uses fun names", () => {

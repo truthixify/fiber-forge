@@ -51,6 +51,31 @@ describe("parseTopology (valid)", () => {
     );
     expect(t.channels).toEqual([]);
   });
+
+  it("parses the optional CCH extension without changing Fiber-only topologies", () => {
+    const topology = parseTopology(`
+name: cch-test
+nodes:
+  - name: user
+  - name: hub
+channels: []
+funding:
+  per_node_ckb: 100000
+cch:
+  user_node: user
+  hub_node: hub
+  wrapped_channel_base_units: 200000
+  issued_base_units: 100000000
+`);
+
+    expect(topology.cch).toEqual({
+      userNode: "user",
+      hubNode: "hub",
+      wrappedChannelBaseUnits: 200000,
+      issuedBaseUnits: 100000000,
+    });
+    expect(parseTopology(VALID).cch).toBeUndefined();
+  });
 });
 
 describe("validateTopology (FR-8 error classes)", () => {
@@ -162,6 +187,29 @@ describe("validateTopology (FR-8 error classes)", () => {
       validateTopology({ nodes: [], channels: "no", funding: {} }),
     );
     expect(issues.length).toBeGreaterThan(1);
+  });
+
+  it("rejects invalid CCH roles and insufficient wrapped issuance", () => {
+    const issues = issuesOf(() =>
+      validateTopology({
+        name: "bad-cch",
+        nodes: [{ name: "user" }, { name: "hub" }],
+        channels: [],
+        funding: { per_node_ckb: 1000 },
+        cch: {
+          user_node: "user",
+          hub_node: "missing",
+          wrapped_channel_base_units: 200000,
+          issued_base_units: 100000,
+        },
+      }),
+    );
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('unknown node "missing"'),
+        expect.stringContaining("must cover"),
+      ]),
+    );
   });
 
   it("rejects non-YAML input with a clear message", () => {
