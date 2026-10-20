@@ -237,7 +237,9 @@ also checks the Docker daemon architecture and both image manifest lists before 
 
 ## Roadmap
 
-- **Richer assets** — xUDT with RCE rules, a stablecoin preset, and multiple named assets per node.
+- **Richer assets** — the [xUDT/RCE compatibility decision](docs/xudt-rce-compatibility.md) accepts
+  named extension-free xUDT work while deferring RCE policy claims until Fiber exposes a complete
+  proof-witness lifecycle.
 - **Resilience** — stuck HTLC simulation and force-close/on-chain settlement visibility.
 - **Routing** — multi-path payments, per-hop fee and route inspection, and a view of the gossip graph.
 - **Scenarios** — a curated library of portable failure and recovery recipes.

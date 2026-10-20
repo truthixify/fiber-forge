@@ -102,6 +102,7 @@
     "docs/compatibility.md",
     "docs/cch-topology.md",
     "docs/cch-transfer-proof.md",
+    "docs/xudt-rce-compatibility.md",
     "docs/lightning-backend.md",
     "docs/github-action.md",
     "docs/integration.md",

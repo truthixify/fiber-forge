@@ -37,8 +37,10 @@ graph GUI.
 **MVP:** CKB-denominated channels; the named presets (`duo`/`trio`/`hub`), parametric `shape:N`
 topologies (`line`/`ring`/`star`), and custom YAML; graph GUI with open/pay/close actions and log
 streaming; deterministic teardown; validated on Linux amd64 and macOS arm64 with Docker Desktop.
-**Stretch:** UDT asset preset (deploy an xUDT on the devnet, whitelist it in node configs,
-open a UDT channel); headless CI mode (`fiber-forge up --no-ui --json`).
+**Stretch:** a named, extension-free xUDT asset preset following the reviewed
+[xUDT/RCE compatibility boundary](xudt-rce-compatibility.md); headless CI mode
+(`fiber-forge up --no-ui --json`). RCE policy enforcement remains out of scope until Fiber exposes
+the proof-witness lifecycle needed by every funding and settlement transaction.
 **Non-goals:** testnet/mainnet management (local devnet only); node version matrixing (pinned
 image); Windows-native. WSL2 is the intended Windows path but remains unverified.
 

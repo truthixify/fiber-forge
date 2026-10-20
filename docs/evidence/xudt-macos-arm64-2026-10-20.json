@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "kind": "xudt-compatibility",
+  "result": "passed",
+  "validatedAt": "2026-10-20T12:28:54Z",
+  "source": {
+    "type": "manual-local-proof",
+    "commit": "f1eb3eb7f7a515c050b315805112aa8a0a410c4e",
+    "package": "@truthixify/fiber-forge@0.4.0-rc.1",
+    "configuration": "second generated whitelist entry; no product capability claim"
+  },
+  "host": {
+    "os": "Darwin",
+    "release": "24.6.0",
+    "architecture": "arm64",
+    "node": "v24.13.0",
+    "dockerClient": "29.3.1",
+    "dockerServer": "29.3.1",
+    "dockerDaemon": "linux/arm64"
+  },
+  "images": {
+    "ckb": "nervos/ckb:v0.201.0@sha256:b995cd8b5f35571283d066f011317ef88b6d8e42f10c8b63c4c9ecf7b5cb647e",
+    "fiber": "nervos/fiber:0.9.0-rc7@sha256:827d2eb4f557811c0f0f81268f993aae73d979eacfe48d36bd41d9041fe36081",
+    "fiberCommit": "bc361aaaa40d1394b83e6a1808869b0b06c48c13"
+  },
+  "contracts": {
+    "simpleUdt": {
+      "sha256": "b1a962cb43d88e777d9df0aa4e67270ee758d9abdd18b1c56b106a5eed149af9",
+      "codeHash": "0xe1e354d6d643ad42724d40967e334984534e0367405c5ae42a9d7d63d77df419",
+      "hashType": "data1",
+      "genesisIndex": "0x8"
+    },
+    "plainXudt": {
+      "sha256": "e9b92e5783f692f6ee99ca20eeda5f3da282e0f4010eb4fbd3db4e3058239349",
+      "codeHash": "0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95",
+      "hashType": "data2",
+      "genesisIndex": "0x9",
+      "args": "0x32e555f3ff8e135cece1351a6a2971518392c1e30375c1e006ad0ce8eac07947",
+      "extensions": "none",
+      "matchesPinnedFiberBinary": true
+    }
+  },
+  "whitelist": {
+    "simpleUdtRetained": true,
+    "plainXudtAdded": true,
+    "advertisedByBothNodes": true
+  },
+  "issuance": {
+    "transaction": "0x3431742fb80025881a50da0c6e3d8053c71f592350873bf22a3a8147e0d19be1",
+    "beforeBaseUnits": "0",
+    "afterBaseUnits": "1000000000"
+  },
+  "channel": {
+    "id": "0x8c15031fd8fe3e41b1bfe1fb1d03c2b9512916c9b7409e200c5a4c41575028eb",
+    "capacityBaseUnits": "500000000",
+    "aliceState": "ChannelReady",
+    "bobState": "ChannelReady"
+  },
+  "payment": {
+    "hash": "0xed845d451f71278caa0af51b3ca333370dea14c4c1eae76e16bb1231c112a3d4",
+    "amountBaseUnits": "100000000",
+    "status": "Success",
+    "alice": {
+      "before": "500000000",
+      "after": "400000000",
+      "delta": "-100000000"
+    },
+    "bob": {
+      "before": "0",
+      "after": "100000000",
+      "delta": "100000000"
+    }
+  },
+  "rce": {
+    "configured": false,
+    "ruleChangeTested": false,
+    "supportClaim": false
+  },
+  "cleanup": {
+    "containers": "absent",
+    "network": "absent",
+    "volumes": "absent",
+    "stateDirectory": "absent"
+  }
+}
