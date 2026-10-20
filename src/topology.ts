@@ -48,6 +48,11 @@ export const FUNDING_BUFFER_CKB = 100;
 /** DNS-safe identifier: lowercase alphanumeric and hyphens, 1–30 chars, not hyphen-bounded. */
 const NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$/;
 
+/** Whether a network name is safe for Docker resource names and state-directory paths. */
+export function isValidNetworkName(name: string): boolean {
+  return NAME_PATTERN.test(name);
+}
+
 /** Thrown when a topology is invalid; carries every issue found, not just the first. */
 export class TopologyError extends Error {
   constructor(public readonly issues: string[]) {
@@ -80,7 +85,7 @@ export function validateTopology(raw: unknown): Topology {
   const name = typeof root.name === "string" ? root.name : "";
   if (!name) {
     issues.push("name is required");
-  } else if (!NAME_PATTERN.test(name)) {
+  } else if (!isValidNetworkName(name)) {
     issues.push(
       `name "${name}" must be lowercase alphanumeric/hyphen (1–30 chars)`,
     );

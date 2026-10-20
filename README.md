@@ -69,7 +69,7 @@ fiber-forge up ./examples/topology.yml   # create from your own topology file
 fiber-forge ls                      # list every network on disk
 fiber-forge status trio             # show nodes and channels with live state
 fiber-forge gui trio                # (re)open the GUI for a network
-fiber-forge down trio               # remove one network (--keep data, --purge everything)
+fiber-forge down trio               # remove one network (--keep CKB volume, --purge everything)
 fiber-forge down --all              # remove every network at once
 
 # move value (node names come from `up` or `status`)
@@ -89,6 +89,10 @@ fiber-forge pay trio feynman galileo 100 --udt
 fiber-forge run trio ./examples/payments.yml     # run a scenario of scripted traffic
 fiber-forge status trio --json | jq              # every data command accepts --json
 ```
+
+Failures from `--json` commands are emitted as one parseable object with a stable `error.code`, the
+affected resource when known, and a suggested next action. See
+[Lifecycle errors](docs/lifecycle-errors.md) for the schema and code table.
 
 ## Library API
 

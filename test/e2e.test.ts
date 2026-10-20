@@ -2,7 +2,8 @@ import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DockerEngine } from "../src/engine";
+import { type ContainerSpec, DockerEngine } from "../src/engine";
+import { ForgeError } from "../src/errors";
 import { FORGE_LABEL, Orchestrator } from "../src/orchestrator";
 import { preset } from "../src/presets";
 import {
@@ -20,6 +21,19 @@ const RUN = process.env.FORGE_E2E === "1";
 const assetsDir = join(import.meta.dirname, "..", "assets");
 const MULTIHOP_NET = "e2e-multihop";
 const RECOVERY_NET = "e2e-recovery";
+
+class NodeStartFailureEngine extends DockerEngine {
+  override async run(spec: ContainerSpec): Promise<void> {
+    if (/-node-1$/.test(spec.name)) {
+      throw new ForgeError(
+        "CONTAINER_START_FAILED",
+        `injected node start failure for ${spec.name}`,
+        { resource: spec.name, action: "test-only injected failure" },
+      );
+    }
+    await super.run(spec);
+  }
+}
 
 function edge(from: string, to: string): string {
   return [from, to].sort().join("--");
@@ -189,6 +203,37 @@ async function ensurePeerConnected(
     if (!(await isConnected())) {
       throw error;
     }
+  }
+}
+
+async function expectProvisionRollback(
+  net: string,
+  engine: DockerEngine,
+  expected: { code: string; resource: string | RegExp },
+  failProgress?: (message: string) => void,
+): Promise<void> {
+  const topology: Topology = {
+    name: net,
+    nodes: [{ name: "alice" }, { name: "bob" }],
+    channels: [{ from: "alice", to: "bob", capacityCkb: 1000 }],
+    funding: { perNodeCkb: 100000 },
+  };
+  const stateDir = await mkdtemp(join(tmpdir(), "fiber-forge-rollback-"));
+  const orchestrator = new Orchestrator(engine, assetsDir, stateDir);
+  try {
+    const attempt = orchestrator.up(topology, {
+      onProgress: (message) => failProgress?.(message),
+    });
+    const matcher =
+      expected.resource instanceof RegExp
+        ? {
+            code: expected.code,
+            resource: expect.stringMatching(expected.resource),
+          }
+        : expected;
+    await expect(attempt).rejects.toMatchObject(matcher);
+  } finally {
+    await verifyCleanup(orchestrator, engine, stateDir, net);
   }
 }
 
@@ -476,6 +521,45 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
       throw cleanupFailure;
     }
   }, 360_000);
+});
+
+describe.skipIf(!RUN)("live: partial provisioning rollback", () => {
+  it("cleans up after a node container fails to start", async () => {
+    await expectProvisionRollback(
+      "e2e-rollback-node",
+      new NodeStartFailureEngine(),
+      {
+        code: "CONTAINER_START_FAILED",
+        resource: /forge-e2e-rollback-node-node-1/,
+      },
+    );
+  }, 180_000);
+
+  it("cleans up after peer connection fails", async () => {
+    await expectProvisionRollback(
+      "e2e-rollback-peer",
+      new DockerEngine(),
+      { code: "PROVISION_FAILED", resource: /peer connection/ },
+      (message) => {
+        if (message.startsWith("connect ")) {
+          throw new Error("injected peer connection failure");
+        }
+      },
+    );
+  }, 180_000);
+
+  it("cleans up after channel opening fails", async () => {
+    await expectProvisionRollback(
+      "e2e-rollback-channel",
+      new DockerEngine(),
+      { code: "PROVISION_FAILED", resource: /channel alice->bob/ },
+      (message) => {
+        if (message.startsWith("open channel ")) {
+          throw new Error("injected channel opening failure");
+        }
+      },
+    );
+  }, 180_000);
 });
 
 describe.skipIf(!RUN)("live: UDT asset channel + payment", () => {

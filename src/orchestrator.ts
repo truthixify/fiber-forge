@@ -24,8 +24,9 @@ import {
   planLayout,
 } from "./config.js";
 import { type ContainerEngine, type ContainerSpec } from "./engine.js";
+import { ForgeError, errorDetails } from "./errors.js";
 import { encryptKey, generatePrivateKey } from "./keys.js";
-import { findFreePort, findFreePortBlock } from "./ports.js";
+import { findFreePort, findFreePortBlock, isPortFree } from "./ports.js";
 import {
   type Channel,
   FnnRpc,
@@ -40,7 +41,7 @@ import {
   peerIdOf,
   shannonHexToCkb,
 } from "./rpc.js";
-import { type Topology } from "./topology.js";
+import { isValidNetworkName, type Topology } from "./topology.js";
 
 export const FORGE_LABEL = "fiber-forge";
 export const DEFAULT_FNN_IMAGE = "nervos/fiber:0.9.0-rc7";
@@ -218,35 +219,176 @@ export class Orchestrator {
   /** Serializes channel opens per network: two fundings must not race for the same wallet cell. */
   private readonly openQueue = new Map<string, Promise<void>>();
 
+  private invalidPort(port: number, resource: string): ForgeError {
+    return new ForgeError(
+      "INVALID_PORT",
+      `${resource} must be an integer between 1 and 65535`,
+      { resource, action: "choose a valid host port and retry" },
+    );
+  }
+
+  private requireNetworkName(net: string): void {
+    if (!isValidNetworkName(net)) {
+      throw new ForgeError(
+        "INVALID_NETWORK_NAME",
+        `network name "${net}" must be lowercase alphanumeric/hyphen (1-30 chars)`,
+        {
+          resource: net,
+          action: "use a network name such as my-network",
+        },
+      );
+    }
+  }
+
+  private async resolvePorts(
+    topology: Topology,
+    requested: LayoutOptions,
+  ): Promise<LayoutOptions> {
+    const options = { ...requested };
+    if (options.ckbHostPort !== undefined) {
+      if (
+        !Number.isInteger(options.ckbHostPort) ||
+        options.ckbHostPort < 1 ||
+        options.ckbHostPort > 65535
+      ) {
+        throw this.invalidPort(options.ckbHostPort, "CKB RPC port");
+      }
+    } else {
+      options.ckbHostPort = await findFreePort(8114);
+    }
+
+    if (options.rpcHostPortBase !== undefined) {
+      const last = options.rpcHostPortBase + topology.nodes.length - 1;
+      if (
+        !Number.isInteger(options.rpcHostPortBase) ||
+        options.rpcHostPortBase < 1 ||
+        last > 65535
+      ) {
+        throw this.invalidPort(options.rpcHostPortBase, "Fiber RPC port base");
+      }
+    } else {
+      let searchFrom = 8300;
+      for (;;) {
+        const candidate = await findFreePortBlock(
+          searchFrom,
+          topology.nodes.length,
+        );
+        const last = candidate + topology.nodes.length - 1;
+        if (options.ckbHostPort! < candidate || options.ckbHostPort! > last) {
+          options.rpcHostPortBase = candidate;
+          break;
+        }
+        searchFrom = candidate + 1;
+      }
+    }
+
+    const ports = [
+      { label: "CKB RPC port", value: options.ckbHostPort! },
+      ...topology.nodes.map((_node, index) => ({
+        label: `Fiber RPC port ${index + 1}`,
+        value: options.rpcHostPortBase! + index,
+      })),
+    ];
+    const seen = new Map<number, string>();
+    for (const port of ports) {
+      const prior = seen.get(port.value);
+      if (prior) {
+        throw new ForgeError(
+          "PORT_IN_USE",
+          `${port.label} ${port.value} overlaps ${prior}`,
+          {
+            resource: `127.0.0.1:${port.value}`,
+            action: "choose non-overlapping --ckb-port and --rpc-base values",
+          },
+        );
+      }
+      seen.set(port.value, port.label);
+      if (!(await isPortFree(port.value))) {
+        throw new ForgeError(
+          "PORT_IN_USE",
+          `${port.label} ${port.value} is already in use`,
+          {
+            resource: `127.0.0.1:${port.value}`,
+            action: `free port ${port.value} or choose a different port`,
+          },
+        );
+      }
+    }
+    return options;
+  }
+
+  private async prepareNetwork(net: string): Promise<void> {
+    const containers = await this.engine.listByLabel(FORGE_LABEL, net);
+    const statuses = await Promise.all(
+      containers.map(
+        async (name) => [name, await this.engine.status(name)] as const,
+      ),
+    );
+    const running = statuses
+      .filter(([, status]) => status === "running")
+      .map(([name]) => name);
+    if (running.length > 0) {
+      throw new ForgeError(
+        "NETWORK_EXISTS",
+        `network "${net}" already has running containers: ${running.join(", ")}`,
+        {
+          resource: net,
+          action: `run "fiber-forge down ${net}" before replacing it`,
+        },
+      );
+    }
+
+    for (const [name] of statuses) {
+      await this.engine.stop(name);
+      await this.engine.remove(name);
+    }
+    if ((await this.engine.forgeNets()).includes(net)) {
+      await this.engine.removeNetwork(`forge-${net}`);
+    }
+    await this.engine.removeVolume(`forge-${net}-ckb-data`);
+    const netDir = join(this.stateDir, net);
+    try {
+      await rm(netDir, { recursive: true, force: true });
+    } catch (error) {
+      throw new ForgeError(
+        "PROVISION_FAILED",
+        `could not remove stale network state at "${netDir}"`,
+        {
+          resource: netDir,
+          action: "fix the state directory permissions, remove it, then retry",
+          cause: error,
+        },
+      );
+    }
+  }
+
   /** Bring the whole network up to funded, connected, CHANNEL_READY channels. */
   async up(
     topology: Topology,
     options: UpOptions = {},
   ): Promise<NetworkLayout> {
-    const layoutOptions: LayoutOptions = { ...(options.layout ?? {}) };
+    this.requireNetworkName(topology.name);
+    const layoutOptions = await this.resolvePorts(
+      topology,
+      options.layout ?? {},
+    );
+    await this.prepareNetwork(topology.name);
     if (!layoutOptions.subnetBase) {
       layoutOptions.subnetBase = pickSubnetBase(
         topology.name,
         await this.engine.usedSubnets(),
       );
     }
-    if (layoutOptions.ckbHostPort === undefined) {
-      layoutOptions.ckbHostPort = await findFreePort(8114);
-    }
-    if (layoutOptions.rpcHostPortBase === undefined) {
-      layoutOptions.rpcHostPortBase = await findFreePortBlock(
-        8300,
-        topology.nodes.length,
-      );
-    }
     const layout = planLayout(topology, layoutOptions);
     const log = options.onProgress ?? (() => {});
     const netDir = join(this.stateDir, layout.net);
+    let phase = `Docker network ${layout.network}`;
 
     try {
       log(`network ${layout.network} (${layout.subnet})`);
       await this.engine.ensureNetwork(layout.network, layout.subnet);
 
+      phase = `CKB container ${layout.ckbContainer}`;
       log(`ckb dev chain ${layout.ckbContainer}`);
       await this.engine.run(
         ckbContainerSpec(layout, this.assetsDir, options.ckbImage),
@@ -264,6 +406,7 @@ export class Orchestrator {
 
       const privateKeys = new Map<string, string>();
       for (const node of layout.nodes) {
+        phase = `Fiber container ${node.container}`;
         const nodeDir = join(netDir, node.container);
         const privateKey = generatePrivateKey();
         privateKeys.set(node.name, hex(privateKey));
@@ -283,6 +426,7 @@ export class Orchestrator {
       const rpcByName = new Map<string, FnnRpc>();
       const infoByName = new Map<string, { pubkey: string; peerId: string }>();
       for (const node of layout.nodes) {
+        phase = `Fiber RPC for node ${node.name}`;
         const rpc = new FnnRpc(
           new HttpTransport(`http://127.0.0.1:${node.rpcHostPort}`),
         );
@@ -298,6 +442,7 @@ export class Orchestrator {
 
       const addressByName = new Map<string, string>();
       for (const node of layout.nodes) {
+        phase = `funding node ${node.name}`;
         const address = await chain.addressOfPrivateKey(
           privateKeys.get(node.name)!,
         );
@@ -308,6 +453,7 @@ export class Orchestrator {
       await chain.generateBlocks(4);
 
       for (const channel of topology.channels) {
+        phase = `peer connection ${channel.from}->${channel.to}`;
         const from = rpcByName.get(channel.from)!;
         const to = infoByName.get(channel.to)!;
         const toLayout = layout.nodes.find((n) => n.name === channel.to)!;
@@ -316,6 +462,7 @@ export class Orchestrator {
           dialAddress(toLayout.ip, to.peerId, FNN_P2P_PORT),
         );
         await this.waitPeerConnected(from, to.pubkey);
+        phase = `channel ${channel.from}->${channel.to}`;
         log(
           `open channel ${channel.from} -> ${channel.to} (${channel.capacityCkb} CKB)`,
         );
@@ -337,6 +484,7 @@ export class Orchestrator {
       if (options.udtPerNode && options.udtPerNode > 0) {
         const amountUdt = options.udtPerNode;
         for (const node of layout.nodes) {
+          phase = `UDT issuance for node ${node.name}`;
           log(`issuing ${amountUdt} UDT to ${node.name}`);
           await chain.issueUdt(
             addressByName.get(node.name)!,
@@ -345,6 +493,7 @@ export class Orchestrator {
         }
         const udtTypeScript = await chain.udtScript();
         for (const channel of topology.channels) {
+          phase = `UDT channel ${channel.from}->${channel.to}`;
           const from = rpcByName.get(channel.from)!;
           const to = infoByName.get(channel.to)!;
           log(
@@ -368,6 +517,7 @@ export class Orchestrator {
       }
 
       if (topology.channels.length > 0) {
+        phase = "routing graph propagation";
         log("propagating routing graph");
         await this.waitGraphPropagated(rpcByName, topology.channels.length);
       }
@@ -398,10 +548,32 @@ export class Orchestrator {
       log(`network ${layout.net} ready`);
       return layout;
     } catch (error) {
-      // A spawn that fails partway must not leave half-built containers running on the machine —
-      // tear down whatever was created before surfacing the error.
-      await this.down(layout.net, { purge: true }).catch(() => {});
-      throw error;
+      const primary =
+        error instanceof ForgeError
+          ? error
+          : new ForgeError(
+              "PROVISION_FAILED",
+              `failed to provision network "${layout.net}" at ${phase}: ${errorDetails(error).message}`,
+              {
+                resource: phase,
+                action: "inspect the named resource, then retry provisioning",
+                cause: error,
+              },
+            );
+      try {
+        await this.down(layout.net, { purge: true });
+      } catch (rollbackError) {
+        throw new ForgeError(
+          "ROLLBACK_FAILED",
+          `${primary.message}; rollback also failed: ${errorDetails(rollbackError).message}`,
+          {
+            resource: layout.net,
+            action: `run "fiber-forge down ${layout.net} --purge" after fixing Docker`,
+            cause: new AggregateError([primary, rollbackError]),
+          },
+        );
+      }
+      throw primary;
     }
   }
 
@@ -509,16 +681,59 @@ export class Orchestrator {
    * leaving nothing on disk. Teardown removes Fiber containers, so it is not a node restart path.
    */
   async down(net: string, options: DownOptions = {}): Promise<void> {
-    for (const name of await this.engine.listByLabel(FORGE_LABEL, net)) {
-      await this.engine.stop(name);
-      await this.engine.remove(name);
+    this.requireNetworkName(net);
+    const failures: string[] = [];
+    let containerRemovalFailed = false;
+    const containers = await this.engine.listByLabel(FORGE_LABEL, net);
+    for (const name of containers) {
+      let stopFailure: string | undefined;
+      try {
+        await this.engine.stop(name);
+      } catch (error) {
+        stopFailure = `stop ${name}: ${errorDetails(error).message}`;
+      }
+      try {
+        await this.engine.remove(name);
+      } catch (error) {
+        containerRemovalFailed = true;
+        if (stopFailure) {
+          failures.push(stopFailure);
+        }
+        failures.push(`remove ${name}: ${errorDetails(error).message}`);
+      }
     }
-    await this.engine.removeNetwork(`forge-${net}`);
+    try {
+      await this.engine.removeNetwork(`forge-${net}`);
+    } catch (error) {
+      failures.push(
+        `remove network forge-${net}: ${errorDetails(error).message}`,
+      );
+    }
     if (!options.keep) {
-      await this.engine.removeVolume(`forge-${net}-ckb-data`);
+      try {
+        await this.engine.removeVolume(`forge-${net}-ckb-data`);
+      } catch (error) {
+        failures.push(
+          `remove volume forge-${net}-ckb-data: ${errorDetails(error).message}`,
+        );
+      }
     }
-    if (options.purge) {
-      await rm(join(this.stateDir, net), { recursive: true, force: true });
+    if (options.purge && !containerRemovalFailed) {
+      try {
+        await rm(join(this.stateDir, net), { recursive: true, force: true });
+      } catch (error) {
+        failures.push(`remove state ${net}: ${errorDetails(error).message}`);
+      }
+    }
+    if (failures.length > 0) {
+      throw new ForgeError(
+        "DOCKER_OPERATION_FAILED",
+        `network "${net}" teardown was incomplete: ${failures.join("; ")}`,
+        {
+          resource: net,
+          action: `fix the reported resources, then run "fiber-forge down ${net}${options.purge ? " --purge" : ""}" again`,
+        },
+      );
     }
   }
 
@@ -529,8 +744,26 @@ export class Orchestrator {
     const stateNets = (await this.list()).map((summary) => summary.net);
     const dockerNets = await this.engine.forgeNets();
     const nets = [...new Set([...stateNets, ...dockerNets])];
+    const failures: string[] = [];
+    const failedNets: string[] = [];
     for (const net of nets) {
-      await this.down(net, options);
+      try {
+        await this.down(net, options);
+      } catch (error) {
+        failedNets.push(net);
+        failures.push(`${net}: ${errorDetails(error).message}`);
+      }
+    }
+    if (failures.length > 0) {
+      throw new ForgeError(
+        "DOCKER_OPERATION_FAILED",
+        `one or more networks had incomplete teardown: ${failures.join("; ")}`,
+        {
+          resource: failedNets.join(", "),
+          action:
+            'fix the reported resources, then run "fiber-forge down --all" again',
+        },
+      );
     }
     return nets;
   }
@@ -834,12 +1067,17 @@ export class Orchestrator {
   }
 
   private async readState(net: string): Promise<NetworkState> {
+    this.requireNetworkName(net);
     try {
       return JSON.parse(
         await readFile(join(this.stateDir, net, "layout.json"), "utf8"),
       ) as NetworkState;
-    } catch {
-      throw new Error(`network "${net}" not found`);
+    } catch (error) {
+      throw new ForgeError("NETWORK_NOT_FOUND", `network "${net}" not found`, {
+        resource: net,
+        action: 'run "fiber-forge ls" to list recorded networks',
+        cause: error,
+      });
     }
   }
 

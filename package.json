@@ -71,6 +71,8 @@
     "src",
     "bin",
     "assets",
-    "docs/sdk.md"
+    "docs/sdk.md",
+    "docs/recovery.md",
+    "docs/lifecycle-errors.md"
   ]
 }

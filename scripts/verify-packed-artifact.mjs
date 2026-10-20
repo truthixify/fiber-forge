@@ -33,6 +33,8 @@ const requiredPackageFiles = [
   "bin/fiber-forge.mjs",
   "dist/sdk.d.ts",
   "dist/sdk.js",
+  "docs/lifecycle-errors.md",
+  "docs/recovery.md",
   "docs/sdk.md",
   "package.json",
   "src/cli.ts",
@@ -124,6 +126,8 @@ function validatePackListing(metadata) {
         "assets/",
         "bin/",
         "dist/",
+        "docs/lifecycle-errors.md",
+        "docs/recovery.md",
         "docs/sdk.md",
         "src/",
       ].some((allowedPath) =>
@@ -296,8 +300,11 @@ async function main() {
     );
     assert.equal(topologyResult.code, 1, "invalid topology must exit non-zero");
     assert.equal(topologyResult.stdout, "");
-    assert.match(topologyResult.stderr, /invalid topology/);
-    assert.match(topologyResult.stderr, /unknown node "missing"/);
+    const topologyError = JSON.parse(topologyResult.stderr);
+    assert.equal(topologyError.ok, false);
+    assert.equal(topologyError.error.code, "UNEXPECTED");
+    assert.match(topologyError.error.message, /invalid topology/);
+    assert.match(topologyError.error.message, /unknown node "missing"/);
     assertNoAnsi("CLI topology error", topologyResult.stderr);
 
     const runtimeResult = await run(

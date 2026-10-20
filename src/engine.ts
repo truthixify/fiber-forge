@@ -5,6 +5,7 @@
  */
 
 import Docker from "dockerode";
+import { ForgeError } from "./errors.js";
 
 export type ContainerStatus = "running" | "exited" | "absent";
 
@@ -114,7 +115,11 @@ export class FakeEngine implements ContainerEngine {
   async start(name: string): Promise<void> {
     const entry = this.containers.get(name);
     if (!entry) {
-      throw new Error(`container ${name} not found`);
+      throw new ForgeError(
+        "CONTAINER_NOT_FOUND",
+        `container "${name}" does not exist`,
+        { resource: name, action: "recreate the network before retrying" },
+      );
     }
     entry.status = "running";
     this.log.push(`start ${name}`);
@@ -159,24 +164,34 @@ export class DockerEngine implements ContainerEngine {
   }
 
   async ensureNetwork(name: string, subnet: string): Promise<void> {
-    const existing = await this.docker.listNetworks({
-      filters: { name: [name] },
-    });
-    const match = existing.find((n) => n.Name === name);
-    if (match) {
-      // Reuse only if the subnet matches; a stale network with a different subnet (left by a
-      // crashed run) can't host the planned IPs, so tear it down and recreate it clean.
-      const current = (match as { IPAM?: { Config?: { Subnet?: string }[] } })
-        .IPAM?.Config?.[0]?.Subnet;
-      if (current === subnet) {
-        return;
+    try {
+      const existing = await this.docker.listNetworks({
+        filters: { name: [name] },
+      });
+      const match = existing.find((n) => n.Name === name);
+      if (match) {
+        // Reuse only if the subnet matches; a stale network with a different subnet (left by a
+        // crashed run) can't host the planned IPs, so tear it down and recreate it clean.
+        const current = (match as { IPAM?: { Config?: { Subnet?: string }[] } })
+          .IPAM?.Config?.[0]?.Subnet;
+        if (current === subnet) {
+          return;
+        }
+        await this.removeNetwork(name);
       }
-      await this.removeNetwork(name);
+      await this.docker.createNetwork({
+        Name: name,
+        IPAM: { Config: [{ Subnet: subnet }] },
+      });
+    } catch (error) {
+      throw dockerFailure(
+        error,
+        "DOCKER_OPERATION_FAILED",
+        `could not create Docker network "${name}"`,
+        name,
+        "start Docker, remove the conflicting network if needed, then retry",
+      );
     }
-    await this.docker.createNetwork({
-      Name: name,
-      IPAM: { Config: [{ Subnet: subnet }] },
-    });
   }
 
   async removeNetwork(name: string): Promise<void> {
@@ -194,7 +209,15 @@ export class DockerEngine implements ContainerEngine {
       }
       await network.remove();
     } catch (error) {
-      if (!isNotFound(error)) throw error;
+      if (!isNotFound(error)) {
+        throw dockerFailure(
+          error,
+          "DOCKER_OPERATION_FAILED",
+          `could not remove Docker network "${name}"`,
+          name,
+          `remove network "${name}" manually, then retry`,
+        );
+      }
     }
   }
 
@@ -202,7 +225,15 @@ export class DockerEngine implements ContainerEngine {
     try {
       await this.docker.getVolume(name).remove({ force: true });
     } catch (error) {
-      if (!isNotFound(error)) throw error;
+      if (!isNotFound(error)) {
+        throw dockerFailure(
+          error,
+          "DOCKER_OPERATION_FAILED",
+          `could not remove Docker volume "${name}"`,
+          name,
+          `remove volume "${name}" manually, then retry`,
+        );
+      }
     }
   }
 
@@ -212,54 +243,81 @@ export class DockerEngine implements ContainerEngine {
       return true;
     } catch (error) {
       if (isNotFound(error)) return false;
-      throw error;
+      throw dockerFailure(
+        error,
+        "DOCKER_OPERATION_FAILED",
+        `could not inspect Docker volume "${name}"`,
+        name,
+        "start Docker and retry",
+      );
     }
   }
 
   async run(spec: ContainerSpec): Promise<void> {
-    await this.remove(spec.name);
-    await this.ensureImage(spec.image);
+    try {
+      await this.remove(spec.name);
+      await this.ensureImage(spec.image);
 
-    const exposedPorts: Record<string, object> = {};
-    const portBindings: Record<string, { HostPort: string }[]> = {};
-    for (const p of spec.ports ?? []) {
-      const key = `${p.container}/tcp`;
-      exposedPorts[key] = {};
-      portBindings[key] = [{ HostPort: String(p.host) }];
+      const exposedPorts: Record<string, object> = {};
+      const portBindings: Record<string, { HostPort: string }[]> = {};
+      for (const p of spec.ports ?? []) {
+        const key = `${p.container}/tcp`;
+        exposedPorts[key] = {};
+        portBindings[key] = [{ HostPort: String(p.host) }];
+      }
+
+      const container = await this.docker.createContainer({
+        name: spec.name,
+        Image: spec.image,
+        User: spec.user,
+        Env: Object.entries(spec.env ?? {}).map(([k, v]) => `${k}=${v}`),
+        Entrypoint: spec.entrypoint,
+        Cmd: spec.cmd,
+        Labels: spec.labels,
+        ExposedPorts: exposedPorts,
+        HostConfig: {
+          NetworkMode: spec.network,
+          PortBindings: portBindings,
+          Binds: (spec.volumes ?? []).map(
+            (v) => `${v.source}:${v.target}${v.readOnly ? ":ro" : ""}`,
+          ),
+        },
+        NetworkingConfig: spec.ip
+          ? {
+              EndpointsConfig: {
+                [spec.network]: { IPAMConfig: { IPv4Address: spec.ip } },
+              },
+            }
+          : undefined,
+      });
+      await container.start();
+    } catch (error) {
+      if (error instanceof ForgeError) {
+        throw error;
+      }
+      throw dockerFailure(
+        error,
+        "CONTAINER_START_FAILED",
+        `could not start container "${spec.name}"`,
+        spec.name,
+        "free its requested ports, inspect Docker, then retry",
+      );
     }
-
-    const container = await this.docker.createContainer({
-      name: spec.name,
-      Image: spec.image,
-      User: spec.user,
-      Env: Object.entries(spec.env ?? {}).map(([k, v]) => `${k}=${v}`),
-      Entrypoint: spec.entrypoint,
-      Cmd: spec.cmd,
-      Labels: spec.labels,
-      ExposedPorts: exposedPorts,
-      HostConfig: {
-        NetworkMode: spec.network,
-        PortBindings: portBindings,
-        Binds: (spec.volumes ?? []).map(
-          (v) => `${v.source}:${v.target}${v.readOnly ? ":ro" : ""}`,
-        ),
-      },
-      NetworkingConfig: spec.ip
-        ? {
-            EndpointsConfig: {
-              [spec.network]: { IPAMConfig: { IPv4Address: spec.ip } },
-            },
-          }
-        : undefined,
-    });
-    await container.start();
   }
 
   async stop(name: string): Promise<void> {
     try {
       await this.docker.getContainer(name).stop({ t: 3 });
     } catch (error) {
-      if (!isNotFound(error) && !isNotModified(error)) throw error;
+      if (!isNotFound(error) && !isNotModified(error)) {
+        throw dockerFailure(
+          error,
+          "DOCKER_OPERATION_FAILED",
+          `could not stop container "${name}"`,
+          name,
+          "start Docker and retry teardown",
+        );
+      }
     }
   }
 
@@ -267,7 +325,22 @@ export class DockerEngine implements ContainerEngine {
     try {
       await this.docker.getContainer(name).start();
     } catch (error) {
-      if (!isNotModified(error)) throw error;
+      if (isNotFound(error)) {
+        throw new ForgeError(
+          "CONTAINER_NOT_FOUND",
+          `container "${name}" does not exist`,
+          { resource: name, action: "recreate the network before retrying" },
+        );
+      }
+      if (!isNotModified(error)) {
+        throw dockerFailure(
+          error,
+          "CONTAINER_START_FAILED",
+          `could not start container "${name}"`,
+          name,
+          "inspect the container logs and Docker state, then retry",
+        );
+      }
     }
   }
 
@@ -275,7 +348,15 @@ export class DockerEngine implements ContainerEngine {
     try {
       await this.docker.getContainer(name).remove({ force: true });
     } catch (error) {
-      if (!isNotFound(error)) throw error;
+      if (!isNotFound(error)) {
+        throw dockerFailure(
+          error,
+          "DOCKER_OPERATION_FAILED",
+          `could not remove container "${name}"`,
+          name,
+          "remove the container manually, then retry",
+        );
+      }
     }
   }
 
@@ -285,7 +366,13 @@ export class DockerEngine implements ContainerEngine {
       return info.State.Running ? "running" : "exited";
     } catch (error) {
       if (isNotFound(error)) return "absent";
-      throw error;
+      throw dockerFailure(
+        error,
+        "DOCKER_OPERATION_FAILED",
+        `could not inspect container "${name}"`,
+        name,
+        "start Docker and retry",
+      );
     }
   }
 
@@ -299,35 +386,71 @@ export class DockerEngine implements ContainerEngine {
       return demuxDockerLogs(buffer);
     } catch (error) {
       if (isNotFound(error)) return "";
-      throw error;
+      throw dockerFailure(
+        error,
+        "DOCKER_OPERATION_FAILED",
+        `could not read logs for container "${name}"`,
+        name,
+        "start Docker and retry",
+      );
     }
   }
 
   async listByLabel(label: string, value: string): Promise<string[]> {
-    const list = await this.docker.listContainers({
-      all: true,
-      filters: { label: [`${label}=${value}`] },
-    });
-    return list.flatMap((c) => c.Names.map((n) => n.replace(/^\//, "")));
+    try {
+      const list = await this.docker.listContainers({
+        all: true,
+        filters: { label: [`${label}=${value}`] },
+      });
+      return list.flatMap((c) => c.Names.map((n) => n.replace(/^\//, "")));
+    } catch (error) {
+      throw dockerFailure(
+        error,
+        "DOCKER_OPERATION_FAILED",
+        `could not list Docker resources for ${label}=${value}`,
+        `${label}=${value}`,
+        "start Docker and retry",
+      );
+    }
   }
 
   async forgeNets(): Promise<string[]> {
-    const networks = await this.docker.listNetworks();
-    return networks
-      .map((n) => n.Name)
-      .filter(
-        (name): name is string => Boolean(name) && name.startsWith("forge-"),
-      )
-      .map((name) => name.slice("forge-".length));
+    try {
+      const networks = await this.docker.listNetworks();
+      return networks
+        .map((n) => n.Name)
+        .filter(
+          (name): name is string => Boolean(name) && name.startsWith("forge-"),
+        )
+        .map((name) => name.slice("forge-".length));
+    } catch (error) {
+      throw dockerFailure(
+        error,
+        "DOCKER_OPERATION_FAILED",
+        "could not list Fiber Forge Docker networks",
+        "Docker networks",
+        "start Docker and retry",
+      );
+    }
   }
 
   async usedSubnets(): Promise<string[]> {
-    const networks = await this.docker.listNetworks();
-    return networks.flatMap((network) =>
-      (network.IPAM?.Config ?? [])
-        .map((config) => config.Subnet)
-        .filter((subnet): subnet is string => Boolean(subnet)),
-    );
+    try {
+      const networks = await this.docker.listNetworks();
+      return networks.flatMap((network) =>
+        (network.IPAM?.Config ?? [])
+          .map((config) => config.Subnet)
+          .filter((subnet): subnet is string => Boolean(subnet)),
+      );
+    } catch (error) {
+      throw dockerFailure(
+        error,
+        "DOCKER_OPERATION_FAILED",
+        "could not inspect Docker network subnets",
+        "Docker daemon",
+        "start Docker and retry",
+      );
+    }
   }
 
   private async ensureImage(image: string): Promise<void> {
@@ -337,14 +460,27 @@ export class DockerEngine implements ContainerEngine {
     if (images.length > 0) {
       return;
     }
-    await new Promise<void>((resolve, reject) => {
-      this.docker.pull(image, (err: unknown, stream: NodeJS.ReadableStream) => {
-        if (err) return reject(err as Error);
-        this.docker.modem.followProgress(stream, (done: unknown) =>
-          done ? reject(done as Error) : resolve(),
+    try {
+      await new Promise<void>((resolve, reject) => {
+        this.docker.pull(
+          image,
+          (err: unknown, stream: NodeJS.ReadableStream) => {
+            if (err) return reject(err as Error);
+            this.docker.modem.followProgress(stream, (done: unknown) =>
+              done ? reject(done as Error) : resolve(),
+            );
+          },
         );
       });
-    });
+    } catch (error) {
+      throw dockerFailure(
+        error,
+        "IMAGE_PULL_FAILED",
+        `could not pull image "${image}"`,
+        image,
+        `check registry access or run "docker pull ${image}", then retry`,
+      );
+    }
   }
 }
 
@@ -384,4 +520,40 @@ function isNotFound(error: unknown): boolean {
 
 function isNotModified(error: unknown): boolean {
   return (error as { statusCode?: number })?.statusCode === 304;
+}
+
+function dockerFailure(
+  error: unknown,
+  fallbackCode:
+    "CONTAINER_START_FAILED" | "DOCKER_OPERATION_FAILED" | "IMAGE_PULL_FAILED",
+  message: string,
+  resource: string,
+  action: string,
+): ForgeError {
+  if (error instanceof ForgeError) {
+    return error;
+  }
+  const detail = error instanceof Error ? error.message : String(error);
+  const code = (error as NodeJS.ErrnoException)?.code;
+  const unavailable =
+    code === "ECONNREFUSED" ||
+    code === "ENOENT" ||
+    code === "EACCES" ||
+    /docker\.sock|docker daemon|connect (?:enoent|econnrefused)/i.test(detail);
+  if (unavailable) {
+    return new ForgeError(
+      "DOCKER_UNAVAILABLE",
+      `Docker is unavailable: ${detail}`,
+      {
+        resource: "Docker daemon",
+        action: "start Docker and retry",
+        cause: error,
+      },
+    );
+  }
+  return new ForgeError(fallbackCode, `${message}: ${detail}`, {
+    resource,
+    action,
+    cause: error,
+  });
 }

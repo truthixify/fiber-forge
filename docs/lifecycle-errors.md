@@ -1,0 +1,51 @@
+# Lifecycle Errors
+
+Lifecycle failures have stable codes for CLI automation. When a command uses `--json`, Fiber Forge
+writes one JSON error object to stderr and exits non-zero:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "PORT_IN_USE",
+    "message": "CKB RPC port 8114 is already in use",
+    "resource": "127.0.0.1:8114",
+    "action": "free port 8114 or choose a different port"
+  }
+}
+```
+
+`message` is for people. Automation should branch on `code`; `resource` and `action` are present
+when Fiber Forge can identify a specific target and safe next step.
+
+## Codes
+
+| Code | Meaning |
+| --- | --- |
+| `DOCKER_UNAVAILABLE` | The Docker socket is missing, refused the connection, or is inaccessible. |
+| `IMAGE_PULL_FAILED` | A required pinned image could not be pulled. |
+| `CONTAINER_START_FAILED` | Docker could not create or start the named container. |
+| `CONTAINER_NOT_FOUND` | An operation required an existing container that has been removed. |
+| `INVALID_NETWORK_NAME` | A network name is not safe for Docker resources or local state paths. |
+| `PORT_IN_USE` | A requested port is occupied or overlaps another requested binding. |
+| `INVALID_PORT` | A requested port or port range is outside the TCP port range. |
+| `NETWORK_EXISTS` | A same-name Fiber Forge network still has running containers. |
+| `NETWORK_NOT_FOUND` | No readable saved layout exists for the requested network. |
+| `PROVISION_FAILED` | Provisioning failed at a named node, peer, channel, or routing phase. |
+| `ROLLBACK_FAILED` | Provisioning failed and automatic cleanup also encountered an error. |
+| `DOCKER_OPERATION_FAILED` | Another named Docker inspection or cleanup operation failed. |
+| `UNEXPECTED` | A failure outside the classified lifecycle paths. |
+
+These codes currently describe the CLI and internal orchestration contract. They are not added to
+the public SDK export surface in this release.
+
+## Cleanup Rules
+
+- Requested ports are validated before Docker resources are created.
+- A same-name running network is never replaced implicitly; tear it down explicitly first.
+- Exited, Fiber Forge-labeled containers and their stale network, CKB volume, and bind-mounted node
+  state are removed before a fresh provisioning attempt.
+- A failure after provisioning begins triggers `down --purge` semantics for that network only.
+- Teardown continues across individual resource failures and reports every resource it could not
+  remove. If a container remains, its bind-mounted state is retained for the next teardown attempt.
+  Repeating teardown is safe when containers, networks, volumes, or state are already gone.

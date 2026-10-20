@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { type NetworkLayout } from "./config.js";
 import { DockerEngine } from "./engine.js";
+import { errorDetails } from "./errors.js";
 import { type NetworkView, Orchestrator } from "./orchestrator.js";
 import { preset, presetHelp } from "./presets.js";
 import { parseScenario, runScenario } from "./scenario.js";
@@ -82,6 +83,11 @@ function fail(message: string, suggestion?: string): void {
   const hint =
     suggestion ?? (/not found/.test(message) ? "fiber-forge ls" : undefined);
   console.error("\n" + ui.errorBox(message, hint) + "\n");
+  process.exitCode = 1;
+}
+
+function failJson(error: unknown): void {
+  console.error(JSON.stringify({ ok: false, error: errorDetails(error) }));
   process.exitCode = 1;
 }
 
@@ -257,8 +263,12 @@ export function buildCli(): Command {
             });
           }
         } catch (error) {
-          progress.failActive((error as Error).message);
-          fail((error as Error).message, `fiber-forge down ${topology.name}`);
+          const details = errorDetails(error);
+          progress.failActive(details.message);
+          fail(
+            details.message,
+            details.action ?? `fiber-forge down ${topology.name}`,
+          );
         }
       },
     );
@@ -315,8 +325,12 @@ export function buildCli(): Command {
       let view: NetworkView;
       try {
         view = await orchestrator().inspect(net);
-      } catch {
-        fail(`network "${net}" not found`, "fiber-forge ls");
+      } catch (error) {
+        if (options.json) {
+          throw error;
+        }
+        const details = errorDetails(error);
+        fail(details.message, details.action ?? "fiber-forge ls");
         return;
       }
       if (options.json) {
@@ -424,8 +438,9 @@ export function buildCli(): Command {
             fail(`payment ${result.status.toLowerCase()}`);
           }
         } catch (error) {
-          progress.fail("settle", (error as Error).message);
-          fail((error as Error).message);
+          const details = errorDetails(error);
+          progress.fail("settle", details.message);
+          fail(details.message, details.action);
         }
       },
     );
@@ -508,8 +523,9 @@ export function buildCli(): Command {
             `\n  ${ui.success("✔")}  channel ${ui.text(from)} ${ui.muted("→")} ${ui.text(to)}  ${ui.muted(capacityCkb + " " + unit)}  ${ui.success("ChannelReady")}\n`,
           );
         } catch (error) {
-          progress.failActive((error as Error).message);
-          fail((error as Error).message);
+          const details = errorDetails(error);
+          progress.failActive(details.message);
+          fail(details.message, details.action);
         }
       },
     );
@@ -672,6 +688,11 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   try {
     await buildCli().parseAsync(argv);
   } catch (error) {
-    fail((error as Error).message);
+    if (argv.includes("--json")) {
+      failJson(error);
+      return;
+    }
+    const details = errorDetails(error);
+    fail(details.message, details.action);
   }
 }

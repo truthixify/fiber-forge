@@ -1,7 +1,8 @@
 name: e2e
 # Headless live smoke: brings real CKB + fnn containers up on the runner's Docker, drives a
-# three-node CKB multi-hop payment plus node-failure and UDT paths, then verifies teardown. Kept
-# off the per-push path (slow: pulls images + boots a devnet) — run it on demand or weekly.
+# three-node CKB multi-hop payment, node recovery, rollback failures, and UDT paths, then verifies
+# teardown. Kept off the per-push path (slow: pulls images + boots a devnet) — run it on demand or
+# weekly.
 on:
   workflow_dispatch:
   schedule:

@@ -76,8 +76,8 @@ GUI (React/vite, served on localhost) ──► fiber-forge daemon HTTP+WS API (
 - FR-1 `fiber-forge up <preset|file>` produces a network where every declared channel reaches
   `CHANNEL_READY`, or exits non-zero with a per-step error naming the failing node/channel. With no
   argument, `fiber-forge up` opens the GUI on its spawn chooser to pick a topology and Forge it there.
-- FR-2 `fiber-forge down <net>` removes containers + network; `--keep` preserves data dirs; `--purge`
-  wipes; `--all` (no net) tears down every network at once.
+- FR-2 `fiber-forge down <net>` removes containers + network; `--keep` preserves the CKB volume;
+  `--purge` also removes saved node/layout state; `--all` (no net) tears down every network at once.
 - FR-3 The GUI reflects node/channel/balance state within 2s of change (poll or WS push).
 - FR-4 Opening a channel from the GUI requires only source, target, capacity; the orchestrator
   handles funding, acceptance, and readiness.
@@ -90,6 +90,8 @@ GUI (React/vite, served on localhost) ──► fiber-forge daemon HTTP+WS API (
   channel reserve, duplicate names) before any container starts.
 - FR-9 `@truthixify/fiber-forge/sdk` exposes the documented high-level lifecycle and topology
   contract without requiring imports from package-internal source or build paths.
+- FR-10 Lifecycle failures expose a stable code, affected resource, and next action; `--json`
+  commands emit a single parseable error object and a non-zero exit status.
 
 ## 7. Topology schema (YAML)
 
