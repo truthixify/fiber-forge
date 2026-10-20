@@ -5,6 +5,7 @@ import * as sdk from "@truthixify/fiber-forge/sdk";
 
 const expectedRuntimeExports = [
   "DEFAULT_PROVISION_TIMEOUT_MS",
+  "FAULT_KINDS",
   "FUNDING_BUFFER_CKB",
   "ForgeError",
   "MAX_NODES",
@@ -13,6 +14,7 @@ const expectedRuntimeExports = [
   "TopologyError",
   "createFiberForge",
   "errorDetails",
+  "isFaultKind",
   "line",
   "parseTopology",
   "planNetwork",
@@ -48,11 +50,22 @@ funding: { per_node_ckb: 100000 }
   1,
 );
 const forge = sdk.createFiberForge();
+assert.deepEqual(sdk.FAULT_KINDS, [
+  "node-kill",
+  "peer-partition",
+  "ckb-unavailable",
+  "mining-pause",
+]);
 assert.equal(typeof forge.up, "function");
 assert.equal(typeof forge.inspectNode, "function");
 assert.equal(typeof forge.stopNode, "function");
 assert.equal(typeof forge.startNode, "function");
 assert.equal(typeof forge.restartNode, "function");
+assert.equal(typeof forge.applyFault, "function");
+assert.equal(typeof forge.faultStatus, "function");
+assert.equal(typeof forge.resetFault, "function");
+assert.equal(typeof forge.resetAllFaults, "function");
+assert.equal(typeof forge.mineBlocks, "function");
 assert.equal(sdk.planNetwork(sdk.preset("duo")).nodes.length, 2);
 assert.deepEqual(
   sdk.errorDetails(

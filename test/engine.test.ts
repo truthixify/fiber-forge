@@ -17,10 +17,36 @@ function removableContainer() {
 describe("FakeEngine", () => {
   it("creates a network idempotently", async () => {
     const e = new FakeEngine();
-    await e.ensureNetwork("forge-x", "172.30.0.0/16");
-    await e.ensureNetwork("forge-x", "172.30.0.0/16");
+    await e.ensureNetwork("forge-x", "172.30.0.0/16", {
+      labels: { "fiber-forge": "x" },
+    });
+    await e.ensureNetwork("forge-x", "172.30.0.0/16", {
+      labels: { "fiber-forge": "x" },
+    });
     expect(e.networks.get("forge-x")).toBe("172.30.0.0/16");
+    expect(await e.getNetworkLabels("forge-x")).toEqual({
+      "fiber-forge": "x",
+    });
     expect(e.log.filter((l) => l.startsWith("network")).length).toBe(1);
+  });
+
+  it("does not claim a same-named network with different labels", async () => {
+    const e = new FakeEngine();
+    await e.ensureNetwork("ffault-x-1", "172.30.0.0/16", {
+      labels: { owner: "external" },
+    });
+
+    await expect(
+      e.ensureNetwork("ffault-x-1", "172.31.0.0/16", {
+        labels: { "fiber-forge": "x" },
+      }),
+    ).rejects.toMatchObject({
+      code: "DOCKER_OPERATION_FAILED",
+      resource: "ffault-x-1",
+    });
+    expect(await e.getNetworkLabels("ffault-x-1")).toEqual({
+      owner: "external",
+    });
   });
 
   it("models the container lifecycle", async () => {
@@ -40,6 +66,37 @@ describe("FakeEngine", () => {
     expect(await e.status("n1")).toBe("running");
     await e.remove("n1");
     expect(await e.status("n1")).toBe("absent");
+  });
+
+  it("models abrupt termination and scoped network attachments", async () => {
+    const e = new FakeEngine();
+    await e.ensureNetwork("forge-x", "172.30.0.0/24");
+    await e.ensureNetwork("ffault-x-1", "172.31.0.0/24");
+    await e.run({
+      name: "n1",
+      image: "img",
+      network: "forge-x",
+      ip: "172.30.0.11",
+    });
+
+    await e.connectNetwork("ffault-x-1", "n1", { ip: "172.31.0.11" });
+    await e.disconnectNetwork("forge-x", "n1");
+    expect(await e.networkConnected("forge-x", "n1")).toBe(false);
+    expect(await e.networkConnected("ffault-x-1", "n1")).toBe(true);
+    expect(await e.networkExists("ffault-x-1")).toBe(true);
+
+    await expect(e.removeNetwork("ffault-x-1")).rejects.toMatchObject({
+      code: "DOCKER_OPERATION_FAILED",
+      resource: "ffault-x-1",
+    });
+    expect(await e.networkConnected("ffault-x-1", "n1")).toBe(true);
+
+    await e.kill("n1");
+    expect(await e.status("n1")).toBe("exited");
+    expect(await e.faultCapabilities()).toEqual({
+      abruptKill: true,
+      networkIsolation: true,
+    });
   });
 
   it("rejects starting a container that no longer exists", async () => {
@@ -69,6 +126,28 @@ describe("FakeEngine", () => {
 });
 
 describe("DockerEngine errors", () => {
+  it("labels newly created managed networks", async () => {
+    const createNetwork = vi.fn().mockResolvedValue({});
+    const docker = {
+      listNetworks: vi.fn().mockResolvedValue([]),
+      createNetwork,
+    } as unknown as Docker;
+
+    await new DockerEngine(docker).ensureNetwork(
+      "ffault-x-1",
+      "172.31.0.0/24",
+      {
+        labels: { "fiber-forge": "x", "fiber-forge.fault": "true" },
+      },
+    );
+
+    expect(createNetwork).toHaveBeenCalledWith({
+      Name: "ffault-x-1",
+      Labels: { "fiber-forge": "x", "fiber-forge.fault": "true" },
+      IPAM: { Config: [{ Subnet: "172.31.0.0/24" }] },
+    });
+  });
+
   it("publishes container RPC ports on IPv4 loopback only", async () => {
     const createContainer = vi.fn().mockResolvedValue({ start: vi.fn() });
     const docker = {

@@ -82,6 +82,10 @@ fiber-forge node inspect trio feynman --json
 fiber-forge node stop trio feynman  # retain the node's container and data
 fiber-forge node start trio feynman # wait for RPC and report channel recovery
 fiber-forge node restart trio feynman
+fiber-forge fault apply trio peer-partition feynman --json
+fiber-forge fault status trio --json
+fiber-forge fault reset trio peer-partition feynman --json
+fiber-forge fault reset-all trio --json
 fiber-forge gui trio                # (re)open the GUI for a network
 fiber-forge down trio               # remove one network (--keep CKB volume, --purge everything)
 fiber-forge down --all              # remove every network at once
@@ -175,6 +179,11 @@ can still require reconnecting the original opener, so a process restart is neve
 transparent channel recovery. The live test applies that bounded fallback when required and proves
 a subsequent payment over the original channel IDs. See [Node recovery](docs/recovery.md).
 
+Controlled faults cover abrupt node termination, CKB-preserving peer isolation, CKB dependency
+loss, and pausing Fiber Forge's on-demand dev-chain mining. Requested state is persisted and every
+fault has an inspectable reset path; teardown also removes a still-active fault. See
+[Controlled fault injection](docs/fault-injection.md).
+
 The code that talks to the nodes and the chain is split into small modules — `topology`, `keys`,
 `rpc`, `engine`, `config`, `ckb`, `orchestrator`, `scenario`, `presets`, `cli`, and `daemon` — each
 tested against a fake, so `make ci` never needs Docker.
@@ -199,8 +208,7 @@ also checks the Docker daemon architecture and both image manifest lists before 
 ## Roadmap
 
 - **Richer assets** — xUDT with RCE rules, a stablecoin preset, and multiple named assets per node.
-- **Resilience** — controlled network faults, stuck HTLC simulation, and force-close/on-chain
-  settlement visibility.
+- **Resilience** — stuck HTLC simulation and force-close/on-chain settlement visibility.
 - **Routing** — multi-path payments, per-hop fee and route inspection, and a view of the gossip graph.
 - **Scenarios** — shareable topology and traffic bundles with expected-outcome assertions.
 - **Cross-chain** — `cch` (Fiber ↔ Lightning) hub demos and BTC bridging.

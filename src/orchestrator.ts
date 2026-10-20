@@ -6,7 +6,15 @@
  * proven live in `docs/dev-notes.md`.
  */
 
-import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -30,6 +38,18 @@ import {
   type ContainerStatus,
 } from "./engine.js";
 import { ForgeError, errorDetails } from "./errors.js";
+import {
+  type FaultKind,
+  type FaultObservation,
+  type FaultReport,
+  type PersistedFault,
+  type PersistedFaultFile,
+  emptyFaultFile,
+  faultId,
+  faultNeedsTarget,
+  isFaultKind,
+  parseFaultFile,
+} from "./faults.js";
 import { encryptKey, generatePrivateKey } from "./keys.js";
 import { findFreePort, findFreePortBlock, isPortFree } from "./ports.js";
 import {
@@ -49,6 +69,7 @@ import {
 import { isValidNetworkName, type Topology } from "./topology.js";
 
 export const FORGE_LABEL = "fiber-forge";
+const FAULT_NETWORK_LABEL = "fiber-forge.fault";
 const packageMetadata = createRequire(import.meta.url)("../package.json") as {
   fiberForge: { images: { ckb: string; fiber: string } };
 };
@@ -221,6 +242,9 @@ export interface NetworkState {
   net: string;
   network: string;
   ckbHostPort: number;
+  /** Present in layouts created by current releases; older layouts derive these names safely. */
+  ckbContainer?: string;
+  ckbIp?: string;
   nodes: {
     name: string;
     container: string;
@@ -294,6 +318,14 @@ export interface NodeLifecycleReport {
   nextAction: string | null;
 }
 
+/** Result of explicit on-demand block generation. */
+export interface MineReport {
+  net: string;
+  count: number;
+  fromBlock: number;
+  toBlock: number;
+}
+
 /** A channel as seen from one node. */
 export interface ChannelRow {
   node: string;
@@ -349,6 +381,9 @@ export class Orchestrator {
     private readonly stateDir = join(homedir(), ".fiber-forge"),
     private readonly makeRpc: (rpcHostPort: number) => FnnRpc = (rpcHostPort) =>
       new FnnRpc(new HttpTransport(`http://127.0.0.1:${rpcHostPort}`)),
+    private readonly makeChain: (ckbHostPort: number) => DevChain = (
+      ckbHostPort,
+    ) => new DevChain(`http://127.0.0.1:${ckbHostPort}`),
   ) {}
 
   /** Serializes channel opens per network: two fundings must not race for the same wallet cell. */
@@ -356,6 +391,9 @@ export class Orchestrator {
 
   /** Serializes lifecycle mutations for one node while allowing unrelated nodes to proceed. */
   private readonly lifecycleQueue = new Map<string, Promise<void>>();
+
+  /** Serializes persisted fault-state transitions per network. */
+  private readonly faultQueue = new Map<string, Promise<void>>();
 
   private invalidPort(port: number, resource: string): ForgeError {
     return new ForgeError(
@@ -456,6 +494,7 @@ export class Orchestrator {
   }
 
   private async prepareNetwork(net: string): Promise<void> {
+    const faultNetworks = await this.faultNetworksForCleanup(net);
     const containers = await this.engine.listByLabel(FORGE_LABEL, net);
     const statuses = await Promise.all(
       containers.map(
@@ -479,6 +518,9 @@ export class Orchestrator {
     for (const [name] of statuses) {
       await this.engine.stop(name);
       await this.engine.remove(name);
+    }
+    for (const network of faultNetworks) {
+      await this.removeFaultNetwork(net, network);
     }
     if ((await this.engine.forgeNets()).includes(net)) {
       await this.engine.removeNetwork(`forge-${net}`);
@@ -734,6 +776,8 @@ export class Orchestrator {
         net: layout.net,
         network: layout.network,
         ckbHostPort: layout.ckbHostPort,
+        ckbContainer: layout.ckbContainer,
+        ckbIp: layout.ckbIp,
         nodes: layout.nodes.map((n) => ({
           name: n.name,
           container: n.container,
@@ -1034,6 +1078,189 @@ export class Orchestrator {
     );
   }
 
+  /** Apply a named, persisted fault to one managed network. */
+  async applyFault(
+    net: string,
+    kind: FaultKind,
+    target?: string,
+  ): Promise<FaultReport> {
+    return this.queueFault(net, async () => {
+      const state = await this.readState(net);
+      this.validateFaultInput(state, kind, target);
+      const file = await this.readFaultFile(net);
+      const id = faultId(kind, target);
+      const existing = file.faults.find((fault) => fault.id === id);
+      await this.assertFaultSupported(kind);
+
+      if (kind === "peer-partition" && this.hasFault(file, "ckb-unavailable")) {
+        throw new ForgeError(
+          "FAULT_CONFLICT",
+          "peer partition requires CKB connectivity, but CKB is unavailable",
+          {
+            resource: `${net}/${id}`,
+            action: `reset "ckb-unavailable" on network "${net}" first`,
+          },
+        );
+      }
+
+      if (existing) {
+        const observed = await this.observeFault(state, file, existing, true);
+        if (observed.state === "active") {
+          return this.faultReport(
+            state.net,
+            existing,
+            "active",
+            observed,
+            false,
+          );
+        }
+      }
+
+      const record =
+        existing ?? (await this.prepareFaultRecord(state, kind, target));
+      await this.preflightFaultApply(state, file, record);
+      if (!existing) {
+        file.faults.push(record);
+        await this.writeFaultFile(net, file);
+      }
+      await this.applyFaultRecord(state, file, record);
+      const observed = await this.observeFault(state, file, record, true);
+      if (observed.state !== "active") {
+        throw new ForgeError(
+          "FAULT_STATE_MISMATCH",
+          `fault "${record.id}" was requested but observed ${observed.state}`,
+          {
+            resource: `${net}/${record.id}`,
+            action: `inspect with "fiber-forge fault status ${net} --json", then reset or retry`,
+          },
+        );
+      }
+      return this.faultReport(state.net, record, "active", observed, true);
+    });
+  }
+
+  /** Inspect every persisted fault and its actual container/network condition. */
+  async faultStatus(net: string): Promise<FaultReport[]> {
+    return this.queueFault(net, async () => {
+      const state = await this.readState(net);
+      const file = await this.readFaultFile(net);
+      const reports = await Promise.all(
+        file.faults.map(async (fault) =>
+          this.faultReport(
+            net,
+            fault,
+            "active",
+            await this.observeFault(state, file, fault, true),
+            false,
+          ),
+        ),
+      );
+      return reports.sort((a, b) => a.id.localeCompare(b.id));
+    });
+  }
+
+  /** Reset one named fault and wait for the relevant process or dependency readiness. */
+  async resetFault(
+    net: string,
+    kind: FaultKind,
+    target?: string,
+    options: NodeLifecycleOptions = {},
+  ): Promise<FaultReport> {
+    return this.queueFault(net, async () => {
+      const state = await this.readState(net);
+      this.validateFaultInput(state, kind, target);
+      const file = await this.readFaultFile(net);
+      const id = faultId(kind, target);
+      const record = file.faults.find((fault) => fault.id === id);
+      if (!record) {
+        return {
+          net,
+          id,
+          kind,
+          target: target ?? null,
+          requested: "reset",
+          observed: {
+            state: "inactive",
+            summary: "no matching fault is recorded",
+          },
+          changed: false,
+          appliedAt: null,
+          survivesProcessRestart: true,
+          recovery: "ready",
+          nextAction: null,
+        };
+      }
+
+      await this.assertFaultSupported(kind);
+      const recovery = await this.resetFaultRecord(
+        state,
+        file,
+        record,
+        options,
+      );
+      file.faults = file.faults.filter((fault) => fault.id !== record.id);
+      await this.writeFaultFile(net, file);
+      const observed = await this.observeFault(state, file, record, false);
+      return {
+        ...this.faultReport(net, record, "reset", observed, true),
+        ...recovery,
+      };
+    });
+  }
+
+  /** Reset every active fault in dependency-safe order. */
+  async resetAllFaults(
+    net: string,
+    options: NodeLifecycleOptions = {},
+  ): Promise<FaultReport[]> {
+    const active = await this.faultStatus(net);
+    const order: Record<FaultKind, number> = {
+      "ckb-unavailable": 0,
+      "mining-pause": 1,
+      "peer-partition": 2,
+      "node-kill": 3,
+    };
+    const reports: FaultReport[] = [];
+    for (const fault of active.sort(
+      (a, b) => order[a.kind] - order[b.kind] || a.id.localeCompare(b.id),
+    )) {
+      reports.push(
+        await this.resetFault(
+          net,
+          fault.kind,
+          fault.target ?? undefined,
+          options,
+        ),
+      );
+    }
+    return reports;
+  }
+
+  /** Generate blocks through the managed control plane, honoring a mining-pause fault. */
+  async mineBlocks(net: string, count = 1): Promise<MineReport> {
+    if (!Number.isInteger(count) || count <= 0 || count > 1_000) {
+      throw new ForgeError(
+        "FAULT_PRECONDITION_FAILED",
+        "block count must be an integer between 1 and 1000",
+        {
+          resource: String(count),
+          action: "choose a block count between 1 and 1000",
+        },
+      );
+    }
+    const state = await this.readState(net);
+    await this.assertMiningAvailable(net);
+    const chain = this.chainFor(state.ckbHostPort);
+    const fromBlock = await chain.tipBlock();
+    await chain.generateBlocks(count);
+    return {
+      net,
+      count,
+      fromBlock,
+      toBlock: await chain.tipBlock(),
+    };
+  }
+
   /**
    * Tear a network down. By default removes its containers, network, and ckb data volume, keeping
    * the state dir. `keep` preserves the CKB data volume too; `purge` also deletes the state dir,
@@ -1043,6 +1270,7 @@ export class Orchestrator {
     this.requireNetworkName(net);
     const failures: string[] = [];
     let containerRemovalFailed = false;
+    const faultNetworks = await this.faultNetworksForCleanup(net);
     const containers = await this.engine.listByLabel(FORGE_LABEL, net);
     for (const name of containers) {
       let stopFailure: string | undefined;
@@ -1061,6 +1289,17 @@ export class Orchestrator {
         failures.push(`remove ${name}: ${errorDetails(error).message}`);
       }
     }
+    for (const network of [`forge-${net}`, ...faultNetworks]) {
+      for (const name of containers) {
+        try {
+          await this.engine.disconnectNetwork(network, name);
+        } catch (error) {
+          failures.push(
+            `disconnect ${name} from ${network}: ${errorDetails(error).message}`,
+          );
+        }
+      }
+    }
     try {
       await this.engine.removeNetwork(`forge-${net}`);
     } catch (error) {
@@ -1068,12 +1307,30 @@ export class Orchestrator {
         `remove network forge-${net}: ${errorDetails(error).message}`,
       );
     }
+    for (const network of faultNetworks) {
+      try {
+        await this.removeFaultNetwork(net, network);
+      } catch (error) {
+        failures.push(
+          `remove fault network ${network}: ${errorDetails(error).message}`,
+        );
+      }
+    }
     if (!options.keep) {
       try {
         await this.engine.removeVolume(`forge-${net}-ckb-data`);
       } catch (error) {
         failures.push(
           `remove volume forge-${net}-ckb-data: ${errorDetails(error).message}`,
+        );
+      }
+    }
+    if (failures.length === 0) {
+      try {
+        await rm(join(this.stateDir, net, "faults.json"), { force: true });
+      } catch (error) {
+        failures.push(
+          `remove fault state ${net}: ${errorDetails(error).message}`,
         );
       }
     }
@@ -1204,6 +1461,7 @@ export class Orchestrator {
     amountUdt: number,
   ): Promise<string> {
     const state = await this.readState(net);
+    await this.assertMiningAvailable(net);
     const target = this.requireNode(state, node);
     const chain = new DevChain(`http://127.0.0.1:${state.ckbHostPort}`);
     return chain.issueUdt(
@@ -1263,6 +1521,7 @@ export class Orchestrator {
   ): Promise<void> {
     const log = onProgress ?? (() => {});
     const state = await this.readState(net);
+    await this.assertMiningAvailable(net);
     const fromNode = this.requireNode(state, from);
     const toNode = this.requireNode(state, to);
     const fromRpc = this.rpcFor(fromNode.rpcHostPort);
@@ -1326,6 +1585,7 @@ export class Orchestrator {
   /** Top up a running node's on-chain wallet from the deployer; returns the funding tx hash. */
   async fund(net: string, node: string, amountCkb: number): Promise<string> {
     const state = await this.readState(net);
+    await this.assertMiningAvailable(net);
     const target = this.requireNode(state, node);
     const chain = new DevChain(`http://127.0.0.1:${state.ckbHostPort}`);
     const tx = await chain.fund(target.ckbAddress, amountCkb);
@@ -1374,6 +1634,615 @@ export class Orchestrator {
         : this.requireNode(state, node).container;
     const raw = await this.engine.logs(container, tailLines);
     return level ? filterLogsByLevel(raw, level) : raw;
+  }
+
+  private queueFault<T>(net: string, operation: () => Promise<T>): Promise<T> {
+    const prior = this.faultQueue.get(net) ?? Promise.resolve();
+    const result = prior.catch(() => undefined).then(operation);
+    const settled = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.faultQueue.set(net, settled);
+    return result.finally(() => {
+      if (this.faultQueue.get(net) === settled) {
+        this.faultQueue.delete(net);
+      }
+    });
+  }
+
+  private validateFaultInput(
+    state: NetworkState,
+    kind: FaultKind,
+    target?: string,
+  ): void {
+    if (!isFaultKind(String(kind))) {
+      throw new ForgeError(
+        "FAULT_UNSUPPORTED",
+        `fault kind "${String(kind)}" is not supported`,
+        {
+          resource: String(kind),
+          action:
+            "use node-kill, peer-partition, ckb-unavailable, or mining-pause",
+        },
+      );
+    }
+    if (faultNeedsTarget(kind) && !target) {
+      throw new ForgeError(
+        "FAULT_PRECONDITION_FAILED",
+        `fault "${kind}" requires a node target`,
+        {
+          resource: `${state.net}/${kind}`,
+          action: `provide a node listed by "fiber-forge status ${state.net}"`,
+        },
+      );
+    }
+    if (!faultNeedsTarget(kind) && target) {
+      throw new ForgeError(
+        "FAULT_PRECONDITION_FAILED",
+        `fault "${kind}" does not accept a node target`,
+        {
+          resource: `${state.net}/${kind}/${target}`,
+          action: `omit the node target for "${kind}"`,
+        },
+      );
+    }
+    if (target) {
+      this.requireNode(state, target);
+    }
+  }
+
+  private async faultNetworksForCleanup(net: string): Promise<string[]> {
+    const networks = new Set<string>();
+    try {
+      const state = JSON.parse(
+        await readFile(join(this.stateDir, net, "layout.json"), "utf8"),
+      ) as NetworkState;
+      state.nodes.forEach((_node, index) =>
+        networks.add(`ffault-${net}-${index + 1}`),
+      );
+    } catch {
+      // Teardown still removes known runtime resources when saved state is unavailable.
+    }
+    try {
+      const file = parseFaultFile(
+        JSON.parse(
+          await readFile(join(this.stateDir, net, "faults.json"), "utf8"),
+        ),
+      );
+      for (const fault of file.faults) {
+        if (fault.isolation) networks.add(fault.isolation.network);
+      }
+    } catch {
+      // Deterministic names derived above cover valid managed partition networks.
+    }
+    return [...networks];
+  }
+
+  private async removeFaultNetwork(
+    net: string,
+    network: string,
+  ): Promise<void> {
+    const labels = await this.engine.getNetworkLabels(network);
+    if (
+      labels?.[FORGE_LABEL] === net &&
+      labels[FAULT_NETWORK_LABEL] === "true"
+    ) {
+      await this.engine.removeNetwork(network);
+    }
+  }
+
+  private async readFaultFile(net: string): Promise<PersistedFaultFile> {
+    const path = join(this.stateDir, net, "faults.json");
+    try {
+      return parseFaultFile(JSON.parse(await readFile(path, "utf8")));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return emptyFaultFile();
+      }
+      throw new ForgeError(
+        "FAULT_STATE_MISMATCH",
+        `could not read persisted fault state for network "${net}"`,
+        {
+          resource: path,
+          action: `inspect or repair "${path}" before changing faults`,
+          cause: error,
+        },
+      );
+    }
+  }
+
+  private async writeFaultFile(
+    net: string,
+    file: PersistedFaultFile,
+  ): Promise<void> {
+    const path = join(this.stateDir, net, "faults.json");
+    const temporary = `${path}.tmp-${process.pid}-${Date.now()}`;
+    try {
+      await writeFile(temporary, JSON.stringify(file, null, 2) + "\n", {
+        mode: 0o600,
+      });
+      await rename(temporary, path);
+    } catch (error) {
+      await rm(temporary, { force: true }).catch(() => {});
+      throw new ForgeError(
+        "FAULT_STATE_MISMATCH",
+        `could not persist fault state for network "${net}"`,
+        {
+          resource: path,
+          action: "fix state-directory permissions and retry",
+          cause: error,
+        },
+      );
+    }
+  }
+
+  private hasFault(file: PersistedFaultFile, kind: FaultKind): boolean {
+    return file.faults.some((fault) => fault.kind === kind);
+  }
+
+  private async assertFaultSupported(kind: FaultKind): Promise<void> {
+    const capabilities = await this.engine.faultCapabilities();
+    const supported =
+      kind === "node-kill"
+        ? capabilities.abruptKill
+        : kind === "peer-partition" || kind === "ckb-unavailable"
+          ? capabilities.networkIsolation
+          : true;
+    if (!supported) {
+      throw new ForgeError(
+        "FAULT_UNSUPPORTED",
+        `container engine does not support fault "${kind}"`,
+        {
+          resource: kind,
+          action: "use a Docker Engine host with kill and bridge-network APIs",
+        },
+      );
+    }
+  }
+
+  private async prepareFaultRecord(
+    state: NetworkState,
+    kind: FaultKind,
+    target?: string,
+  ): Promise<PersistedFault> {
+    const record: PersistedFault = {
+      id: faultId(kind, target),
+      kind,
+      ...(target ? { target } : {}),
+      appliedAt: new Date().toISOString(),
+    };
+    if (kind === "peer-partition") {
+      const node = this.requireNode(state, target!);
+      const index = state.nodes.indexOf(node) + 1;
+      const base = pickSubnetBase(
+        `${state.net}-partition-${index}`,
+        await this.engine.usedSubnets(),
+      );
+      record.isolation = {
+        network: `ffault-${state.net}-${index}`,
+        subnet: `${base}.0/24`,
+        nodeIp: `${base}.11`,
+        ckbIp: `${base}.2`,
+      };
+    }
+    return record;
+  }
+
+  private async preflightFaultApply(
+    state: NetworkState,
+    file: PersistedFaultFile,
+    fault: PersistedFault,
+  ): Promise<void> {
+    if (
+      (fault.kind === "node-kill" || fault.kind === "peer-partition") &&
+      file.faults.some(
+        (active) =>
+          active.target === fault.target &&
+          ((active.kind === "node-kill" && fault.kind === "peer-partition") ||
+            (active.kind === "peer-partition" && fault.kind === "node-kill")),
+      )
+    ) {
+      const conflicting =
+        fault.kind === "node-kill" ? "peer-partition" : "node-kill";
+      throw new ForgeError(
+        "FAULT_CONFLICT",
+        `fault "${fault.kind}" cannot be combined with "${conflicting}" on node "${fault.target}"`,
+        {
+          resource: `${state.net}/${fault.target}`,
+          action: `reset "${conflicting}" on node "${fault.target}" first`,
+        },
+      );
+    }
+    if (fault.kind === "node-kill" || fault.kind === "peer-partition") {
+      const node = this.requireNode(state, fault.target!);
+      const status = nodeRuntimeStatus(
+        await this.engine.status(node.container),
+      );
+      if (status !== "running") {
+        throw new ForgeError(
+          "FAULT_PRECONDITION_FAILED",
+          `node "${node.name}" must be running before applying ${fault.kind}`,
+          {
+            resource: `${state.net}/${node.name}`,
+            action: `run "fiber-forge node start ${state.net} ${node.name}" first`,
+          },
+        );
+      }
+    }
+    if (fault.kind === "peer-partition" || fault.kind === "ckb-unavailable") {
+      const ckb = this.ckbContainerOf(state);
+      if ((await this.engine.status(ckb)) !== "running") {
+        throw new ForgeError(
+          "FAULT_PRECONDITION_FAILED",
+          `CKB container "${ckb}" must be running before applying ${fault.kind}`,
+          {
+            resource: `${state.net}/ckb`,
+            action: `restore network "${state.net}" before applying the fault`,
+          },
+        );
+      }
+    }
+    if (fault.kind === "peer-partition" && fault.isolation) {
+      const labels = await this.engine.getNetworkLabels(
+        fault.isolation.network,
+      );
+      if (
+        labels &&
+        (labels[FORGE_LABEL] !== state.net ||
+          labels[FAULT_NETWORK_LABEL] !== "true")
+      ) {
+        throw new ForgeError(
+          "FAULT_CONFLICT",
+          `Docker network "${fault.isolation.network}" is not owned by network "${state.net}"`,
+          {
+            resource: fault.isolation.network,
+            action:
+              "rename or remove the conflicting Docker network, then retry",
+          },
+        );
+      }
+    }
+    if (
+      fault.kind === "peer-partition" &&
+      this.hasFault(file, "ckb-unavailable")
+    ) {
+      throw new ForgeError(
+        "FAULT_CONFLICT",
+        "peer partition cannot be applied while CKB is unavailable",
+        {
+          resource: `${state.net}/${fault.id}`,
+          action: `reset "ckb-unavailable" on network "${state.net}" first`,
+        },
+      );
+    }
+  }
+
+  private async applyFaultRecord(
+    state: NetworkState,
+    file: PersistedFaultFile,
+    fault: PersistedFault,
+  ): Promise<void> {
+    if (fault.kind === "node-kill") {
+      await this.engine.kill(this.requireNode(state, fault.target!).container);
+      return;
+    }
+    if (fault.kind === "peer-partition") {
+      const node = this.requireNode(state, fault.target!);
+      const isolation = fault.isolation!;
+      const ckb = this.ckbContainerOf(state);
+      await this.engine.ensureNetwork(isolation.network, isolation.subnet, {
+        labels: {
+          [FORGE_LABEL]: state.net,
+          [FAULT_NETWORK_LABEL]: "true",
+        },
+      });
+      await this.engine.connectNetwork(isolation.network, ckb, {
+        ip: isolation.ckbIp,
+        aliases: [ckb],
+      });
+      await this.engine.connectNetwork(isolation.network, node.container, {
+        ip: isolation.nodeIp,
+        aliases: [node.container],
+      });
+      await this.engine.disconnectNetwork(state.network, node.container);
+      return;
+    }
+    if (fault.kind === "ckb-unavailable") {
+      const ckb = this.ckbContainerOf(state);
+      for (const network of this.ckbNetworks(state, file)) {
+        await this.engine.disconnectNetwork(network, ckb);
+      }
+    }
+  }
+
+  private async observeFault(
+    state: NetworkState,
+    file: PersistedFaultFile,
+    fault: PersistedFault,
+    persisted: boolean,
+  ): Promise<FaultObservation> {
+    if (fault.kind === "node-kill") {
+      const node = this.requireNode(state, fault.target!);
+      const status = nodeRuntimeStatus(
+        await this.engine.status(node.container),
+      );
+      const observedState =
+        status === "absent"
+          ? "degraded"
+          : status === "stopped"
+            ? persisted
+              ? "active"
+              : "degraded"
+            : "inactive";
+      return {
+        state: observedState,
+        summary:
+          status === "stopped"
+            ? `node ${node.name} is abruptly stopped with retained state`
+            : status === "running"
+              ? `node ${node.name} is running`
+              : `node ${node.name} container is missing`,
+        containerStatus: status,
+      };
+    }
+
+    if (fault.kind === "peer-partition") {
+      const node = this.requireNode(state, fault.target!);
+      const isolation = fault.isolation;
+      if (!isolation) {
+        return {
+          state: "degraded",
+          summary: "persisted partition is missing isolation network details",
+        };
+      }
+      const ckb = this.ckbContainerOf(state);
+      const [nodePrimary, nodeIsolated, ckbIsolated] = await Promise.all([
+        this.engine.networkConnected(state.network, node.container),
+        this.engine.networkConnected(isolation.network, node.container),
+        this.engine.networkConnected(isolation.network, ckb),
+      ]);
+      const attachments = [
+        {
+          container: node.container,
+          network: state.network,
+          connected: nodePrimary,
+        },
+        {
+          container: node.container,
+          network: isolation.network,
+          connected: nodeIsolated,
+        },
+        { container: ckb, network: isolation.network, connected: ckbIsolated },
+      ];
+      const active = !nodePrimary && nodeIsolated && ckbIsolated;
+      const inactive = nodePrimary && !nodeIsolated;
+      return {
+        state: active ? "active" : inactive ? "inactive" : "degraded",
+        summary: active
+          ? `node ${node.name} is isolated from Fiber peers while attached to CKB`
+          : inactive
+            ? `node ${node.name} is attached to the primary network`
+            : `node ${node.name} has incomplete partition attachments`,
+        containerStatus: nodeRuntimeStatus(
+          await this.engine.status(node.container),
+        ),
+        attachments,
+      };
+    }
+
+    if (fault.kind === "ckb-unavailable") {
+      const ckb = this.ckbContainerOf(state);
+      const networks = this.ckbNetworks(state, file);
+      const attachments = await Promise.all(
+        networks.map(async (network) => ({
+          container: ckb,
+          network,
+          connected: await this.engine.networkConnected(network, ckb),
+        })),
+      );
+      const connected = attachments.filter((item) => item.connected).length;
+      return {
+        state:
+          connected === 0
+            ? persisted
+              ? "active"
+              : "degraded"
+            : connected === attachments.length
+              ? "inactive"
+              : "degraded",
+        summary:
+          connected === 0
+            ? "CKB is detached from every managed Fiber network"
+            : connected === attachments.length
+              ? "CKB is attached to every managed Fiber network"
+              : "CKB has incomplete network attachments",
+        containerStatus: nodeRuntimeStatus(await this.engine.status(ckb)),
+        attachments,
+      };
+    }
+
+    return {
+      state: persisted ? "active" : "inactive",
+      summary: persisted
+        ? "Fiber Forge on-demand block generation is paused"
+        : "Fiber Forge on-demand block generation is enabled",
+    };
+  }
+
+  private async resetFaultRecord(
+    state: NetworkState,
+    file: PersistedFaultFile,
+    fault: PersistedFault,
+    options: NodeLifecycleOptions,
+  ): Promise<Pick<FaultReport, "recovery" | "nextAction">> {
+    const { timeoutMs, reconcileTimeoutMs } = this.lifecycleTimeouts(options);
+    if (fault.kind === "node-kill") {
+      const report = await this.startNodeNow(
+        state.net,
+        fault.target!,
+        "start",
+        options,
+      );
+      return { recovery: report.recovery, nextAction: report.nextAction };
+    }
+
+    if (fault.kind === "peer-partition") {
+      const node = this.requireNode(state, fault.target!);
+      const isolation = fault.isolation;
+      if (!isolation) {
+        throw new ForgeError(
+          "FAULT_STATE_MISMATCH",
+          `fault "${fault.id}" has no isolation network details`,
+          {
+            resource: `${state.net}/${fault.id}`,
+            action:
+              "inspect faults.json and remove the orphaned fault network manually",
+          },
+        );
+      }
+      await this.engine.connectNetwork(state.network, node.container, {
+        ip: node.ip,
+        aliases: [node.container],
+      });
+      await this.engine.disconnectNetwork(isolation.network, node.container);
+      await this.engine.disconnectNetwork(
+        isolation.network,
+        this.ckbContainerOf(state),
+      );
+      await this.removeFaultNetwork(state.net, isolation.network);
+      const rpc = this.rpcFor(node.rpcHostPort);
+      const info = await this.waitLifecycleNodeInfo(
+        rpc,
+        timeoutMs,
+        state.net,
+        node.name,
+        node.container,
+      );
+      if (info.pubkey !== node.pubkey) {
+        throw new ForgeError(
+          "NODE_IDENTITY_MISMATCH",
+          `node "${node.name}" has a different public key after partition reset`,
+          {
+            resource: `${state.net}/${node.name}`,
+            action: `stop using network "${state.net}" and recreate it`,
+          },
+        );
+      }
+      const observed = await this.observeNodeRecovery(
+        state,
+        node,
+        rpc,
+        reconcileTimeoutMs,
+      );
+      return observed.ready
+        ? { recovery: "ready", nextAction: null }
+        : {
+            recovery: "action-required",
+            nextAction: `inspect peers and channels with "fiber-forge node inspect ${state.net} ${node.name} --json"`,
+          };
+    }
+
+    if (fault.kind === "ckb-unavailable") {
+      const ckb = this.ckbContainerOf(state);
+      await this.engine.connectNetwork(state.network, ckb, {
+        ip: this.ckbIpOf(state),
+        aliases: [ckb],
+      });
+      for (const partition of file.faults.filter(
+        (candidate) =>
+          candidate.kind === "peer-partition" && candidate.isolation,
+      )) {
+        await this.engine.connectNetwork(partition.isolation!.network, ckb, {
+          ip: partition.isolation!.ckbIp,
+          aliases: [ckb],
+        });
+      }
+      await this.chainFor(state.ckbHostPort).waitReady(timeoutMs);
+      return { recovery: "ready", nextAction: null };
+    }
+
+    const chain = this.chainFor(state.ckbHostPort);
+    await chain.waitReady(timeoutMs);
+    const before = await chain.tipBlock();
+    await chain.generateBlocks(1);
+    const after = await chain.tipBlock();
+    return after > before
+      ? { recovery: "ready", nextAction: null }
+      : {
+          recovery: "action-required",
+          nextAction: `inspect CKB logs with "fiber-forge logs ${state.net} ckb"`,
+        };
+  }
+
+  private faultReport(
+    net: string,
+    fault: PersistedFault,
+    requested: "active" | "reset",
+    observed: FaultObservation,
+    changed: boolean,
+  ): FaultReport {
+    const suffix = fault.target ? ` ${fault.target}` : "";
+    return {
+      net,
+      id: fault.id,
+      kind: fault.kind,
+      target: fault.target ?? null,
+      requested,
+      observed,
+      changed,
+      appliedAt: fault.appliedAt,
+      survivesProcessRestart: true,
+      recovery: requested === "reset" ? "ready" : "not-applicable",
+      nextAction:
+        requested === "active"
+          ? `run "fiber-forge fault reset ${net} ${fault.kind}${suffix}"`
+          : null,
+    };
+  }
+
+  private ckbContainerOf(state: NetworkState): string {
+    return state.ckbContainer ?? `forge-${state.net}-ckb`;
+  }
+
+  private ckbIpOf(state: NetworkState): string {
+    if (state.ckbIp) return state.ckbIp;
+    const octets = state.nodes[0]?.ip.split(".");
+    if (!octets || octets.length !== 4) {
+      throw new ForgeError(
+        "FAULT_STATE_MISMATCH",
+        `network "${state.net}" has no recoverable CKB address`,
+        {
+          resource: `${state.net}/ckb`,
+          action: `recreate network "${state.net}" with the current Fiber Forge version`,
+        },
+      );
+    }
+    return `${octets[0]}.${octets[1]}.${octets[2]}.2`;
+  }
+
+  private ckbNetworks(state: NetworkState, file: PersistedFaultFile): string[] {
+    return [
+      state.network,
+      ...file.faults.flatMap((fault) =>
+        fault.kind === "peer-partition" && fault.isolation
+          ? [fault.isolation.network]
+          : [],
+      ),
+    ];
+  }
+
+  private async assertMiningAvailable(net: string): Promise<void> {
+    if (this.hasFault(await this.readFaultFile(net), "mining-pause")) {
+      throw new ForgeError(
+        "MINING_PAUSED",
+        `on-demand block generation is paused for network "${net}"`,
+        {
+          resource: `${net}/mining-pause`,
+          action: `run "fiber-forge fault reset ${net} mining-pause"`,
+        },
+      );
+    }
   }
 
   private queueNodeLifecycle(
@@ -1733,6 +2602,10 @@ export class Orchestrator {
 
   private rpcFor(rpcHostPort: number): FnnRpc {
     return this.makeRpc(rpcHostPort);
+  }
+
+  private chainFor(ckbHostPort: number): DevChain {
+    return this.makeChain(ckbHostPort);
   }
 
   private async writeNodeDir(

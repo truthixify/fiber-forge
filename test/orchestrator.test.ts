@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { planLayout } from "../src/config";
 import { type ContainerSpec, FakeEngine } from "../src/engine";
+import { type FaultCapabilities } from "../src/engine";
 import { ForgeError } from "../src/errors";
 import {
   FORGE_LABEL,
@@ -14,6 +15,7 @@ import {
   nodeContainerSpec,
 } from "../src/orchestrator";
 import { FnnRpc, type RpcTransport } from "../src/rpc";
+import { type DevChain } from "../src/ckb";
 import { type Topology } from "../src/topology";
 
 async function pathExists(path: string): Promise<boolean> {
@@ -105,18 +107,22 @@ interface SimulatedNode {
   channelState: string;
 }
 
-async function lifecycleFixture(): Promise<{
+async function lifecycleFixture(engine = new FakeEngine()): Promise<{
   engine: FakeEngine;
   orchestrator: Orchestrator;
   nodes: Map<number, SimulatedNode>;
+  chain: { ready: boolean; tip: number };
+  makeRpc: (port: number) => FnnRpc;
+  makeChain: () => DevChain;
   stateDir: string;
 }> {
   const stateDir = await mkdtemp(join(tmpdir(), "forge-lifecycle-test-"));
-  const engine = new FakeEngine();
   const state: NetworkState = {
     net: "duo",
     network: "forge-duo",
     ckbHostPort: 18114,
+    ckbContainer: "forge-duo-ckb",
+    ckbIp: "10.5.7.2",
     nodes: [
       {
         name: "alice",
@@ -139,6 +145,7 @@ async function lifecycleFixture(): Promise<{
   };
   await mkdir(join(stateDir, "duo"), { recursive: true });
   await writeFile(join(stateDir, "duo", "layout.json"), JSON.stringify(state));
+  await engine.ensureNetwork("forge-duo", "10.5.7.0/24");
   for (const name of [
     "forge-duo-ckb",
     "forge-duo-node-1",
@@ -214,12 +221,42 @@ async function lifecycleFixture(): Promise<{
     };
     return new FnnRpc(transport);
   };
+  const chain = { ready: true, tip: 40 };
+  const makeChain = (): DevChain =>
+    ({
+      waitReady: async () => {
+        if (!chain.ready) throw new Error("CKB unavailable");
+      },
+      tipBlock: async () => {
+        if (!chain.ready) throw new Error("CKB unavailable");
+        return chain.tip;
+      },
+      generateBlocks: async (count = 1) => {
+        if (!chain.ready) throw new Error("CKB unavailable");
+        chain.tip += count;
+      },
+    }) as DevChain;
   return {
     engine,
-    orchestrator: new Orchestrator(engine, "/assets", stateDir, makeRpc),
+    orchestrator: new Orchestrator(
+      engine,
+      "/assets",
+      stateDir,
+      makeRpc,
+      makeChain,
+    ),
     nodes,
+    chain,
+    makeRpc,
+    makeChain,
     stateDir,
   };
+}
+
+class UnsupportedFaultEngine extends FakeEngine {
+  override async faultCapabilities(): Promise<FaultCapabilities> {
+    return { abruptKill: false, networkIsolation: false };
+  }
 }
 
 describe("container specs", () => {
@@ -449,6 +486,262 @@ describe("Orchestrator node lifecycle", () => {
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("Orchestrator controlled faults", () => {
+  it("persists an abrupt node kill, survives client restart, and resets idempotently", async () => {
+    const { engine, orchestrator, makeRpc, makeChain, stateDir } =
+      await lifecycleFixture();
+    try {
+      const applied = await orchestrator.applyFault(
+        "duo",
+        "node-kill",
+        "alice",
+      );
+      expect(applied).toMatchObject({
+        id: "node-kill:alice",
+        requested: "active",
+        changed: true,
+        observed: { state: "active", containerStatus: "stopped" },
+      });
+      expect(await engine.status("forge-duo-node-2")).toBe("running");
+      expect(await engine.status("forge-duo-ckb")).toBe("running");
+
+      const restartedClient = new Orchestrator(
+        engine,
+        "/assets",
+        stateDir,
+        makeRpc,
+        makeChain,
+      );
+      await expect(restartedClient.faultStatus("duo")).resolves.toMatchObject([
+        {
+          id: "node-kill:alice",
+          observed: { state: "active" },
+          survivesProcessRestart: true,
+        },
+      ]);
+      const repeated = await restartedClient.applyFault(
+        "duo",
+        "node-kill",
+        "alice",
+      );
+      expect(repeated.changed).toBe(false);
+      expect(
+        engine.log.filter((line) => line === "kill forge-duo-node-1"),
+      ).toHaveLength(1);
+
+      const reset = await restartedClient.resetFault(
+        "duo",
+        "node-kill",
+        "alice",
+        { timeoutMs: 20, reconcileTimeoutMs: 20 },
+      );
+      expect(reset).toMatchObject({
+        requested: "reset",
+        changed: true,
+        recovery: "ready",
+        observed: { state: "inactive", containerStatus: "running" },
+      });
+      expect(await restartedClient.faultStatus("duo")).toEqual([]);
+      const repeatedReset = await restartedClient.resetFault(
+        "duo",
+        "node-kill",
+        "alice",
+      );
+      expect(repeatedReset).toMatchObject({
+        changed: false,
+        recovery: "ready",
+        observed: { state: "inactive" },
+      });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("isolates one peer on a CKB-only bridge and restores its primary attachment", async () => {
+    const { engine, orchestrator, stateDir } = await lifecycleFixture();
+    try {
+      const applied = await orchestrator.applyFault(
+        "duo",
+        "peer-partition",
+        "alice",
+      );
+      expect(applied.observed).toMatchObject({
+        state: "active",
+        containerStatus: "running",
+      });
+      expect(
+        await engine.networkConnected("forge-duo", "forge-duo-node-1"),
+      ).toBe(false);
+      expect(
+        await engine.networkConnected("ffault-duo-1", "forge-duo-node-1"),
+      ).toBe(true);
+      expect(
+        await engine.networkConnected("ffault-duo-1", "forge-duo-ckb"),
+      ).toBe(true);
+      expect(await engine.getNetworkLabels("ffault-duo-1")).toEqual({
+        [FORGE_LABEL]: "duo",
+        "fiber-forge.fault": "true",
+      });
+      expect(
+        await engine.networkConnected("forge-duo", "forge-duo-node-2"),
+      ).toBe(true);
+
+      await expect(
+        orchestrator.applyFault("duo", "node-kill", "alice"),
+      ).rejects.toMatchObject({
+        code: "FAULT_CONFLICT",
+        resource: "duo/alice",
+      });
+      expect(await engine.status("forge-duo-node-1")).toBe("running");
+
+      const reset = await orchestrator.resetFault(
+        "duo",
+        "peer-partition",
+        "alice",
+        { timeoutMs: 20, reconcileTimeoutMs: 20 },
+      );
+      expect(reset).toMatchObject({
+        recovery: "ready",
+        observed: { state: "inactive" },
+      });
+      expect(
+        await engine.networkConnected("forge-duo", "forge-duo-node-1"),
+      ).toBe(true);
+      expect(engine.networks.has("ffault-duo-1")).toBe(false);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("detaches CKB from every active segment and restores all attachments", async () => {
+    const { engine, orchestrator, stateDir } = await lifecycleFixture();
+    try {
+      await orchestrator.applyFault("duo", "peer-partition", "alice");
+      const applied = await orchestrator.applyFault("duo", "ckb-unavailable");
+      expect(applied.observed.state).toBe("active");
+      expect(await engine.networkConnected("forge-duo", "forge-duo-ckb")).toBe(
+        false,
+      );
+      expect(
+        await engine.networkConnected("ffault-duo-1", "forge-duo-ckb"),
+      ).toBe(false);
+
+      const reset = await orchestrator.resetFault(
+        "duo",
+        "ckb-unavailable",
+        undefined,
+        { timeoutMs: 20, reconcileTimeoutMs: 20 },
+      );
+      expect(reset).toMatchObject({
+        recovery: "ready",
+        observed: { state: "inactive" },
+      });
+      expect(await engine.networkConnected("forge-duo", "forge-duo-ckb")).toBe(
+        true,
+      );
+      expect(
+        await engine.networkConnected("ffault-duo-1", "forge-duo-ckb"),
+      ).toBe(true);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("gates on-demand mining until reset proves block production", async () => {
+    const { orchestrator, chain, stateDir } = await lifecycleFixture();
+    try {
+      await orchestrator.applyFault("duo", "mining-pause");
+      await expect(orchestrator.mineBlocks("duo", 2)).rejects.toMatchObject({
+        code: "MINING_PAUSED",
+        resource: "duo/mining-pause",
+      });
+      await expect(
+        orchestrator.issueUdt("duo", "alice", 100),
+      ).rejects.toMatchObject({
+        code: "MINING_PAUSED",
+        resource: "duo/mining-pause",
+      });
+      expect(chain.tip).toBe(40);
+
+      const reset = await orchestrator.resetFault("duo", "mining-pause");
+      expect(reset.recovery).toBe("ready");
+      expect(chain.tip).toBe(41);
+      await expect(orchestrator.mineBlocks("duo", 2)).resolves.toEqual({
+        net: "duo",
+        count: 2,
+        fromBlock: 41,
+        toBlock: 43,
+      });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects unsupported capabilities and invalid targets before mutation", async () => {
+    const engine = new UnsupportedFaultEngine();
+    const { orchestrator, stateDir } = await lifecycleFixture(engine);
+    try {
+      await expect(
+        orchestrator.applyFault("duo", "node-kill", "alice"),
+      ).rejects.toMatchObject({
+        code: "FAULT_UNSUPPORTED",
+        resource: "node-kill",
+      });
+      expect(await engine.status("forge-duo-node-1")).toBe("running");
+      expect(await pathExists(join(stateDir, "duo", "faults.json"))).toBe(
+        false,
+      );
+
+      await expect(
+        orchestrator.applyFault("duo", "peer-partition", "missing"),
+      ).rejects.toMatchObject({ code: "NODE_NOT_FOUND" });
+      expect(engine.networks.has("ffault-duo-1")).toBe(false);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a same-named external network without changing or removing it", async () => {
+    const { engine, orchestrator, stateDir } = await lifecycleFixture();
+    await engine.ensureNetwork("ffault-duo-1", "10.99.1.0/24", {
+      labels: { owner: "external" },
+    });
+    try {
+      await expect(
+        orchestrator.applyFault("duo", "peer-partition", "alice"),
+      ).rejects.toMatchObject({
+        code: "FAULT_CONFLICT",
+        resource: "ffault-duo-1",
+      });
+      expect(await pathExists(join(stateDir, "duo", "faults.json"))).toBe(
+        false,
+      );
+
+      await orchestrator.down("duo", { purge: true });
+      expect(await engine.getNetworkLabels("ffault-duo-1")).toEqual({
+        owner: "external",
+      });
+    } finally {
+      await engine.removeNetwork("ffault-duo-1");
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("tears down every managed resource while faults are active", async () => {
+    const { engine, orchestrator, stateDir } = await lifecycleFixture();
+    await orchestrator.applyFault("duo", "peer-partition", "alice");
+    await orchestrator.applyFault("duo", "node-kill", "bob");
+
+    await orchestrator.down("duo", { purge: true });
+
+    expect(await engine.listByLabel(FORGE_LABEL, "duo")).toEqual([]);
+    expect(engine.networks.has("forge-duo")).toBe(false);
+    expect(engine.networks.has("ffault-duo-1")).toBe(false);
+    expect(await pathExists(join(stateDir, "duo"))).toBe(false);
+    await rm(stateDir, { recursive: true, force: true });
   });
 });
 

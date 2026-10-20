@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { type ContainerSpec, DockerEngine } from "../src/engine";
 import { ForgeError } from "../src/errors";
+import { DevChain } from "../src/ckb";
 import {
   FORGE_LABEL,
   type NodeLifecycleReport,
@@ -122,6 +123,7 @@ async function verifyCleanup(
   engine: DockerEngine,
   stateDir: string,
   net = MULTIHOP_NET,
+  faultNetworks: string[] = [],
 ): Promise<void> {
   const failures: string[] = [];
   try {
@@ -137,6 +139,11 @@ async function verifyCleanup(
     }
     if ((await engine.forgeNets()).includes(net)) {
       failures.push(`network remains: forge-${net}`);
+    }
+    for (const network of faultNetworks) {
+      if (await engine.networkExists(network)) {
+        failures.push(`fault network remains: ${network}`);
+      }
     }
     if (await engine.volumeExists(`forge-${net}-ckb-data`)) {
       failures.push(`volume remains: forge-${net}-ckb-data`);
@@ -431,6 +438,7 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
     const trio = { ...selected, name: RECOVERY_NET };
     const [sender, relay, receiver] = trio.nodes.map((node) => node.name);
     const progress: string[] = [];
+    const faultNetworksToCheck: string[] = [];
     let failure: Error | undefined;
     let cleanupFailure: Error | undefined;
 
@@ -481,7 +489,7 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
         [infos[1].pubkey],
       ];
       const reconcile = async (
-        report: NodeLifecycleReport,
+        report: Pick<NodeLifecycleReport, "recovery" | "nextAction">,
       ): Promise<{ mode: string; pubkeys: string[] }> => {
         let mode =
           report.recovery === "ready" ? "automatic" : "manual-peer-reconnect";
@@ -489,10 +497,6 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
           progress.push(
             `lifecycle report requires action: ${report.nextAction}`,
           );
-        }
-        const relayPeerId = peerIdOf(infos[1]);
-        if (!relayPeerId) {
-          throw new Error(`restarted relay ${relay} has no peer id`);
         }
         try {
           const pubkeys = await waitForNetworkRecovery(
@@ -507,11 +511,22 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
           progress.push(
             `automatic recovery incomplete: ${(automaticError as Error).message}`,
           );
-          await ensurePeerConnected(
-            rpcs[0],
-            infos[1].pubkey,
-            dialAddress(layout.nodes[1].ip, relayPeerId),
-          );
+          for (const [fromIndex, toIndex] of [
+            [0, 1],
+            [1, 2],
+          ] as const) {
+            const peerId = peerIdOf(infos[toIndex]);
+            if (!peerId) {
+              throw new Error(
+                `node ${layout.nodes[toIndex].name} has no peer id after recovery`,
+              );
+            }
+            await ensurePeerConnected(
+              rpcs[fromIndex],
+              infos[toIndex].pubkey,
+              dialAddress(layout.nodes[toIndex].ip, peerId),
+            );
+          }
           return {
             mode,
             pubkeys: await waitForNetworkRecovery(
@@ -581,11 +596,127 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
         `${restartedRecovery.mode} relay restart proof`,
       );
       expect(finalPayment.status).toBe("Success");
+
+      const chain = new DevChain(`http://127.0.0.1:${layout.ckbHostPort}`);
+      const tipBeforePause = await chain.tipBlock();
+      const miningPause = await orchestrator.applyFault(
+        RECOVERY_NET,
+        "mining-pause",
+      );
+      expect(miningPause.observed.state).toBe("active");
+      await expect(
+        orchestrator.mineBlocks(RECOVERY_NET, 1),
+      ).rejects.toMatchObject({ code: "MINING_PAUSED" });
+      expect(await chain.tipBlock()).toBe(tipBeforePause);
+      const miningReset = await orchestrator.resetFault(
+        RECOVERY_NET,
+        "mining-pause",
+      );
+      expect(miningReset.recovery).toBe("ready");
+      expect(await chain.tipBlock()).toBeGreaterThan(tipBeforePause);
+
+      const ckbFault = await orchestrator.applyFault(
+        RECOVERY_NET,
+        "ckb-unavailable",
+      );
+      expect(ckbFault.observed).toMatchObject({ state: "active" });
+      expect(
+        ckbFault.observed.attachments?.every(
+          (attachment) => !attachment.connected,
+        ),
+      ).toBe(true);
+      const ckbReset = await orchestrator.resetFault(
+        RECOVERY_NET,
+        "ckb-unavailable",
+      );
+      expect(ckbReset).toMatchObject({
+        recovery: "ready",
+        observed: { state: "inactive" },
+      });
+
+      const partition = await orchestrator.applyFault(
+        RECOVERY_NET,
+        "peer-partition",
+        relay,
+      );
+      expect(partition.observed).toMatchObject({
+        state: "active",
+        containerStatus: "running",
+      });
+      expect(partition.observed.attachments).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            container: `forge-${RECOVERY_NET}-node-2`,
+            network: `forge-${RECOVERY_NET}`,
+            connected: false,
+          }),
+          expect.objectContaining({
+            container: `forge-${RECOVERY_NET}-node-2`,
+            network: expect.stringMatching(/^ffault-/),
+            connected: true,
+          }),
+        ]),
+      );
+      await expect(rpcs[1].nodeInfo()).rejects.toThrow();
+      const partitionReset = await orchestrator.resetFault(
+        RECOVERY_NET,
+        "peer-partition",
+        relay,
+      );
+      const partitionRecovery = await reconcile(partitionReset);
+      expect(partitionRecovery.pubkeys).toEqual(
+        infos.map((info) => info.pubkey),
+      );
+
+      const killed = await orchestrator.applyFault(
+        RECOVERY_NET,
+        "node-kill",
+        relay,
+      );
+      expect(killed.observed).toMatchObject({
+        state: "active",
+        containerStatus: "stopped",
+      });
+      const killedInvoice = await orchestrator.createInvoice(
+        RECOVERY_NET,
+        receiver,
+        100,
+        "abrupt relay kill proof",
+      );
+      await expect(
+        orchestrator.payInvoice(RECOVERY_NET, sender, killedInvoice),
+      ).rejects.toThrow(/Failed to build route|Insufficient balance|no path/i);
+      const killReset = await orchestrator.resetFault(
+        RECOVERY_NET,
+        "node-kill",
+        relay,
+      );
+      const killRecovery = await reconcile(killReset);
+      expect(killRecovery.pubkeys).toEqual(infos.map((info) => info.pubkey));
+
+      const teardownPartition = await orchestrator.applyFault(
+        RECOVERY_NET,
+        "peer-partition",
+        relay,
+      );
+      const faultNetwork = teardownPartition.observed.attachments?.find(
+        (attachment) => attachment.network.startsWith("ffault-"),
+      )?.network;
+      if (!faultNetwork) {
+        throw new Error("partition did not report its managed fault network");
+      }
+      faultNetworksToCheck.push(faultNetwork);
     } catch (error) {
       failure = await addLiveDiagnostics(error, engine, progress, RECOVERY_NET);
     } finally {
       try {
-        await verifyCleanup(orchestrator, engine, stateDir, RECOVERY_NET);
+        await verifyCleanup(
+          orchestrator,
+          engine,
+          stateDir,
+          RECOVERY_NET,
+          faultNetworksToCheck,
+        );
       } catch (error) {
         cleanupFailure =
           error instanceof Error ? error : new Error(String(error));
@@ -604,7 +735,7 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
     if (cleanupFailure) {
       throw cleanupFailure;
     }
-  }, 360_000);
+  }, 480_000);
 });
 
 describe.skipIf(!RUN)("live: partial provisioning rollback", () => {

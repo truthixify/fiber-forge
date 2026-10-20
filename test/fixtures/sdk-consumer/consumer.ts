@@ -1,5 +1,6 @@
 import {
   DEFAULT_PROVISION_TIMEOUT_MS,
+  FAULT_KINDS,
   ForgeError,
   createFiberForge,
   errorDetails,
@@ -8,11 +9,14 @@ import {
   preset,
   type DownOptions,
   type FiberForge,
+  type FaultKind,
+  type FaultReport,
   type FiberForgeError,
   type ForgeErrorCode,
   type LayoutOptions,
   type NetworkLayout,
   type NetworkView,
+  type MineReport,
   type NodeLifecycleOptions,
   type NodeLifecycleReport,
   type Topology,
@@ -62,12 +66,17 @@ type ExpectedForgeErrorCode =
   | "CONTAINER_START_FAILED"
   | "DOCKER_OPERATION_FAILED"
   | "DOCKER_UNAVAILABLE"
+  | "FAULT_CONFLICT"
+  | "FAULT_PRECONDITION_FAILED"
+  | "FAULT_STATE_MISMATCH"
+  | "FAULT_UNSUPPORTED"
   | "IMAGE_PULL_FAILED"
   | "INVALID_NETWORK_NAME"
   | "INVALID_PORT"
   | "INVALID_TIMEOUT"
   | "NETWORK_EXISTS"
   | "NETWORK_NOT_FOUND"
+  | "MINING_PAUSED"
   | "NODE_CONTAINER_MISSING"
   | "NODE_IDENTITY_MISMATCH"
   | "NODE_NOT_FOUND"
@@ -116,6 +125,11 @@ type AppForge = Pick<
   | "stopNode"
   | "startNode"
   | "restartNode"
+  | "applyFault"
+  | "faultStatus"
+  | "resetFault"
+  | "resetAllFaults"
+  | "mineBlocks"
   | "pay"
   | "down"
 >;
@@ -131,6 +145,15 @@ async function exerciseContract(client: AppForge): Promise<void> {
     layout.net,
     topology.nodes[0].name,
   );
+  const faultKind: FaultKind = FAULT_KINDS[0];
+  const applied: FaultReport = await client.applyFault(
+    layout.net,
+    faultKind,
+    topology.nodes[0].name,
+  );
+  const mined: MineReport = await client.mineBlocks(layout.net, 1);
+  void applied;
+  void mined;
   void inspected;
   void lifecycleOptions;
   await client.down(view.net, downOptions);

@@ -9,6 +9,23 @@ import { ForgeError } from "./errors.js";
 
 export type ContainerStatus = "running" | "exited" | "absent";
 
+/** Portable fault primitives exposed by the active container engine. */
+export interface FaultCapabilities {
+  abruptKill: boolean;
+  networkIsolation: boolean;
+}
+
+/** Endpoint details used when attaching an existing container to a bridge network. */
+export interface NetworkAttachmentOptions {
+  ip?: string;
+  aliases?: string[];
+}
+
+/** Metadata attached when Fiber Forge creates a managed bridge network. */
+export interface NetworkCreateOptions {
+  labels?: Record<string, string>;
+}
+
 export interface PortBinding {
   host: number;
   container: number;
@@ -38,7 +55,11 @@ export interface ContainerSpec {
 
 export interface ContainerEngine {
   /** Create the network with the given subnet if it does not already exist. */
-  ensureNetwork(name: string, subnet: string): Promise<void>;
+  ensureNetwork(
+    name: string,
+    subnet: string,
+    options?: NetworkCreateOptions,
+  ): Promise<void>;
   removeNetwork(name: string): Promise<void>;
   /** Remove a named volume if it exists. */
   removeVolume(name: string): Promise<void>;
@@ -47,6 +68,8 @@ export interface ContainerEngine {
   /** Create and start a container from the spec (removing any prior container of that name). */
   run(spec: ContainerSpec): Promise<void>;
   stop(name: string): Promise<void>;
+  /** Abruptly terminate a running container without removing it or its mounted state. */
+  kill(name: string): Promise<void>;
   /** Start an existing stopped container without replacing its mounted state. */
   start(name: string): Promise<void>;
   remove(name: string): Promise<void>;
@@ -59,27 +82,76 @@ export interface ContainerEngine {
   forgeNets(): Promise<string[]>;
   /** The subnets (CIDR) of every existing network, so a new one can avoid overlaps. */
   usedSubnets(): Promise<string[]>;
+  /** Capabilities required by the portable fault-injection contract. */
+  faultCapabilities(): Promise<FaultCapabilities>;
+  connectNetwork(
+    network: string,
+    container: string,
+    options?: NetworkAttachmentOptions,
+  ): Promise<void>;
+  disconnectNetwork(network: string, container: string): Promise<void>;
+  networkConnected(network: string, container: string): Promise<boolean>;
+  networkExists(network: string): Promise<boolean>;
+  /** Labels on an existing network, or `null` when it does not exist. */
+  getNetworkLabels(network: string): Promise<Record<string, string> | null>;
 }
 
 /** An in-memory engine for unit tests and dry runs; records every spec and models status. */
 export class FakeEngine implements ContainerEngine {
   readonly networks = new Map<string, string>();
+  readonly networkLabelSets = new Map<string, Record<string, string>>();
   readonly volumes = new Set<string>();
+  readonly attachments = new Map<string, Map<string, string | undefined>>();
   readonly containers = new Map<
     string,
     { spec: ContainerSpec; status: ContainerStatus }
   >();
   readonly log: string[] = [];
 
-  async ensureNetwork(name: string, subnet: string): Promise<void> {
+  async ensureNetwork(
+    name: string,
+    subnet: string,
+    options: NetworkCreateOptions = {},
+  ): Promise<void> {
     if (!this.networks.has(name)) {
       this.networks.set(name, subnet);
+      this.networkLabelSets.set(name, { ...(options.labels ?? {}) });
       this.log.push(`network ${name} ${subnet}`);
+      return;
+    }
+    const currentLabels = this.networkLabelSets.get(name) ?? {};
+    if (
+      Object.entries(options.labels ?? {}).some(
+        ([label, value]) => currentLabels[label] !== value,
+      )
+    ) {
+      throw new ForgeError(
+        "DOCKER_OPERATION_FAILED",
+        `Docker network "${name}" exists but is not owned by this operation`,
+        {
+          resource: name,
+          action: "rename or remove the conflicting Docker network, then retry",
+        },
+      );
     }
   }
 
   async removeNetwork(name: string): Promise<void> {
+    const attached = [...this.attachments.entries()]
+      .filter(([, networks]) => networks.has(name))
+      .map(([container]) => container);
+    if (attached.length > 0) {
+      throw new ForgeError(
+        "DOCKER_OPERATION_FAILED",
+        `Docker network "${name}" still has attached containers: ${attached.join(", ")}`,
+        {
+          resource: name,
+          action: "disconnect or remove the attached containers, then retry",
+        },
+      );
+    }
     this.networks.delete(name);
+    this.networkLabelSets.delete(name);
     this.log.push(`rm-network ${name}`);
   }
 
@@ -99,6 +171,7 @@ export class FakeEngine implements ContainerEngine {
       }
     }
     this.containers.set(spec.name, { spec, status: "running" });
+    this.attachments.set(spec.name, new Map([[spec.network, spec.ip]]));
     this.log.push(
       `run ${spec.name} ${spec.image}${spec.ip ? " @" + spec.ip : ""}`,
     );
@@ -110,6 +183,14 @@ export class FakeEngine implements ContainerEngine {
       entry.status = "exited";
     }
     this.log.push(`stop ${name}`);
+  }
+
+  async kill(name: string): Promise<void> {
+    const entry = this.containers.get(name);
+    if (entry) {
+      entry.status = "exited";
+    }
+    this.log.push(`kill ${name}`);
   }
 
   async start(name: string): Promise<void> {
@@ -127,6 +208,7 @@ export class FakeEngine implements ContainerEngine {
 
   async remove(name: string): Promise<void> {
     this.containers.delete(name);
+    this.attachments.delete(name);
     this.log.push(`rm ${name}`);
   }
 
@@ -153,6 +235,61 @@ export class FakeEngine implements ContainerEngine {
   async usedSubnets(): Promise<string[]> {
     return [...this.networks.values()];
   }
+
+  async faultCapabilities(): Promise<FaultCapabilities> {
+    return { abruptKill: true, networkIsolation: true };
+  }
+
+  async connectNetwork(
+    network: string,
+    container: string,
+    options: NetworkAttachmentOptions = {},
+  ): Promise<void> {
+    if (!this.networks.has(network)) {
+      throw new ForgeError(
+        "DOCKER_OPERATION_FAILED",
+        `network "${network}" does not exist`,
+        { resource: network, action: "create the network before connecting" },
+      );
+    }
+    if (!this.containers.has(container)) {
+      throw new ForgeError(
+        "CONTAINER_NOT_FOUND",
+        `container "${container}" does not exist`,
+        { resource: container, action: "recreate the network before retrying" },
+      );
+    }
+    const networks = this.attachments.get(container) ?? new Map();
+    if (!networks.has(network)) {
+      networks.set(network, options.ip);
+      this.attachments.set(container, networks);
+      this.log.push(
+        `connect-network ${network} ${container}${options.ip ? ` @${options.ip}` : ""}`,
+      );
+    }
+  }
+
+  async disconnectNetwork(network: string, container: string): Promise<void> {
+    const networks = this.attachments.get(container);
+    if (networks?.delete(network)) {
+      this.log.push(`disconnect-network ${network} ${container}`);
+    }
+  }
+
+  async networkConnected(network: string, container: string): Promise<boolean> {
+    return this.attachments.get(container)?.has(network) ?? false;
+  }
+
+  async networkExists(network: string): Promise<boolean> {
+    return this.networks.has(network);
+  }
+
+  async getNetworkLabels(
+    network: string,
+  ): Promise<Record<string, string> | null> {
+    if (!this.networks.has(network)) return null;
+    return { ...(this.networkLabelSets.get(network) ?? {}) };
+  }
 }
 
 /** The real container engine over dockerode. */
@@ -163,13 +300,34 @@ export class DockerEngine implements ContainerEngine {
     this.docker = docker ?? new Docker();
   }
 
-  async ensureNetwork(name: string, subnet: string): Promise<void> {
+  async ensureNetwork(
+    name: string,
+    subnet: string,
+    options: NetworkCreateOptions = {},
+  ): Promise<void> {
     try {
       const existing = await this.docker.listNetworks({
         filters: { name: [name] },
       });
       const match = existing.find((n) => n.Name === name);
       if (match) {
+        const currentLabels =
+          (match as { Labels?: Record<string, string> }).Labels ?? {};
+        if (
+          Object.entries(options.labels ?? {}).some(
+            ([label, value]) => currentLabels[label] !== value,
+          )
+        ) {
+          throw new ForgeError(
+            "DOCKER_OPERATION_FAILED",
+            `Docker network "${name}" exists but is not owned by this operation`,
+            {
+              resource: name,
+              action:
+                "rename or remove the conflicting Docker network, then retry",
+            },
+          );
+        }
         // Reuse only if the subnet matches; a stale network with a different subnet (left by a
         // crashed run) can't host the planned IPs, so tear it down and recreate it clean.
         const current = (match as { IPAM?: { Config?: { Subnet?: string }[] } })
@@ -181,6 +339,7 @@ export class DockerEngine implements ContainerEngine {
       }
       await this.docker.createNetwork({
         Name: name,
+        Labels: options.labels,
         IPAM: { Config: [{ Subnet: subnet }] },
       });
     } catch (error) {
@@ -196,18 +355,7 @@ export class DockerEngine implements ContainerEngine {
 
   async removeNetwork(name: string): Promise<void> {
     try {
-      const network = this.docker.getNetwork(name);
-      const info = (await network.inspect()) as {
-        Containers?: Record<string, unknown>;
-      };
-      for (const id of Object.keys(info.Containers ?? {})) {
-        try {
-          await network.disconnect({ Container: id, Force: true });
-        } catch {
-          // container already gone
-        }
-      }
-      await network.remove();
+      await this.docker.getNetwork(name).remove();
     } catch (error) {
       if (!isNotFound(error)) {
         throw dockerFailure(
@@ -319,6 +467,22 @@ export class DockerEngine implements ContainerEngine {
           `could not stop container "${name}"`,
           name,
           "start Docker and retry teardown",
+        );
+      }
+    }
+  }
+
+  async kill(name: string): Promise<void> {
+    try {
+      await this.docker.getContainer(name).kill({ signal: "SIGKILL" });
+    } catch (error) {
+      if (!isNotFound(error) && !isNotModified(error)) {
+        throw dockerFailure(
+          error,
+          "DOCKER_OPERATION_FAILED",
+          `could not kill container "${name}"`,
+          name,
+          "inspect Docker and retry the fault operation",
         );
       }
     }
@@ -451,6 +615,122 @@ export class DockerEngine implements ContainerEngine {
         "DOCKER_OPERATION_FAILED",
         "could not inspect Docker network subnets",
         "Docker daemon",
+        "start Docker and retry",
+      );
+    }
+  }
+
+  async faultCapabilities(): Promise<FaultCapabilities> {
+    // These endpoints are part of the portable Docker Engine API used by Docker Desktop and Linux.
+    return { abruptKill: true, networkIsolation: true };
+  }
+
+  async connectNetwork(
+    networkName: string,
+    containerName: string,
+    options: NetworkAttachmentOptions = {},
+  ): Promise<void> {
+    if (await this.networkConnected(networkName, containerName)) {
+      return;
+    }
+    try {
+      await this.docker.getNetwork(networkName).connect({
+        Container: containerName,
+        EndpointConfig: {
+          ...(options.ip ? { IPAMConfig: { IPv4Address: options.ip } } : {}),
+          ...(options.aliases ? { Aliases: options.aliases } : {}),
+        },
+      });
+    } catch (error) {
+      throw dockerFailure(
+        error,
+        "DOCKER_OPERATION_FAILED",
+        `could not connect container "${containerName}" to network "${networkName}"`,
+        `${networkName}/${containerName}`,
+        "inspect Docker network attachments and retry",
+      );
+    }
+  }
+
+  async disconnectNetwork(
+    networkName: string,
+    containerName: string,
+  ): Promise<void> {
+    if (!(await this.networkConnected(networkName, containerName))) {
+      return;
+    }
+    try {
+      await this.docker.getNetwork(networkName).disconnect({
+        Container: containerName,
+        Force: true,
+      });
+    } catch (error) {
+      if (!isNotFound(error)) {
+        throw dockerFailure(
+          error,
+          "DOCKER_OPERATION_FAILED",
+          `could not disconnect container "${containerName}" from network "${networkName}"`,
+          `${networkName}/${containerName}`,
+          "inspect Docker network attachments and retry",
+        );
+      }
+    }
+  }
+
+  async networkConnected(
+    networkName: string,
+    containerName: string,
+  ): Promise<boolean> {
+    try {
+      const info = (await this.docker
+        .getContainer(containerName)
+        .inspect()) as {
+        NetworkSettings?: { Networks?: Record<string, unknown> };
+      };
+      return Boolean(info.NetworkSettings?.Networks?.[networkName]);
+    } catch (error) {
+      if (isNotFound(error)) return false;
+      throw dockerFailure(
+        error,
+        "DOCKER_OPERATION_FAILED",
+        `could not inspect network attachments for container "${containerName}"`,
+        containerName,
+        "start Docker and retry",
+      );
+    }
+  }
+
+  async networkExists(networkName: string): Promise<boolean> {
+    try {
+      await this.docker.getNetwork(networkName).inspect();
+      return true;
+    } catch (error) {
+      if (isNotFound(error)) return false;
+      throw dockerFailure(
+        error,
+        "DOCKER_OPERATION_FAILED",
+        `could not inspect Docker network "${networkName}"`,
+        networkName,
+        "start Docker and retry",
+      );
+    }
+  }
+
+  async getNetworkLabels(
+    networkName: string,
+  ): Promise<Record<string, string> | null> {
+    try {
+      const info = (await this.docker.getNetwork(networkName).inspect()) as {
+        Labels?: Record<string, string>;
+      };
+      return { ...(info.Labels ?? {}) };
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw dockerFailure(
+        error,
+        "DOCKER_OPERATION_FAILED",
+        `could not inspect Docker network "${networkName}"`,
+        networkName,
         "start Docker and retry",
       );
     }

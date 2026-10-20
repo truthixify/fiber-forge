@@ -10,6 +10,7 @@ import { Command } from "commander";
 import { type NetworkLayout } from "./config.js";
 import { DockerEngine } from "./engine.js";
 import { errorDetails } from "./errors.js";
+import { type FaultKind, type FaultReport } from "./faults.js";
 import {
   type NetworkView,
   type NodeLifecycleAction,
@@ -219,6 +220,23 @@ function printNodeLifecycle(report: NodeLifecycleReport): void {
   }
   if (report.nextAction) {
     console.log(`  ${ui.muted("next")}  ${ui.text(report.nextAction)}`);
+  }
+  console.log("");
+}
+
+function printFault(report: FaultReport): void {
+  const observed =
+    report.observed.state === "active"
+      ? ui.error("active")
+      : report.observed.state === "inactive"
+        ? ui.success("inactive")
+        : ui.gold("degraded");
+  console.log(
+    `\n  ${ui.text(report.id)}   ${observed}   ${ui.muted(report.changed ? "changed" : "no-op")}`,
+  );
+  console.log(`  ${ui.muted("observed")}  ${ui.text(report.observed.summary)}`);
+  if (report.nextAction) {
+    console.log(`  ${ui.muted("next")}      ${ui.text(report.nextAction)}`);
   }
   console.log("");
 }
@@ -450,6 +468,93 @@ export function buildCli(): Command {
   addNodeAction("stop", "stop one node while retaining its state");
   addNodeAction("start", "start one stopped node and wait for RPC readiness");
   addNodeAction("restart", "restart one node without replacing its state");
+
+  const fault = program
+    .command("fault")
+    .description("apply, inspect, and reset controlled network faults");
+
+  const faultAction = (action: "apply" | "reset"): void => {
+    fault
+      .command(action)
+      .argument("<net>", "network name")
+      .argument(
+        "<kind>",
+        "node-kill, peer-partition, ckb-unavailable, or mining-pause",
+      )
+      .argument("[target]", "node target for node-kill or peer-partition")
+      .option("--json", "print machine-readable JSON")
+      .action(
+        async (
+          net: string,
+          kindValue: string,
+          target: string | undefined,
+          options: { json?: boolean },
+        ) => {
+          const kind = kindValue as FaultKind;
+          const report =
+            action === "apply"
+              ? await orchestrator().applyFault(net, kind, target)
+              : await orchestrator().resetFault(net, kind, target);
+          if (options.json) printJson(report);
+          else printFault(report);
+          if (action === "reset" && report.recovery === "action-required") {
+            process.exitCode = 2;
+          }
+        },
+      );
+  };
+
+  faultAction("apply");
+  faultAction("reset");
+
+  fault
+    .command("status")
+    .argument("<net>", "network name")
+    .option("--json", "print machine-readable JSON")
+    .action(async (net: string, options: { json?: boolean }) => {
+      const reports = await orchestrator().faultStatus(net);
+      if (options.json) {
+        printJson({ net, faults: reports });
+        return;
+      }
+      if (reports.length === 0) {
+        console.log(
+          `\n  ${ui.success("no active faults")}   ${ui.muted(net)}\n`,
+        );
+        return;
+      }
+      reports.forEach(printFault);
+    });
+
+  fault
+    .command("reset-all")
+    .argument("<net>", "network name")
+    .option("--json", "print machine-readable JSON")
+    .action(async (net: string, options: { json?: boolean }) => {
+      const reports = await orchestrator().resetAllFaults(net);
+      if (options.json) printJson({ net, faults: reports });
+      else reports.forEach(printFault);
+      if (reports.some((report) => report.recovery === "action-required")) {
+        process.exitCode = 2;
+      }
+    });
+
+  fault
+    .command("mine")
+    .argument("<net>", "network name")
+    .argument("[count]", "number of blocks", "1")
+    .option("--json", "print machine-readable JSON")
+    .action(
+      async (net: string, countValue: string, options: { json?: boolean }) => {
+        const report = await orchestrator().mineBlocks(net, Number(countValue));
+        if (options.json) printJson(report);
+        else {
+          console.log(
+            `\n  ${ui.success("mined")}   ${ui.text(String(report.count))}   ${ui.muted(`#${report.fromBlock} → #${report.toBlock}`)}\n`,
+          );
+        }
+      },
+    );
 
   program
     .command("pay")

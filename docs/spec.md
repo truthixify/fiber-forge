@@ -95,6 +95,9 @@ GUI (React/vite, served on localhost) ──► fiber-forge daemon HTTP+WS API (
 - FR-11 Individual Fiber nodes can be inspected, stopped, started, and restarted without replacing
   their container or mounted state. Start/restart verifies RPC readiness and saved identity, then
   reports observed peer/channel recovery without promising that channels recovered automatically.
+- FR-12 Controlled faults are named, atomically persisted, scoped to one managed network, and have
+  explicit observed state and reset behavior. The portable baseline covers abrupt node termination,
+  CKB-preserving node partition, CKB unavailability, and the on-demand mining control path.
 
 ## 7. Topology schema (YAML)
 

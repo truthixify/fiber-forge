@@ -23,6 +23,10 @@ when Fiber Forge can identify a specific target and safe next step.
 | Code | Meaning |
 | --- | --- |
 | `DOCKER_UNAVAILABLE` | The Docker socket is missing, refused the connection, or is inaccessible. |
+| `FAULT_UNSUPPORTED` | The active engine lacks a required portable primitive, or the requested fault kind is unknown. |
+| `FAULT_PRECONDITION_FAILED` | A fault target, process state, or argument does not satisfy the documented precondition. |
+| `FAULT_CONFLICT` | Another active fault prevents the requested condition from being applied truthfully. |
+| `FAULT_STATE_MISMATCH` | Persisted fault intent is unreadable or does not match the observed Docker condition. |
 | `IMAGE_PULL_FAILED` | A required pinned image could not be pulled. |
 | `CONTAINER_START_FAILED` | Docker could not create or start the named container. |
 | `CONTAINER_NOT_FOUND` | An operation required an existing container that has been removed. |
@@ -32,6 +36,7 @@ when Fiber Forge can identify a specific target and safe next step.
 | `INVALID_TIMEOUT` | The requested provisioning timeout is not a positive finite number. |
 | `NETWORK_EXISTS` | A same-name Fiber Forge network still has running containers. |
 | `NETWORK_NOT_FOUND` | No readable saved layout exists for the requested network. |
+| `MINING_PAUSED` | A mining-dependent operation was rejected before submission while the mining fault is active. |
 | `NODE_NOT_FOUND` | The saved network has no node with the requested name. |
 | `NODE_CONTAINER_MISSING` | The saved node exists, but its retained Docker container was removed. |
 | `NODE_RPC_UNAVAILABLE` | A started node did not expose a usable RPC and peer address before its deadline. |

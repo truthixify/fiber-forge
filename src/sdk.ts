@@ -8,9 +8,11 @@ import {
 } from "./config.js";
 import { DockerEngine } from "./engine.js";
 import { type ForgeErrorDetails } from "./errors.js";
+import { type FaultKind, type FaultReport } from "./faults.js";
 import {
   type ChannelRow,
   type DownOptions,
+  type MineReport,
   type NetworkSummary,
   type NetworkView,
   type NodeLifecycleOptions,
@@ -24,6 +26,14 @@ import { type Topology, validateTopology } from "./topology.js";
 export { version } from "./version.js";
 export { ForgeError, errorDetails } from "./errors.js";
 export type { ForgeErrorCode, ForgeErrorDetails } from "./errors.js";
+export { FAULT_KINDS, isFaultKind } from "./faults.js";
+export type {
+  FaultKind,
+  FaultNetworkAttachment,
+  FaultObservation,
+  FaultObservedState,
+  FaultReport,
+} from "./faults.js";
 export {
   FUNDING_BUFFER_CKB,
   MAX_NODES,
@@ -48,6 +58,7 @@ export type {
   NetworkState,
   NetworkSummary,
   NetworkView,
+  MineReport,
   NodeChannelObservation,
   NodeLifecycleAction,
   NodeLifecycleOptions,
@@ -103,6 +114,23 @@ export interface FiberForge {
     node: string,
     options?: NodeLifecycleOptions,
   ): Promise<NodeLifecycleReport>;
+  applyFault(
+    net: string,
+    kind: FaultKind,
+    target?: string,
+  ): Promise<FaultReport>;
+  faultStatus(net: string): Promise<FaultReport[]>;
+  resetFault(
+    net: string,
+    kind: FaultKind,
+    target?: string,
+    options?: NodeLifecycleOptions,
+  ): Promise<FaultReport>;
+  resetAllFaults(
+    net: string,
+    options?: NodeLifecycleOptions,
+  ): Promise<FaultReport[]>;
+  mineBlocks(net: string, count?: number): Promise<MineReport>;
   down(net: string, options?: DownOptions): Promise<void>;
   downAll(options?: DownOptions): Promise<string[]>;
   list(): Promise<NetworkSummary[]>;

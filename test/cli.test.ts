@@ -1,6 +1,6 @@
 import { createServer } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { main, resolveTopology } from "../src/cli";
+import { buildCli, main, resolveTopology } from "../src/cli";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -81,6 +81,37 @@ describe("resolveTopology", () => {
       error: {
         code: "NETWORK_NOT_FOUND",
         resource: "cli-node-missing",
+      },
+    });
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("registers the complete controlled-fault command surface", async () => {
+    const fault = buildCli().commands.find(
+      (command) => command.name() === "fault",
+    );
+    expect(fault?.commands.map((command) => command.name()).sort()).toEqual([
+      "apply",
+      "mine",
+      "reset",
+      "reset-all",
+      "status",
+    ]);
+
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+    await main([
+      "node",
+      "fiber-forge",
+      "fault",
+      "status",
+      "cli-fault-missing",
+      "--json",
+    ]);
+    expect(JSON.parse(String(stderr.mock.calls[0][0]))).toMatchObject({
+      ok: false,
+      error: {
+        code: "NETWORK_NOT_FOUND",
+        resource: "cli-fault-missing",
       },
     });
     expect(process.exitCode).toBe(1);

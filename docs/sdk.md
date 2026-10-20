@@ -63,6 +63,8 @@ unsupported.
 | `inspect(net)` / `list()` | Return `NetworkView` or `NetworkSummary[]`. | Best-effort inspection: unreachable nodes/chains are represented as stopped, zero, or omitted live data instead of making the whole view unavailable. RPC calls have a ten-second request bound. |
 | `inspectNode(net, node)` | Returns a `NodeLifecycleReport` without mutation. | Reads actual Docker state. A running node is checked for RPC identity, peers, and channels; stopped or externally removed containers remain explicit states. |
 | `stopNode` / `startNode` / `restartNode` | Return a shared `NodeLifecycleReport`; start/restart accept `NodeLifecycleOptions`. | Operations on the same node are serialized. Stop retains the exact container and mounted state. Start/restart wait up to 60 seconds for RPC and identity, then observe automatic peer/channel recovery for up to 10 seconds. Repeats return `changed: false` when already in the requested state. |
+| `applyFault` / `faultStatus` / `resetFault` / `resetAllFaults` | Apply, inspect, or reset a portable `FaultKind`; return `FaultReport` values. | Fault transitions are serialized per network and atomically persisted. Node kill and network isolation require matching engine capabilities. Reset waits for the relevant RPC and reports incomplete channel recovery honestly. |
+| `mineBlocks(net, count?)` | Returns a `MineReport` with the prior and resulting tip. | Generates 1-1000 blocks through the managed dev-chain control path and rejects with `MINING_PAUSED` while that fault is active. |
 | `createInvoice`, `pay`, `payInvoice` | Return an invoice or `PaymentReport`. | RPC calls are bounded to ten seconds; route discovery retries for up to 30 seconds and payment settlement is observed for up to 60 seconds. These methods do not create or remove a network. |
 | `openChannelBetween` / `closeChannel` / `channels` | Mutate or inspect channels. | Channel readiness is bounded to 120 seconds. Opens for the same network are serialized. A failed open leaves the existing network running for inspection or retry. |
 | `issueUdt` / `fund` | Return the submitted transaction hash. | Operate only against the disposable local dev chain; they never access testnet or mainnet. |
@@ -82,6 +84,11 @@ Always put teardown in `finally`. Abort and timeout already roll back an incompl
 `ChannelReady` channel from the operated node. `action-required` is a truthful post-operation
 observation, not a failed process start; use `nextAction` and inspect the network before reconnecting
 or reopening anything. `restartNode` never replaces the container, key, or node database.
+
+Faults are local test controls, not production network policy. `peer-partition` moves one Fiber node
+to a CKB-only managed bridge; it does not install firewall rules. `mining-pause` gates Fiber Forge's
+on-demand miner because the bundled Dummy-PoW chain does not mine in the background. See
+[Controlled fault injection](fault-injection.md).
 
 ## Errors
 
