@@ -96,6 +96,8 @@ fiber-forge invoice trio lorentz 100             # create an invoice
 fiber-forge channel open trio feynman galileo 1000
 fiber-forge channel ls trio
 fiber-forge channel close trio feynman <id>
+fiber-forge channel force-close trio feynman <id> --confirm <id> --json
+fiber-forge channel settlement trio feynman <id> --json
 fiber-forge logs trio feynman --level warn       # a node's logs (or 'ckb')
 
 # dev-UDT asset channels (simple_udt, included in the devnet genesis)
@@ -213,6 +215,10 @@ also checks the Docker daemon architecture and both image manifest lists before 
 - **Scenarios** — shareable topology and traffic bundles with expected-outcome assertions.
 - **Cross-chain** — `cch` (Fiber ↔ Lightning) hub demos and BTC bridging.
 - **Reproducibility** — snapshot a network and its channel state so someone can replay a bug or demo.
+
+Force-close is an explicit local-dev operation with full-ID confirmation and terminal settlement
+checks. See [Force-close and settlement](docs/force-close.md) for the RPC/state mapping and timeout
+behavior.
 
 ## License
 

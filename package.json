@@ -86,6 +86,7 @@
     "assets",
     "docs/sdk.md",
     "docs/recovery.md",
+    "docs/force-close.md",
     "docs/fault-injection.md",
     "docs/lifecycle-errors.md",
     "docs/verification.md",

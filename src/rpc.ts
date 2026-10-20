@@ -47,14 +47,22 @@ export interface NodeInfo {
   node_name: string | null;
 }
 
-/** A channel as returned by `list_channels`; `state` may be a string or a `{state_name}` object. */
+/** Fiber's structured channel state. Flag values are serialized as a `|`-separated string. */
+export interface ChannelState {
+  state_name: string;
+  state_flags?: string;
+}
+
+/** A channel as returned by `list_channels`; older nodes may encode `state` as a string. */
 export interface Channel {
   channel_id: string;
   /** The peer node's public key. */
   pubkey?: string;
-  state: string | { state_name: string };
+  state: string | ChannelState;
   local_balance?: string;
   remote_balance?: string;
+  latest_commitment_transaction_hash?: string | null;
+  shutdown_transaction_hash?: string | null;
   [key: string]: unknown;
 }
 
@@ -63,6 +71,17 @@ export function channelStateName(channel: Channel): string {
   return typeof channel.state === "string"
     ? channel.state
     : (channel.state?.state_name ?? "");
+}
+
+/** The flags attached to a structured Fiber channel state. */
+export function channelStateFlags(channel: Channel): string[] {
+  if (typeof channel.state === "string" || !channel.state?.state_flags) {
+    return [];
+  }
+  return channel.state.state_flags
+    .split("|")
+    .map((flag) => flag.trim())
+    .filter(Boolean);
 }
 
 /** Whether a channel has reached the usable `ChannelReady` state. */
@@ -116,17 +135,25 @@ export class FnnRpc {
     return result.peers;
   }
 
-  async listChannels(pubkey?: string): Promise<Channel[]> {
+  async listChannels(
+    pubkey?: string,
+    includeClosed = false,
+  ): Promise<Channel[]> {
     const result = (await this.transport.call("list_channels", [
-      pubkey ? { pubkey } : {},
+      {
+        ...(pubkey ? { pubkey } : {}),
+        ...(includeClosed ? { include_closed: true } : {}),
+      },
     ])) as {
       channels: Channel[];
     };
     return result.channels;
   }
 
-  async shutdownChannel(channelId: string): Promise<void> {
-    await this.transport.call("shutdown_channel", [{ channel_id: channelId }]);
+  async shutdownChannel(channelId: string, force = false): Promise<void> {
+    await this.transport.call("shutdown_channel", [
+      { channel_id: channelId, ...(force ? { force: true } : {}) },
+    ]);
   }
 
   /** How many channels this node currently sees in the routing graph. Used to wait for gossip to

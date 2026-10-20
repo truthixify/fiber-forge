@@ -68,8 +68,10 @@ GUI (React/vite, served on localhost) ──► fiber-forge daemon HTTP+WS API (
 - Wiring: `node_info` (readiness probe + pubkey/address harvest) → `connect_peer` (full-mesh or
   topology-defined) → `open_channel` (capacity from topology; poll `list_channels` until
   `CHANNEL_READY`) → payments via `new_invoice` on receiver + `send_payment` on sender →
-  `shutdown_channel` for GUI close. All via the shared verified-method set; consult the OpenRPC
-  JSON before touching any other field.
+  `shutdown_channel` without `force` for cooperative close. Explicit force-close sends
+  `shutdown_channel` with `force: true`, then observes closed-channel flags and the CKB transaction
+  independently. All use the shared verified-method set; consult the OpenRPC JSON before touching
+  any other field.
 
 ## 6. Functional requirements
 
@@ -98,6 +100,10 @@ GUI (React/vite, served on localhost) ──► fiber-forge daemon HTTP+WS API (
 - FR-12 Controlled faults are named, atomically persisted, scoped to one managed network, and have
   explicit observed state and reset behavior. The portable baseline covers abrupt node termination,
   CKB-preserving node partition, CKB unavailability, and the on-demand mining control path.
+- FR-13 Force-close is limited to disposable local value, requires an exact full-channel-ID
+  confirmation, and is never substituted for cooperative close. Success requires both terminal
+  Fiber settlement flags and a committed CKB closing transaction; timeouts retain observable
+  transaction and state evidence for later inspection.
 
 ## 7. Topology schema (YAML)
 

@@ -104,7 +104,12 @@ interface SimulatedNode {
   peerPubkey: string;
   ready: boolean;
   connected: boolean;
-  channelState: string;
+  channelState: string | { state_name: string; state_flags?: string };
+  forceRequested: boolean;
+  autoSettle: boolean;
+  settlementStep: number;
+  commitmentHash: string | null;
+  closingHash: string | null;
 }
 
 async function lifecycleFixture(engine = new FakeEngine()): Promise<{
@@ -168,6 +173,11 @@ async function lifecycleFixture(engine = new FakeEngine()): Promise<{
         ready: true,
         connected: true,
         channelState: "ChannelReady",
+        forceRequested: false,
+        autoSettle: true,
+        settlementStep: 0,
+        commitmentHash: null,
+        closingHash: null,
       },
     ],
     [
@@ -178,12 +188,17 @@ async function lifecycleFixture(engine = new FakeEngine()): Promise<{
         ready: true,
         connected: true,
         channelState: "ChannelReady",
+        forceRequested: false,
+        autoSettle: true,
+        settlementStep: 0,
+        commitmentHash: null,
+        closingHash: null,
       },
     ],
   ]);
   const makeRpc = (port: number): FnnRpc => {
     const transport: RpcTransport = {
-      async call(method: string): Promise<unknown> {
+      async call(method: string, params: unknown[]): Promise<unknown> {
         const simulated = nodes.get(port);
         if (!simulated || !simulated.ready) {
           throw new Error(`${method}: unavailable`);
@@ -212,9 +227,27 @@ async function lifecycleFixture(engine = new FakeEngine()): Promise<{
                 state: simulated.channelState,
                 local_balance: "0x174876e800",
                 remote_balance: "0x174876e800",
+                latest_commitment_transaction_hash: simulated.commitmentHash,
+                shutdown_transaction_hash: simulated.closingHash,
               },
             ],
           };
+        }
+        if (method === "shutdown_channel") {
+          const request = params[0] as {
+            channel_id?: string;
+            force?: boolean;
+          };
+          if (!request.force) {
+            throw new Error("test fixture only supports force shutdown");
+          }
+          simulated.forceRequested = true;
+          simulated.channelState = {
+            state_name: "ShuttingDown",
+            state_flags: "WAITING_COMMITMENT_CONFIRMATION",
+          };
+          simulated.commitmentHash = `0xcommitment-${port}`;
+          return null;
         }
         throw new Error(`unexpected RPC method ${method}`);
       },
@@ -234,6 +267,31 @@ async function lifecycleFixture(engine = new FakeEngine()): Promise<{
       generateBlocks: async (count = 1) => {
         if (!chain.ready) throw new Error("CKB unavailable");
         chain.tip += count;
+        for (const simulated of nodes.values()) {
+          if (!simulated.forceRequested) continue;
+          simulated.settlementStep += 1;
+          simulated.closingHash = `0xclosing-${simulated.pubkey.slice(2)}`;
+          if (simulated.settlementStep === 1 || !simulated.autoSettle) {
+            simulated.channelState = {
+              state_name: "Closed",
+              state_flags: "UNCOOPERATIVE_LOCAL|WAITING_ONCHAIN_SETTLEMENT",
+            };
+          } else {
+            simulated.channelState = {
+              state_name: "Closed",
+              state_flags: "UNCOOPERATIVE_LOCAL",
+            };
+          }
+        }
+      },
+      transactionStatus: async (txHash: string) => {
+        if (!chain.ready) throw new Error("CKB unavailable");
+        return {
+          status: txHash.startsWith("0xclosing-") ? "committed" : "unknown",
+          blockHash: txHash.startsWith("0xclosing-") ? "0xblock" : null,
+          blockNumber: txHash.startsWith("0xclosing-") ? chain.tip : null,
+          reason: null,
+        };
       },
     }) as DevChain;
   return {
@@ -483,6 +541,178 @@ describe("Orchestrator node lifecycle", () => {
         resource: "NodeLifecycleOptions.timeoutMs",
       });
       expect(await engine.status("forge-duo-node-1")).toBe("running");
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Orchestrator force-close settlement", () => {
+  it("requires the exact channel id, sends force=true, and survives reinspection", async () => {
+    const { orchestrator, nodes, makeRpc, makeChain, engine, stateDir } =
+      await lifecycleFixture();
+    const channelId = "0xchannel-18300";
+    try {
+      await expect(
+        orchestrator.forceCloseChannel("duo", "alice", channelId, {
+          confirmChannelId: "0xwrong",
+        }),
+      ).rejects.toMatchObject({
+        code: "FORCE_CLOSE_CONFIRMATION_REQUIRED",
+      });
+      expect(nodes.get(18300)?.forceRequested).toBe(false);
+
+      const report = await orchestrator.forceCloseChannel(
+        "duo",
+        "alice",
+        channelId,
+        {
+          confirmChannelId: channelId,
+          timeoutMs: 100,
+          pollIntervalMs: 1,
+          mineBlocksPerPoll: 1,
+        },
+      );
+      expect(nodes.get(18300)?.forceRequested).toBe(true);
+      expect(report).toMatchObject({
+        operation: "force-close",
+        rpcAccepted: true,
+        closeMode: "force",
+        phase: "settled",
+        settled: true,
+        timedOut: false,
+        channelState: "Closed",
+        channelFlags: ["UNCOOPERATIVE_LOCAL"],
+        commitmentTransactionHash: "0xcommitment-18300",
+        closingTransaction: {
+          hash: "0xclosing-alice",
+          status: "committed",
+        },
+        finalState: {
+          state: "Closed",
+          flags: ["UNCOOPERATIVE_LOCAL"],
+        },
+      });
+
+      const restarted = new Orchestrator(
+        engine,
+        "/assets",
+        stateDir,
+        makeRpc,
+        makeChain,
+      );
+      await expect(
+        restarted.inspectChannelSettlement("duo", "alice", channelId),
+      ).resolves.toMatchObject({
+        operation: "inspect",
+        rpcAccepted: null,
+        phase: "settled",
+        settled: true,
+        commitmentTransactionHash: "0xcommitment-18300",
+        closingTransaction: { hash: "0xclosing-alice" },
+      });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns timeout evidence without losing commitment and closing hashes", async () => {
+    const { orchestrator, nodes, stateDir } = await lifecycleFixture();
+    const channelId = "0xchannel-18300";
+    nodes.get(18300)!.autoSettle = false;
+    try {
+      const report = await orchestrator.forceCloseChannel(
+        "duo",
+        "alice",
+        channelId,
+        {
+          confirmChannelId: channelId,
+          timeoutMs: 10,
+          pollIntervalMs: 1,
+          mineBlocksPerPoll: 1,
+        },
+      );
+      expect(report).toMatchObject({
+        phase: "settlement-pending",
+        settled: false,
+        timedOut: true,
+        commitmentTransactionHash: "0xcommitment-18300",
+        closingTransaction: {
+          hash: "0xclosing-alice",
+          status: "committed",
+        },
+      });
+      expect(report.nextAction).toContain("channel settlement");
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("recognizes a remotely forced channel after its CKB transaction commits", async () => {
+    const { orchestrator, nodes, stateDir } = await lifecycleFixture();
+    const channelId = "0xchannel-18300";
+    const alice = nodes.get(18300)!;
+    alice.channelState = {
+      state_name: "Closed",
+      state_flags: "UNCOOPERATIVE_REMOTE",
+    };
+    alice.commitmentHash = "0xcommitment-remote";
+    alice.closingHash = "0xclosing-remote";
+    try {
+      await expect(
+        orchestrator.inspectChannelSettlement("duo", "alice", channelId),
+      ).resolves.toMatchObject({
+        operation: "inspect",
+        closeMode: "force",
+        phase: "settled",
+        settled: true,
+        channelFlags: ["UNCOOPERATIVE_REMOTE"],
+        closingTransaction: {
+          hash: "0xclosing-remote",
+          status: "committed",
+        },
+      });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps terminal Fiber state pending while CKB confirmation is unavailable", async () => {
+    const { orchestrator, nodes, chain, stateDir } = await lifecycleFixture();
+    const channelId = "0xchannel-18300";
+    const alice = nodes.get(18300)!;
+    alice.channelState = {
+      state_name: "Closed",
+      state_flags: "UNCOOPERATIVE_LOCAL",
+    };
+    alice.closingHash = "0xclosing-alice";
+    chain.ready = false;
+    try {
+      await expect(
+        orchestrator.inspectChannelSettlement("duo", "alice", channelId),
+      ).resolves.toMatchObject({
+        phase: "settlement-pending",
+        settled: false,
+        finalState: null,
+        closingTransaction: {
+          hash: "0xclosing-alice",
+          status: "unavailable",
+        },
+      });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an unknown channel without sending a shutdown request", async () => {
+    const { orchestrator, nodes, stateDir } = await lifecycleFixture();
+    try {
+      await expect(
+        orchestrator.forceCloseChannel("duo", "alice", "0xmissing", {
+          confirmChannelId: "0xmissing",
+        }),
+      ).rejects.toMatchObject({ code: "CHANNEL_NOT_FOUND" });
+      expect(nodes.get(18300)?.forceRequested).toBe(false);
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }

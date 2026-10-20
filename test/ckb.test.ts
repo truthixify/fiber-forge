@@ -51,3 +51,61 @@ describe("DevChain.waitReady", () => {
     expect(aborted).toBe(true);
   });
 });
+
+describe("DevChain.transactionStatus", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("normalizes committed CKB transaction metadata", async () => {
+    const fetchMock = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          method: "get_transaction",
+          params: ["0xtx", "0x1"],
+        });
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            result: {
+              tx_status: {
+                status: "committed",
+                block_hash: "0xblock",
+                block_number: "0x2a",
+                reason: null,
+              },
+            },
+          }),
+          { status: 200 },
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      new DevChain("http://127.0.0.1:8114").transactionStatus("0xtx"),
+    ).resolves.toEqual({
+      status: "committed",
+      blockHash: "0xblock",
+      blockNumber: 42,
+      reason: null,
+    });
+  });
+
+  it("reports an unknown transaction without dropping its caller-owned hash", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: null })),
+      ),
+    );
+    await expect(
+      new DevChain("http://127.0.0.1:8114").transactionStatus("0xmissing"),
+    ).resolves.toEqual({
+      status: "unknown",
+      blockHash: null,
+      blockNumber: null,
+      reason: null,
+    });
+  });
+});

@@ -1,5 +1,7 @@
 /** Stable lifecycle failures used by machine-readable CLI output and internal orchestration. */
 export type ForgeErrorCode =
+  | "CHANNEL_NOT_FOUND"
+  | "CHANNEL_STATE_MISMATCH"
   | "CONTAINER_NOT_FOUND"
   | "CONTAINER_START_FAILED"
   | "DOCKER_OPERATION_FAILED"
@@ -8,6 +10,7 @@ export type ForgeErrorCode =
   | "FAULT_PRECONDITION_FAILED"
   | "FAULT_STATE_MISMATCH"
   | "FAULT_UNSUPPORTED"
+  | "FORCE_CLOSE_CONFIRMATION_REQUIRED"
   | "IMAGE_PULL_FAILED"
   | "INVALID_NETWORK_NAME"
   | "INVALID_PORT"

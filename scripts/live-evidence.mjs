@@ -605,7 +605,10 @@ function testDescriptor(name) {
     };
   }
   if (name.includes("relay node recovery")) {
-    return { topology: "trio (3-node line)", paths: ["recovery"] };
+    return {
+      topology: "trio (3-node line)",
+      paths: ["recovery", "force-close"],
+    };
   }
   if (name.includes("partial provisioning rollback")) {
     return { topology: "duo (2-node line)", paths: ["rollback"] };
@@ -678,6 +681,7 @@ export function buildEvidence({
     ["provisioning", "Real CKB/Fiber provisioning"],
     ["multi-hop-ckb", "Three-node multi-hop CKB payment"],
     ["recovery", "Stopped relay recovery + payment"],
+    ["force-close", "Failed-peer recovery + terminal force-close settlement"],
     ["rollback", "Node/peer/channel rollback"],
     ["udt", "UDT issue/channel/payment regression"],
   ];

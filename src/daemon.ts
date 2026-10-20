@@ -18,6 +18,8 @@ import { type WebSocket, WebSocketServer } from "ws";
 import { type NetworkLayout } from "./config.js";
 import {
   type ChannelRow,
+  type ChannelSettlementReport,
+  type ForceCloseOptions,
   type NetworkSummary,
   type NetworkView,
   type NodeLifecycleReport,
@@ -53,6 +55,17 @@ export interface Backend {
   ): Promise<void>;
   issueUdt(net: string, node: string, amountUdt: number): Promise<string>;
   closeChannel(net: string, node: string, channelId: string): Promise<void>;
+  forceCloseChannel(
+    net: string,
+    node: string,
+    channelId: string,
+    options: ForceCloseOptions,
+  ): Promise<ChannelSettlementReport>;
+  inspectChannelSettlement(
+    net: string,
+    node: string,
+    channelId: string,
+  ): Promise<ChannelSettlementReport>;
   fund(net: string, node: string, amountCkb: number): Promise<string>;
   createInvoice(
     net: string,
@@ -207,6 +220,23 @@ export function createDaemon(backend: Backend): Server {
         sendJson(response, 200, await backend.channels(net));
         return;
       }
+      if (method === "GET" && path === "/api/channel/settlement") {
+        const net = parsed.searchParams.get("net");
+        const node = parsed.searchParams.get("node");
+        const channelId = parsed.searchParams.get("channelId");
+        if (!net || !node || !channelId) {
+          sendJson(response, 400, {
+            error: "net, node, and channelId query parameters required",
+          });
+          return;
+        }
+        sendJson(
+          response,
+          200,
+          await backend.inspectChannelSettlement(net, node, channelId),
+        );
+        return;
+      }
       if (method === "GET" && path === "/api/logs") {
         const net = parsed.searchParams.get("net");
         const node = parsed.searchParams.get("node");
@@ -296,6 +326,24 @@ export function createDaemon(backend: Backend): Server {
             str(body.channelId),
           );
           sendJson(response, 200, { ok: true });
+          return;
+        }
+        if (path === "/api/channel/force-close") {
+          const report = await backend.forceCloseChannel(
+            str(body.net),
+            str(body.node),
+            str(body.channelId),
+            {
+              confirmChannelId: str(body.confirmChannelId),
+              timeoutMs:
+                body.timeoutMs === undefined ? undefined : num(body.timeoutMs),
+              mineBlocksPerPoll:
+                body.mineBlocksPerPoll === undefined
+                  ? undefined
+                  : num(body.mineBlocksPerPoll),
+            },
+          );
+          sendJson(response, 200, report);
           return;
         }
         if (path === "/api/fund") {

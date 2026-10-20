@@ -116,4 +116,51 @@ describe("resolveTopology", () => {
     });
     expect(process.exitCode).toBe(1);
   });
+
+  it("registers distinct cooperative, force-close, and settlement commands", () => {
+    const channel = buildCli().commands.find(
+      (command) => command.name() === "channel",
+    );
+    expect(channel?.commands.map((command) => command.name()).sort()).toEqual([
+      "close",
+      "force-close",
+      "ls",
+      "open",
+      "settlement",
+    ]);
+    const forceClose = channel?.commands.find(
+      (command) => command.name() === "force-close",
+    );
+    expect(
+      forceClose?.options.find((option) => option.long === "--confirm")
+        ?.mandatory,
+    ).toBe(true);
+  });
+
+  it("emits a structured force-close confirmation failure in JSON mode", async () => {
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await main([
+      "node",
+      "fiber-forge",
+      "channel",
+      "force-close",
+      "cli-force-close-missing",
+      "alice",
+      "0xchannel",
+      "--confirm",
+      "0xwrong",
+      "--json",
+    ]);
+
+    expect(stderr).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(stderr.mock.calls[0][0]))).toMatchObject({
+      ok: false,
+      error: {
+        code: "FORCE_CLOSE_CONFIRMATION_REQUIRED",
+        resource: "cli-force-close-missing/alice/0xchannel",
+      },
+    });
+    expect(process.exitCode).toBe(1);
+  });
 });

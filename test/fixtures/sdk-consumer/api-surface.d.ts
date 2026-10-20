@@ -3,6 +3,7 @@ import { type ForgeErrorDetails } from "./errors.js";
 import { type FaultKind, type FaultReport } from "./faults.js";
 import {
   type ChannelRow,
+  type ChannelSettlementReport,
   type DownOptions,
   type MineReport,
   type NetworkSummary,
@@ -10,6 +11,7 @@ import {
   type NodeLifecycleOptions,
   type NodeLifecycleReport,
   type PaymentReport,
+  type ForceCloseOptions,
   type UpOptions,
 } from "./orchestrator.js";
 import { type Topology } from "./topology.js";
@@ -44,11 +46,14 @@ export type { LayoutOptions, NetworkLayout, NodeLayout } from "./config.js";
 export { DEFAULT_PROVISION_TIMEOUT_MS } from "./orchestrator.js";
 export type {
   ChannelRow,
+  ChannelSettlementPhase,
+  ChannelSettlementReport,
   DownOptions,
   NetworkState,
   NetworkSummary,
   NetworkView,
   MineReport,
+  ForceCloseOptions,
   NodeChannelObservation,
   NodeLifecycleAction,
   NodeLifecycleOptions,
@@ -139,6 +144,17 @@ export interface FiberForge {
     udt?: boolean,
   ): Promise<void>;
   closeChannel(net: string, node: string, channelId: string): Promise<void>;
+  forceCloseChannel(
+    net: string,
+    node: string,
+    channelId: string,
+    options: ForceCloseOptions,
+  ): Promise<ChannelSettlementReport>;
+  inspectChannelSettlement(
+    net: string,
+    node: string,
+    channelId: string,
+  ): Promise<ChannelSettlementReport>;
   fund(net: string, node: string, amountCkb: number): Promise<string>;
   channels(net: string, node?: string): Promise<ChannelRow[]>;
   logs(

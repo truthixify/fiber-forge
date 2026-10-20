@@ -19,7 +19,11 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { DevChain, SIMPLE_UDT_CODE_HASH } from "./ckb.js";
+import {
+  type CkbTransactionStatus,
+  DevChain,
+  SIMPLE_UDT_CODE_HASH,
+} from "./ckb.js";
 import {
   CKB_RPC_PORT,
   FNN_P2P_PORT,
@@ -58,6 +62,7 @@ import {
   HttpTransport,
   type NodeInfo,
   type OpenChannelParams,
+  channelStateFlags,
   channelStateName,
   ckbToShannonHex,
   dialAddress,
@@ -80,6 +85,7 @@ const sleep = (ms: number) =>
   new Promise<void>((resolvePromise) => setTimeout(resolvePromise, ms));
 const hex = (bytes: Uint8Array) => "0x" + Buffer.from(bytes).toString("hex");
 export const DEFAULT_PROVISION_TIMEOUT_MS = 10 * 60_000;
+export const DEFAULT_FORCE_CLOSE_TIMEOUT_MS = 7 * 60_000;
 
 function nodeRuntimeStatus(status: ContainerStatus): NodeRuntimeStatus {
   return status === "exited" ? "stopped" : status;
@@ -334,6 +340,48 @@ export interface ChannelRow {
   state: string;
   localCkb: number;
   remoteCkb: number;
+}
+
+/** Observable phases of a cooperative or force-close lifecycle. */
+export type ChannelSettlementPhase =
+  | "open"
+  | "close-requested"
+  | "settlement-pending"
+  | "settled"
+  | "cooperatively-closed"
+  | "closed-other";
+
+/** Options for the destructive, local-dev force-close workflow. */
+export interface ForceCloseOptions {
+  /** Must exactly match `channelId`; prevents an accidental close from a copied command. */
+  confirmChannelId: string;
+  /** Maximum observation time. Defaults to seven minutes. */
+  timeoutMs?: number;
+  /** Blocks generated between observations. Defaults to 3; set to 0 to disable automatic mining. */
+  mineBlocksPerPoll?: number;
+  /** Delay between observations. Defaults to 1 second. */
+  pollIntervalMs?: number;
+}
+
+/** Fiber and CKB evidence for one channel's close/settlement state. */
+export interface ChannelSettlementReport {
+  net: string;
+  node: string;
+  channelId: string;
+  operation: "inspect" | "force-close";
+  closeMode: "none" | "cooperative" | "force" | "other";
+  /** `null` for inspection, otherwise whether this call sent `force: true`. */
+  rpcAccepted: boolean | null;
+  phase: ChannelSettlementPhase;
+  settled: boolean;
+  timedOut: boolean;
+  channelState: string;
+  channelFlags: string[];
+  commitmentTransactionHash: string | null;
+  closingTransaction: ({ hash: string } & CkbTransactionStatus) | null;
+  finalState: { state: string; flags: string[] } | null;
+  elapsedMs: number;
+  nextAction: string | null;
 }
 
 /** The outcome of a payment. */
@@ -1582,6 +1630,155 @@ export class Orchestrator {
     await this.rpcFor(target.rpcHostPort).shutdownChannel(channelId);
   }
 
+  /**
+   * Force-close one local-dev channel and observe it until Fiber and CKB both report settlement.
+   * A timeout is returned as evidence rather than thrown, so transaction identifiers are retained.
+   */
+  async forceCloseChannel(
+    net: string,
+    node: string,
+    channelId: string,
+    options: ForceCloseOptions,
+  ): Promise<ChannelSettlementReport> {
+    if (options.confirmChannelId !== channelId) {
+      throw new ForgeError(
+        "FORCE_CLOSE_CONFIRMATION_REQUIRED",
+        "force-close confirmation must exactly match the full channel id",
+        {
+          resource: `${net}/${node}/${channelId}`,
+          action: `retry with --confirm ${channelId}`,
+        },
+      );
+    }
+    const timeoutMs = options.timeoutMs ?? DEFAULT_FORCE_CLOSE_TIMEOUT_MS;
+    const pollIntervalMs = options.pollIntervalMs ?? 1_000;
+    const mineBlocksPerPoll = options.mineBlocksPerPoll ?? 3;
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      throw new ForgeError(
+        "INVALID_TIMEOUT",
+        "force-close timeoutMs must be a positive finite number",
+        { resource: `${net}/${node}/${channelId}` },
+      );
+    }
+    if (!Number.isFinite(pollIntervalMs) || pollIntervalMs <= 0) {
+      throw new ForgeError(
+        "INVALID_TIMEOUT",
+        "force-close pollIntervalMs must be a positive finite number",
+        { resource: `${net}/${node}/${channelId}` },
+      );
+    }
+    if (
+      !Number.isInteger(mineBlocksPerPoll) ||
+      mineBlocksPerPoll < 0 ||
+      mineBlocksPerPoll > 100
+    ) {
+      throw new ForgeError(
+        "FAULT_PRECONDITION_FAILED",
+        "force-close mineBlocksPerPoll must be an integer between 0 and 100",
+        { resource: `${net}/${node}/${channelId}` },
+      );
+    }
+
+    const state = await this.readState(net);
+    const target = this.requireNode(state, node);
+    const rpc = this.rpcFor(target.rpcHostPort);
+    const initial = await this.requireChannel(rpc, net, node, channelId);
+    const initialState = channelStateName(initial);
+    const initialFlags = channelStateFlags(initial);
+    const forceAlreadyStarted =
+      (initialState === "ShuttingDown" &&
+        initialFlags.includes("WAITING_COMMITMENT_CONFIRMATION")) ||
+      (initialState === "Closed" &&
+        initialFlags.some((flag) => flag.startsWith("UNCOOPERATIVE_")));
+    if (initialState === "Closed" && !forceAlreadyStarted) {
+      throw new ForgeError(
+        "CHANNEL_STATE_MISMATCH",
+        `channel ${channelId} is already closed without a force-close state`,
+        {
+          resource: `${net}/${node}/${channelId}`,
+          action: `inspect it with "fiber-forge channel settlement ${net} ${node} ${channelId}"`,
+        },
+      );
+    }
+    if (initialState !== "ChannelReady" && !forceAlreadyStarted) {
+      throw new ForgeError(
+        "CHANNEL_STATE_MISMATCH",
+        `channel ${channelId} cannot be force-closed from ${initialState || "Unknown"}`,
+        {
+          resource: `${net}/${node}/${channelId}`,
+          action:
+            "wait for ChannelReady or inspect the existing close operation",
+        },
+      );
+    }
+
+    const chain = this.makeChain(state.ckbHostPort);
+    if (mineBlocksPerPoll > 0) {
+      await this.assertMiningAvailable(net);
+    }
+    let rpcAccepted = false;
+    if (!forceAlreadyStarted) {
+      await rpc.shutdownChannel(channelId, true);
+      rpcAccepted = true;
+    }
+
+    const started = Date.now();
+    const deadline = started + timeoutMs;
+    let report = await this.readSettlementReport(
+      net,
+      node,
+      channelId,
+      "force-close",
+      rpcAccepted,
+      started,
+      rpc,
+      chain,
+    );
+    while (!report.settled && Date.now() < deadline) {
+      if (mineBlocksPerPoll > 0) {
+        await chain.generateBlocks(mineBlocksPerPoll);
+      }
+      await sleep(Math.min(pollIntervalMs, Math.max(1, deadline - Date.now())));
+      report = await this.readSettlementReport(
+        net,
+        node,
+        channelId,
+        "force-close",
+        rpcAccepted,
+        started,
+        rpc,
+        chain,
+      );
+    }
+    return report.settled
+      ? report
+      : {
+          ...report,
+          timedOut: true,
+          nextAction: `re-run "fiber-forge channel settlement ${net} ${node} ${channelId} --json"; the force-close continues in Fiber`,
+        };
+  }
+
+  /** Reconstruct close/settlement state only from the persisted node and live Fiber/CKB data. */
+  async inspectChannelSettlement(
+    net: string,
+    node: string,
+    channelId: string,
+  ): Promise<ChannelSettlementReport> {
+    const state = await this.readState(net);
+    const target = this.requireNode(state, node);
+    return this.readSettlementReport(
+      net,
+      node,
+      channelId,
+      "inspect",
+      null,
+      Date.now(),
+      this.rpcFor(target.rpcHostPort),
+      this.makeChain(state.ckbHostPort),
+    );
+  }
+
   /** Top up a running node's on-chain wallet from the deployer; returns the funding tx hash. */
   async fund(net: string, node: string, amountCkb: number): Promise<string> {
     const state = await this.readState(net);
@@ -1618,6 +1815,132 @@ export class Orchestrator {
       }
     }
     return rows;
+  }
+
+  private async requireChannel(
+    rpc: FnnRpc,
+    net: string,
+    node: string,
+    channelId: string,
+  ): Promise<Channel> {
+    const channel = (await rpc.listChannels(undefined, true)).find(
+      (candidate) => candidate.channel_id === channelId,
+    );
+    if (!channel) {
+      throw new ForgeError(
+        "CHANNEL_NOT_FOUND",
+        `channel ${channelId} was not found on node "${node}"`,
+        {
+          resource: `${net}/${node}/${channelId}`,
+          action: `copy the full id from "fiber-forge channel ls ${net} ${node} --json"`,
+        },
+      );
+    }
+    return channel;
+  }
+
+  private async readSettlementReport(
+    net: string,
+    node: string,
+    channelId: string,
+    operation: "inspect" | "force-close",
+    rpcAccepted: boolean | null,
+    started: number,
+    rpc: FnnRpc,
+    chain: DevChain,
+  ): Promise<ChannelSettlementReport> {
+    const channel = await this.requireChannel(rpc, net, node, channelId);
+    const channelState = channelStateName(channel) || "Unknown";
+    const channelFlags = channelStateFlags(channel);
+    const commitmentTransactionHash =
+      channel.latest_commitment_transaction_hash ?? null;
+    const closingHash = channel.shutdown_transaction_hash ?? null;
+    let closingTransaction: ChannelSettlementReport["closingTransaction"] =
+      null;
+    if (closingHash) {
+      try {
+        closingTransaction = {
+          hash: closingHash,
+          ...(await chain.transactionStatus(closingHash)),
+        };
+      } catch (error) {
+        closingTransaction = {
+          hash: closingHash,
+          status: "unavailable",
+          blockHash: null,
+          blockNumber: null,
+          reason: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }
+
+    const cooperative = channelFlags.includes("COOPERATIVE");
+    const force = channelFlags.some((flag) =>
+      flag.startsWith("UNCOOPERATIVE_"),
+    );
+    const waiting = channelFlags.includes("WAITING_ONCHAIN_SETTLEMENT");
+    const transactionCommitted = closingTransaction?.status === "committed";
+    let phase: ChannelSettlementPhase = "open";
+    if (channelState === "ShuttingDown") {
+      phase = "close-requested";
+    } else if (channelState === "Closed" && cooperative) {
+      phase = "cooperatively-closed";
+    } else if (
+      channelState === "Closed" &&
+      force &&
+      (waiting || !transactionCommitted)
+    ) {
+      phase = "settlement-pending";
+    } else if (
+      channelState === "Closed" &&
+      force &&
+      !waiting &&
+      transactionCommitted
+    ) {
+      phase = "settled";
+    } else if (channelState === "Closed") {
+      phase = force ? "close-requested" : "closed-other";
+    }
+    const settled = phase === "settled";
+    const finalState = [
+      "settled",
+      "cooperatively-closed",
+      "closed-other",
+    ].includes(phase)
+      ? { state: channelState, flags: channelFlags }
+      : null;
+    const closeMode = cooperative
+      ? "cooperative"
+      : force
+        ? "force"
+        : channelState === "Closed"
+          ? "other"
+          : "none";
+    const nextAction = settled
+      ? null
+      : phase === "open"
+        ? "the channel is still open"
+        : phase === "cooperatively-closed"
+          ? "the channel closed cooperatively; no force-close settlement is pending"
+          : `re-run "fiber-forge channel settlement ${net} ${node} ${channelId} --json"`;
+    return {
+      net,
+      node,
+      channelId,
+      operation,
+      closeMode,
+      rpcAccepted,
+      phase,
+      settled,
+      timedOut: false,
+      channelState,
+      channelFlags,
+      commitmentTransactionHash,
+      closingTransaction,
+      finalState,
+      elapsedMs: Date.now() - started,
+      nextAction,
+    };
   }
 
   /** Recent logs for a node (or the ckb chain when `node` is `"ckb"`). */

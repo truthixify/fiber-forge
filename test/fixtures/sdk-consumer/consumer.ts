@@ -11,11 +11,13 @@ import {
   type FiberForge,
   type FaultKind,
   type FaultReport,
+  type ForceCloseOptions,
   type FiberForgeError,
   type ForgeErrorCode,
   type LayoutOptions,
   type NetworkLayout,
   type NetworkView,
+  type ChannelSettlementReport,
   type MineReport,
   type NodeLifecycleOptions,
   type NodeLifecycleReport,
@@ -62,6 +64,8 @@ type ExpectedNetworkLayout = {
   }[];
 };
 type ExpectedForgeErrorCode =
+  | "CHANNEL_NOT_FOUND"
+  | "CHANNEL_STATE_MISMATCH"
   | "CONTAINER_NOT_FOUND"
   | "CONTAINER_START_FAILED"
   | "DOCKER_OPERATION_FAILED"
@@ -70,6 +74,7 @@ type ExpectedForgeErrorCode =
   | "FAULT_PRECONDITION_FAILED"
   | "FAULT_STATE_MISMATCH"
   | "FAULT_UNSUPPORTED"
+  | "FORCE_CLOSE_CONFIRMATION_REQUIRED"
   | "IMAGE_PULL_FAILED"
   | "INVALID_NETWORK_NAME"
   | "INVALID_PORT"
@@ -130,6 +135,8 @@ type AppForge = Pick<
   | "resetFault"
   | "resetAllFaults"
   | "mineBlocks"
+  | "forceCloseChannel"
+  | "inspectChannelSettlement"
   | "pay"
   | "down"
 >;
@@ -152,8 +159,17 @@ async function exerciseContract(client: AppForge): Promise<void> {
     topology.nodes[0].name,
   );
   const mined: MineReport = await client.mineBlocks(layout.net, 1);
+  const forceOptions: ForceCloseOptions = { confirmChannelId: "0xchannel" };
+  const settlement: Promise<ChannelSettlementReport> =
+    client.inspectChannelSettlement(
+      layout.net,
+      topology.nodes[0].name,
+      "0xchannel",
+    );
   void applied;
   void mined;
+  void forceOptions;
+  void settlement;
   void inspected;
   void lifecycleOptions;
   await client.down(view.net, downOptions);

@@ -6,6 +6,7 @@ import {
   FnnRpc,
   HttpTransport,
   ckbToShannonHex,
+  channelStateFlags,
   channelStateName,
   dialAddress,
   isChannelReady,
@@ -90,6 +91,32 @@ describe("FnnRpc", () => {
     expect(t.calls[0].params).toEqual([{ pubkey: "0xpeer" }]);
   });
 
+  it("includes closed channels only when requested", async () => {
+    const t = new FakeTransport(() => ({ channels: [] }));
+    await new FnnRpc(t).listChannels(undefined, true);
+    expect(t.calls[0]).toEqual({
+      method: "list_channels",
+      params: [{ include_closed: true }],
+    });
+  });
+
+  it("keeps cooperative and force shutdown payloads distinct", async () => {
+    const t = new FakeTransport(() => null);
+    const rpc = new FnnRpc(t);
+    await rpc.shutdownChannel("0xcooperative");
+    await rpc.shutdownChannel("0xforce", true);
+    expect(t.calls).toEqual([
+      {
+        method: "shutdown_channel",
+        params: [{ channel_id: "0xcooperative" }],
+      },
+      {
+        method: "shutdown_channel",
+        params: [{ channel_id: "0xforce", force: true }],
+      },
+    ]);
+  });
+
   it("surfaces JSON-RPC errors", async () => {
     const rpc = new FnnRpc(
       new FakeTransport(() => {
@@ -123,6 +150,18 @@ describe("channel state helpers", () => {
         state: "NegotiatingFunding",
       } as Channel),
     ).toBe(false);
+  });
+
+  it("parses structured state flags", () => {
+    expect(
+      channelStateFlags({
+        channel_id: "1",
+        state: {
+          state_name: "Closed",
+          state_flags: "UNCOOPERATIVE_LOCAL|WAITING_ONCHAIN_SETTLEMENT",
+        },
+      } as Channel),
+    ).toEqual(["UNCOOPERATIVE_LOCAL", "WAITING_ONCHAIN_SETTLEMENT"]);
   });
 });
 

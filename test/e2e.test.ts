@@ -694,6 +694,71 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
       const killRecovery = await reconcile(killReset);
       expect(killRecovery.pubkeys).toEqual(infos.map((info) => info.pubkey));
 
+      const forceCloseChannelId = channelIdsBefore[0][0];
+      if (!forceCloseChannelId) {
+        throw new Error(
+          "sender channel id was unavailable for force-close proof",
+        );
+      }
+      const forceObserverRestart = await orchestrator.restartNode(
+        RECOVERY_NET,
+        sender,
+      );
+      expect(forceObserverRestart).toMatchObject({
+        status: "running",
+        rpcReady: true,
+        identityMatches: true,
+      });
+
+      const forceClose = await orchestrator.forceCloseChannel(
+        RECOVERY_NET,
+        sender,
+        forceCloseChannelId,
+        {
+          confirmChannelId: forceCloseChannelId,
+          timeoutMs: 420_000,
+        },
+      );
+      expect(forceClose).toMatchObject({
+        operation: "force-close",
+        rpcAccepted: true,
+        closeMode: "force",
+        phase: "settled",
+        settled: true,
+        timedOut: false,
+        channelState: "Closed",
+        channelFlags: ["UNCOOPERATIVE_LOCAL"],
+        closingTransaction: { status: "committed" },
+        finalState: {
+          state: "Closed",
+          flags: ["UNCOOPERATIVE_LOCAL"],
+        },
+      });
+      expect(forceClose.commitmentTransactionHash).toMatch(/^0x[0-9a-f]{64}$/);
+      expect(forceClose.closingTransaction?.hash).toMatch(/^0x[0-9a-f]{64}$/);
+
+      const restartedOrchestrator = new Orchestrator(
+        engine,
+        assetsDir,
+        stateDir,
+      );
+      const reinspection = await restartedOrchestrator.inspectChannelSettlement(
+        RECOVERY_NET,
+        sender,
+        forceCloseChannelId,
+      );
+      expect(reinspection).toMatchObject({
+        operation: "inspect",
+        rpcAccepted: null,
+        phase: "settled",
+        settled: true,
+        commitmentTransactionHash: forceClose.commitmentTransactionHash,
+        closingTransaction: {
+          hash: forceClose.closingTransaction?.hash,
+          status: "committed",
+        },
+        finalState: forceClose.finalState,
+      });
       const teardownPartition = await orchestrator.applyFault(
         RECOVERY_NET,
         "peer-partition",
@@ -735,7 +800,7 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
     if (cleanupFailure) {
       throw cleanupFailure;
     }
-  }, 480_000);
+  }, 720_000);
 });
 
 describe.skipIf(!RUN)("live: partial provisioning rollback", () => {

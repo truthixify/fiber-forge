@@ -12,6 +12,8 @@ import { DockerEngine } from "./engine.js";
 import { errorDetails } from "./errors.js";
 import { type FaultKind, type FaultReport } from "./faults.js";
 import {
+  DEFAULT_FORCE_CLOSE_TIMEOUT_MS,
+  type ChannelSettlementReport,
   type NetworkView,
   type NodeLifecycleAction,
   type NodeLifecycleReport,
@@ -237,6 +239,43 @@ function printFault(report: FaultReport): void {
   console.log(`  ${ui.muted("observed")}  ${ui.text(report.observed.summary)}`);
   if (report.nextAction) {
     console.log(`  ${ui.muted("next")}      ${ui.text(report.nextAction)}`);
+  }
+  console.log("");
+}
+
+function printSettlement(report: ChannelSettlementReport): void {
+  const phase = report.settled
+    ? ui.success(report.phase)
+    : report.timedOut
+      ? ui.error(report.phase)
+      : ui.gold(report.phase);
+  console.log(
+    `\n  ${ui.channelGlyph(report.channelState)} ${ui.text(report.node)}   ${phase}   ${ui.muted(report.closeMode)}`,
+  );
+  console.log(`  ${ui.muted("channel")}     ${ui.text(report.channelId)}`);
+  console.log(
+    `  ${ui.muted("fiber")}       ${ui.text(report.channelState)}${report.channelFlags.length ? `   ${ui.muted(report.channelFlags.join(" | "))}` : ""}`,
+  );
+  console.log(
+    `  ${ui.muted("commitment")}  ${report.commitmentTransactionHash ? ui.text(report.commitmentTransactionHash) : ui.muted("not available")}`,
+  );
+  if (report.closingTransaction) {
+    console.log(
+      `  ${ui.muted("closing tx")}  ${ui.text(report.closingTransaction.hash)}`,
+    );
+    console.log(
+      `  ${ui.muted("ckb")}          ${ui.text(report.closingTransaction.status)}${report.closingTransaction.blockNumber === null ? "" : `   ${ui.muted("block " + report.closingTransaction.blockNumber)}`}`,
+    );
+  } else {
+    console.log(`  ${ui.muted("closing tx")}  ${ui.muted("not broadcast")}`);
+  }
+  if (report.finalState) {
+    console.log(
+      `  ${ui.muted("final state")} ${ui.success(report.finalState.state)}${report.finalState.flags.length ? `   ${ui.muted(report.finalState.flags.join(" | "))}` : ""}`,
+    );
+  }
+  if (report.nextAction) {
+    console.log(`  ${ui.muted("next")}         ${ui.text(report.nextAction)}`);
   }
   console.log("");
 }
@@ -658,7 +697,7 @@ export function buildCli(): Command {
 
   const channel = program
     .command("channel")
-    .description("open, close, and list channels");
+    .description("open, close, settle, and list channels");
 
   channel
     .command("open")
@@ -720,6 +759,83 @@ export function buildCli(): Command {
         `\n  ${ui.success("✔")}  closing ${ui.muted(ui.shortHash(channelId))} on ${ui.text(node)}\n`,
       );
     });
+
+  channel
+    .command("force-close")
+    .description(
+      "force-close disposable local value and wait for CKB settlement",
+    )
+    .argument("<net>", "network name")
+    .argument("<node>", "node that owns the channel")
+    .argument("<channelId>", "the full channel id")
+    .requiredOption(
+      "--confirm <channelId>",
+      "repeat the full channel id to authorize force-close",
+    )
+    .option(
+      "--timeout <ms>",
+      "maximum settlement wait in milliseconds",
+      (value) => Number.parseInt(value, 10),
+      DEFAULT_FORCE_CLOSE_TIMEOUT_MS,
+    )
+    .option(
+      "--mine-blocks <n>",
+      "dev-chain blocks generated per observation",
+      (value) => Number.parseInt(value, 10),
+      3,
+    )
+    .option("--json", "print machine-readable JSON")
+    .action(
+      async (
+        net: string,
+        node: string,
+        channelId: string,
+        options: {
+          confirm: string;
+          timeout: number;
+          mineBlocks: number;
+          json?: boolean;
+        },
+      ) => {
+        const report = await orchestrator().forceCloseChannel(
+          net,
+          node,
+          channelId,
+          {
+            confirmChannelId: options.confirm,
+            timeoutMs: options.timeout,
+            mineBlocksPerPoll: options.mineBlocks,
+          },
+        );
+        if (options.json) printJson(report);
+        else printSettlement(report);
+        if (!report.settled) process.exitCode = 2;
+      },
+    );
+
+  channel
+    .command("settlement")
+    .description("inspect a channel close from persisted Fiber and CKB state")
+    .argument("<net>", "network name")
+    .argument("<node>", "node that owns the channel")
+    .argument("<channelId>", "the full channel id")
+    .option("--json", "print machine-readable JSON")
+    .action(
+      async (
+        net: string,
+        node: string,
+        channelId: string,
+        options: { json?: boolean },
+      ) => {
+        const report = await orchestrator().inspectChannelSettlement(
+          net,
+          node,
+          channelId,
+        );
+        if (options.json) printJson(report);
+        else printSettlement(report);
+      },
+    );
 
   channel
     .command("ls")

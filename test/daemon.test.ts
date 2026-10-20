@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { type NetworkLayout } from "../src/config";
 import { type Backend, serveGui } from "../src/daemon";
 import {
+  type ChannelSettlementReport,
   type NetworkView,
   type NodeLifecycleAction,
   type NodeLifecycleReport,
@@ -52,6 +53,31 @@ function lifecycleReport(action: NodeLifecycleAction): NodeLifecycleReport {
   };
 }
 
+const settlementReport: ChannelSettlementReport = {
+  net: "duo",
+  node: "alice",
+  channelId: "0xchan",
+  operation: "inspect",
+  closeMode: "force",
+  rpcAccepted: null,
+  phase: "settled",
+  settled: true,
+  timedOut: false,
+  channelState: "Closed",
+  channelFlags: ["UNCOOPERATIVE_LOCAL"],
+  commitmentTransactionHash: "0xcommitment",
+  closingTransaction: {
+    hash: "0xclosing",
+    status: "committed",
+    blockHash: "0xblock",
+    blockNumber: 48,
+    reason: null,
+  },
+  finalState: { state: "Closed", flags: ["UNCOOPERATIVE_LOCAL"] },
+  elapsedMs: 0,
+  nextAction: null,
+};
+
 const backend: Backend = {
   inspect: async () => view,
   inspectNode: async () => lifecycleReport("inspect"),
@@ -69,6 +95,12 @@ const backend: Backend = {
   }),
   openChannelBetween: async () => {},
   closeChannel: async () => {},
+  forceCloseChannel: async () => ({
+    ...settlementReport,
+    operation: "force-close",
+    rpcAccepted: true,
+  }),
+  inspectChannelSettlement: async () => settlementReport,
   fund: async () => "0x",
   createInvoice: async () => "fibd1invoice",
   issueUdt: async () => "0xudttx",
@@ -144,6 +176,37 @@ describe("daemon", () => {
       expect(invalid.status).toBe(400);
       await expect(invalid.json()).resolves.toEqual({
         error: "action must be inspect, stop, start, or restart",
+      });
+    } finally {
+      server.close();
+    }
+  });
+
+  it("exposes force-close and restart-safe settlement inspection", async () => {
+    const server = await serveGui(backend, 0);
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const forced = await post(port, "/api/channel/force-close", {
+        net: "duo",
+        node: "alice",
+        channelId: "0xchan",
+        confirmChannelId: "0xchan",
+      });
+      expect(forced.status).toBe(200);
+      await expect(forced.json()).resolves.toMatchObject({
+        operation: "force-close",
+        rpcAccepted: true,
+        phase: "settled",
+      });
+
+      const inspected = await get(
+        port,
+        "/api/channel/settlement?net=duo&node=alice&channelId=0xchan",
+      );
+      expect(inspected.status).toBe(200);
+      await expect(inspected.json()).resolves.toMatchObject({
+        operation: "inspect",
+        phase: "settled",
       });
     } finally {
       server.close();

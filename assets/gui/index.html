@@ -315,7 +315,7 @@
                 <span class="mc" style="color:var(--muted);">{{ c.remote }} REMOTE</span>
               </div>
               <sc-if value="{{ c.canClose }}" hint-placeholder-val="{{ false }}">
-                <button onClick="{{ c.close }}" style="width:100%;margin-top:10px;background:transparent;color:var(--alarm);border:1px solid var(--alarm);padding:8px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.08em;">⚠ CLOSE CHANNEL</button>
+                <button onClick="{{ c.close }}" style="width:100%;margin-top:10px;background:transparent;color:var(--alarm);border:1px solid var(--alarm);padding:8px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.08em;">CLOSE COOPERATIVELY</button>
               </sc-if>
             </div>
           </sc-for>
@@ -375,7 +375,56 @@
           <span class="mc">OPENED</span><span class="num" style="font-size:12px;color:var(--text);">12s ago</span>
         </div>
         <button onClick="{{ openPay }}" style="width:100%;background:var(--ember);color:#1a0b06;border:none;padding:13px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;margin-bottom:1px;">SEND PAYMENT ACROSS →</button>
-        <button onClick="{{ confirmCloseChannel }}" style="width:100%;background:transparent;color:var(--alarm);border:1px solid var(--alarm);padding:13px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">⚠ CLOSE CHANNEL</button>
+        <button onClick="{{ confirmCloseChannel }}" style="width:100%;background:transparent;color:var(--text);border:1px solid var(--border);padding:13px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">CLOSE COOPERATIVELY</button>
+        <button id="force-close-trigger" class="ff-focus" onClick="{{ requestForceClose }}" disabled="{{ forceCloseUnavailable }}" style="width:100%;min-height:42px;margin-top:8px;background:transparent;color:var(--alarm);border:1px solid var(--alarm);padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">FORCE CLOSE</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ FORCE-CLOSE CONFIRMATION + SETTLEMENT ============ -->
+  <sc-if value="{{ forceCloseOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:rgba(6,8,11,.72);z-index:20;"></div>
+    <div role="dialog" aria-modal="true" aria-labelledby="force-close-title" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:min(520px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;background:var(--panel);border:1px solid var(--alarm);z-index:21;animation:sheetIn .22s cubic-bezier(.2,.8,.2,1);">
+      <div style="padding:16px 18px;border-bottom:1px solid var(--hairline);display:flex;align-items:center;justify-content:space-between;gap:16px;">
+        <div><div id="force-close-title" class="mc" style="font-size:12px;color:var(--alarm);">FORCE-CLOSE CHANNEL</div><div style="font-size:13px;color:var(--muted);margin-top:5px;">{{ forceCloseNode }}</div></div>
+        <button class="ff-focus" aria-label="Close force-close dialog" onClick="{{ cancelForceClose }}" disabled="{{ forceCloseBusy }}" style="min-width:40px;min-height:40px;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
+      </div>
+      <div style="padding:18px;">
+        <div style="font-size:13px;line-height:1.55;color:var(--text);margin-bottom:14px;">This publishes the latest Fiber commitment to the disposable CKB dev chain. Type the full channel ID to confirm.</div>
+        <div class="mc" style="color:var(--faint);margin-bottom:6px;">CHANNEL ID</div>
+        <div class="num" style="font-size:11px;line-height:1.5;color:var(--bone);word-break:break-all;padding:10px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:10px;">{{ forceCloseChannelId }}</div>
+        <label class="mc" for="force-close-confirm" style="display:block;color:var(--muted);margin-bottom:6px;">CONFIRM FULL ID</label>
+        <input id="force-close-confirm" aria-label="Confirm full channel ID" value="{{ forceCloseConfirm }}" onInput="{{ setForceCloseConfirm }}" disabled="{{ forceCloseBusy }}" autocomplete="off" spellcheck="false" style="width:100%;min-height:42px;background:var(--inset);color:var(--bone);border:1px solid var(--border);padding:10px;font-family:'Geist Mono',monospace;font-size:11px;outline:none;">
+
+        <sc-if value="{{ forceCloseBusy }}" hint-placeholder-val="{{ false }}">
+          <div role="status" aria-live="polite" aria-busy="true" style="margin-top:12px;padding:12px;border:1px solid var(--amber);color:var(--amber);font-family:'Geist Mono',monospace;font-size:11px;line-height:1.5;">CLOSE REQUESTED · WAITING FOR FIBER AND CKB SETTLEMENT</div>
+        </sc-if>
+        <sc-if value="{{ forceCloseError }}" hint-placeholder-val="{{ false }}">
+          <div role="alert" style="margin-top:12px;padding:12px;border:1px solid var(--alarm);color:var(--alarm);font-family:'Geist Mono',monospace;font-size:11px;line-height:1.5;word-break:break-word;">{{ forceCloseError }}</div>
+        </sc-if>
+        <sc-if value="{{ forceCloseHasReport }}" hint-placeholder-val="{{ false }}">
+          <div role="status" aria-live="polite" style="margin-top:12px;border:1px solid {{ forceCloseOutcomeColor }};background:var(--inset);">
+            <div class="mc" style="padding:11px;color:{{ forceCloseOutcomeColor }};border-bottom:1px solid var(--hairline);">{{ forceCloseOutcome }}</div>
+            <div style="padding:11px;display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px 10px;font-family:'Geist Mono',monospace;font-size:11px;line-height:1.45;">
+              <span style="color:var(--faint);">FIBER STATE</span><span style="color:var(--text);word-break:break-word;">{{ forceCloseFiberState }}</span>
+              <span style="color:var(--faint);">COMMITMENT</span><span style="color:var(--text);word-break:break-all;">{{ forceCloseCommitment }}</span>
+              <span style="color:var(--faint);">CLOSING TX</span><span style="color:var(--text);word-break:break-all;">{{ forceCloseTransaction }}</span>
+              <span style="color:var(--faint);">CONFIRMATION</span><span style="color:var(--text);">{{ forceCloseConfirmation }}</span>
+              <span style="color:var(--faint);">FINAL STATE</span><span style="color:{{ forceCloseOutcomeColor }};word-break:break-word;">{{ forceCloseFinalState }}</span>
+              <span style="color:var(--faint);">NEXT</span><span style="color:var(--muted);word-break:break-word;">{{ forceCloseNext }}</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="display:flex;gap:8px;margin-top:14px;">
+          <button class="ff-focus" onClick="{{ cancelForceClose }}" disabled="{{ forceCloseBusy }}" style="min-height:42px;flex:1;background:transparent;color:var(--muted);border:1px solid var(--border);cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;">{{ forceCloseDismissLabel }}</button>
+          <sc-if value="{{ forceCloseCanRefresh }}" hint-placeholder-val="{{ false }}">
+            <button class="ff-focus" onClick="{{ refreshForceClose }}" style="min-height:42px;flex:1;background:var(--panel-2);color:var(--signal);border:1px solid var(--signal);cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;">REFRESH STATUS</button>
+          </sc-if>
+          <sc-if value="{{ forceCloseCanRequest }}" hint-placeholder-val="{{ true }}">
+            <button class="ff-focus" onClick="{{ confirmForceClose }}" disabled="{{ forceCloseSubmitDisabled }}" style="min-height:42px;flex:1;background:var(--alarm);color:var(--void);border:none;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:10px;">FORCE CLOSE AND WAIT</button>
+          </sc-if>
+        </div>
       </div>
     </div>
   </sc-if>
@@ -628,6 +677,7 @@ class Component extends DCLogic {
     name: 'forge-trio', payFrom: null, payTo: null,
     nodeTab: 'overview', invoiceOpen: false, invoiceAmt: 100, invoiceAddr: '', invoiceBusy: false, nodeLogs: '', nodeLogEntries: [], logLevel: 'ALL', copyFlash: null,
     nodeAction: null, nodeActionBusy: false, nodeActionError: '', nodeActionResult: '',
+    forceCloseOpen: false, forceCloseTarget: null, forceCloseConfirm: '', forceCloseBusy: false, forceCloseError: '', forceCloseReport: null,
     payUdt: false, capUdt: false, invoiceUdt: false, fundUdt: false, pendingOpens: [], nets: [],
   };
 
@@ -640,6 +690,7 @@ class Component extends DCLogic {
   }
 
   _shuffle(arr) { var a = arr.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  demoChannelId(j) { return '0x' + String(j + 1).padStart(64, '0'); }
 
   // ---------------- topology builder ----------------
   mkPub(i) { const h = '0123456789abcdef'; return '0x0' + (3 + i % 9) + h[(i * 5 + 2) % 16] + h[(i * 7 + 1) % 16] + (i % 10) + '…' + h[(i * 11 + 3) % 16] + h[(i * 3 + 5) % 16] + (i % 9) + h[(i * 13) % 16]; }
@@ -673,7 +724,7 @@ class Component extends DCLogic {
     else if (preset === 'line') for (let i = 0; i < n - 1; i++) pairs.push([i, i + 1]);
     else if (preset === 'ring') { for (let i = 0; i < n - 1; i++) pairs.push([i, i + 1]); if (n > 2) pairs.push([n - 1, 0]); }
     else for (let i = 1; i < n; i++) pairs.push([0, i]);
-    const channels = pairs.map((pr, j) => ({ id: 'c' + j, from: nodes[pr[0]].id, to: nodes[pr[1]].id, cap: 1000, hash: this.mkHash(j) }));
+    const channels = pairs.map((pr, j) => ({ id: 'c' + j, from: nodes[pr[0]].id, to: nodes[pr[1]].id, cap: 1000, hash: this.mkHash(j), channelId: this.demoChannelId(j) }));
     const chState = {}, balances = {}, onchain = {};
     channels.forEach((c, j) => { chState[c.id] = 'ready'; balances[c.id] = Math.round(1000 * (0.5 + 0.17 * Math.sin(j * 1.7 + 0.4))); });
     nodes.forEach((nd, i) => { onchain[nd.id] = (funding || 10000) - 150 - i * 40; });
@@ -952,6 +1003,76 @@ class Component extends DCLogic {
     this.setState(st => ({ events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + nodeName + ' closing' }, ...st.events].slice(0, 8) }));
   };
 
+  requestForceClose = () => {
+    const selected = this.state.sel;
+    const channel = selected && selected.type === 'channel' ? this.state.channels.find(function (item) { return item.id === selected.id; }) : null;
+    if (!channel || !channel.channelId || channel.pending) return;
+    const owner = this.node(channel.from);
+    this.setState({
+      forceCloseOpen: true,
+      forceCloseTarget: { channelId: channel.channelId, node: owner ? owner.name : '', label: (owner ? owner.name : '?') + '⇄' + ((this.node(channel.to) || {}).name || '?') },
+      forceCloseConfirm: '',
+      forceCloseBusy: false,
+      forceCloseError: '',
+      forceCloseReport: null,
+    }, function () { var input = document.getElementById('force-close-confirm'); if (input) input.focus(); });
+  };
+  setForceCloseConfirm = (event) => this.setState({ forceCloseConfirm: event.target.value, forceCloseError: '' });
+  cancelForceClose = () => { if (!this.state.forceCloseBusy) this.setState({ forceCloseOpen: false, forceCloseError: '' }, function () { var trigger = document.getElementById('force-close-trigger'); if (trigger) trigger.focus(); }); };
+  _applyForceCloseReport(report) {
+    const target = this.state.forceCloseTarget || {};
+    const complete = !!report.settled;
+    const timedOut = !!report.timedOut;
+    const message = complete ? 'SETTLEMENT COMPLETE' : timedOut ? 'SETTLEMENT PENDING' : 'CLOSE REQUESTED';
+    this.setState(st => ({
+      forceCloseBusy: false,
+      forceCloseError: '',
+      forceCloseReport: report,
+      lastCmd: 'fiber-forge channel settlement ' + this._forgeNet() + ' ' + (target.node || '') + ' ' + (target.channelId || ''),
+      events: [{ t: this.now(), c: complete ? 'var(--flux)' : 'var(--amber)', msg: 'CHANNEL ' + (target.label || '') + ' · ' + message }, ...st.events].slice(0, 8),
+    }), () => { if (this._forgePollFn) this._forgePollFn(); });
+  }
+  _forceCloseFailure(error) {
+    this.setState({ forceCloseBusy: false, forceCloseError: error instanceof Error ? error.message : String(error) });
+  }
+  confirmForceClose = () => {
+    const target = this.state.forceCloseTarget;
+    if (!target || this.state.forceCloseBusy || this.state.forceCloseConfirm !== target.channelId) return;
+    this.setState({ forceCloseBusy: true, forceCloseError: '', forceCloseReport: null });
+    if (!window.__FORGE__) {
+      const self = this;
+      setTimeout(function () {
+        self._applyForceCloseReport({ settled: true, timedOut: false, rpcAccepted: true, phase: 'settled', channelState: 'Closed', channelFlags: ['UNCOOPERATIVE_LOCAL'], commitmentTransactionHash: '0xcommitment-demo', closingTransaction: { hash: '0xclosing-demo', status: 'committed', blockNumber: 48 }, finalState: { state: 'Closed', flags: ['UNCOOPERATIVE_LOCAL'] }, nextAction: null });
+      }, 700);
+      return;
+    }
+    const self = this;
+    const net = this._forgeNet();
+    fetch('/api/channel/force-close', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ net: net, node: target.node, channelId: target.channelId, confirmChannelId: this.state.forceCloseConfirm }),
+    }).then(function (response) {
+      return response.json().then(function (body) {
+        if (!response.ok || (body && body.error)) throw new Error(String((body && body.error) || ('HTTP ' + response.status)));
+        return body;
+      });
+    }).then(function (report) { self._applyForceCloseReport(report); }).catch(function (error) { self._forceCloseFailure(error); });
+  };
+  refreshForceClose = () => {
+    const target = this.state.forceCloseTarget;
+    if (!target || this.state.forceCloseBusy || !window.__FORGE__) return;
+    const self = this;
+    this.setState({ forceCloseBusy: true, forceCloseError: '' });
+    const query = '?net=' + encodeURIComponent(this._forgeNet()) + '&node=' + encodeURIComponent(target.node) + '&channelId=' + encodeURIComponent(target.channelId);
+    fetch('/api/channel/settlement' + query).then(function (response) {
+      return response.json().then(function (body) {
+        if (!response.ok || (body && body.error)) throw new Error(String((body && body.error) || ('HTTP ' + response.status)));
+        return body;
+      });
+    }).then(function (report) { self._applyForceCloseReport(report); }).catch(function (error) { self._forceCloseFailure(error); });
+  };
+
   requestNodeAction(action) {
     if (this.state.nodeActionBusy) return;
     this.setState({ nodeAction: action, nodeActionError: '', nodeActionResult: '' });
@@ -1063,7 +1184,7 @@ class Component extends DCLogic {
     var F = this;
     this._forgeNet_ = net;
     this._forgeFitted = false;
-    this.setState({ events: [], nodeLogEntries: [], nodeLogs: '', pendingOpens: [], sel: null, nodeAction: null, nodeActionBusy: false, nodeActionError: '', nodeActionResult: '' });
+    this.setState({ events: [], nodeLogEntries: [], nodeLogs: '', pendingOpens: [], sel: null, nodeAction: null, nodeActionBusy: false, nodeActionError: '', nodeActionResult: '', forceCloseOpen: false, forceCloseTarget: null, forceCloseConfirm: '', forceCloseBusy: false, forceCloseError: '', forceCloseReport: null });
     var first = true;
     this._forgeApply = function (v) {
       if (v && v.nodes && v.nodes.length && F._forgeNet_ === net) {
@@ -1177,7 +1298,7 @@ class Component extends DCLogic {
   zoomIn = () => { const r = this._floorEl.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 1.25); };
   zoomOut = () => { const r = this._floorEl.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 0.8); };
   handleWheel(e) { if (!e.target || !e.target.closest || !e.target.closest('[data-floor]')) return; e.preventDefault(); const r = this._floorEl.getBoundingClientRect(); this.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0016)); }
-  handleKey(e) { if (e.key === 'Escape' && this.state.nodeAction && !this.state.nodeActionBusy) { e.preventDefault(); this.cancelNodeAction(); return; } if (window.__FORGE__ && this.state.screen === 'floor' && (e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); this._forgeCycle(); return; } if (!(e.metaKey || e.ctrlKey)) return; if (e.key === '0') { e.preventDefault(); this.fitView(); } else if (e.key === '1') { e.preventDefault(); this.reset100(); } }
+  handleKey(e) { if (e.key === 'Escape' && this.state.forceCloseOpen && !this.state.forceCloseBusy) { e.preventDefault(); this.cancelForceClose(); return; } if (e.key === 'Escape' && this.state.nodeAction && !this.state.nodeActionBusy) { e.preventDefault(); this.cancelNodeAction(); return; } if (window.__FORGE__ && this.state.screen === 'floor' && (e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); this._forgeCycle(); return; } if (!(e.metaKey || e.ctrlKey)) return; if (e.key === '0') { e.preventDefault(); this.fitView(); } else if (e.key === '1') { e.preventDefault(); this.reset100(); } }
   onPointerDown = (e) => { if (e.target.closest && (e.target.closest('[data-node]') || e.target.closest('[data-conduit]'))) return; this._pan = { x: e.clientX, y: e.clientY, vx: this._view.x, vy: this._view.y, moved: false }; try { this._floorEl.setPointerCapture(e.pointerId); } catch (_) {} this.applyView(); };
   onPointerMove = (e) => { if (!this._pan) return; const dx = e.clientX - this._pan.x, dy = e.clientY - this._pan.y; if (Math.abs(dx) + Math.abs(dy) > 3) this._pan.moved = true; this._view.x = this._pan.vx + dx; this._view.y = this._pan.vy + dy; this.applyView(); };
   onPointerUp = (e) => { const moved = this._pan && this._pan.moved; this._pan = null; try { this._floorEl.releasePointerCapture(e.pointerId); } catch (_) {} this.applyView(); if (!moved && this.state.sel) this.clearSel(); };
@@ -1424,6 +1545,13 @@ class Component extends DCLogic {
     const scene = (label, id, go) => ({ label, go, bg: S.screen === id ? 'var(--ember)' : 'var(--panel)', fg: S.screen === id ? '#1a0b06' : 'var(--muted)' });
     const modeDefs = [['1', 'SELECT', 'select'], ['2', 'WIRE', 'wire'], ['3', 'PAY', 'pay'], ['4', 'FUND', 'fund'], ['5', 'PIN', 'pin']];
     const chLocal = ch ? (S.balances[ch.id] != null ? S.balances[ch.id] : ch.cap / 2) : 0;
+    const forceTarget = S.forceCloseTarget || {};
+    const forceReport = S.forceCloseReport;
+    const forceTx = forceReport && forceReport.closingTransaction;
+    const forceFinal = forceReport && forceReport.finalState;
+    const forceComplete = !!(forceReport && forceReport.settled);
+    const forceOutcome = !forceReport ? '' : forceComplete ? 'SETTLEMENT COMPLETE' : forceReport.timedOut ? 'REQUEST TIMED OUT · SETTLEMENT CONTINUES' : ('CLOSE REQUESTED · ' + String(forceReport.phase || 'pending').toUpperCase());
+    const forceOutcomeColor = forceComplete ? 'var(--flux)' : forceReport && forceReport.timedOut ? 'var(--amber)' : 'var(--signal)';
     let nInch = 0;
     if (n) S.channels.forEach(c => { if (c.from === n.id) nInch += (S.balances[c.id] || 0); else if (c.to === n.id) nInch += (c.cap - (S.balances[c.id] || 0)); });
     const nodeChans = n ? S.channels.filter(c => c.from === n.id || c.to === n.id).map(c => {
@@ -1494,7 +1622,7 @@ class Component extends DCLogic {
       vitals: [{ k: 'CAPACITY', val: this.fmt(totalCap), c: 'var(--flux)' }, { k: 'ON-CHAIN', val: this.fmt(totalOnchain), c: 'var(--gold)' }, { k: 'BLOCK', val: '#' + (S.block || 0), c: 'var(--text)' }],
       vNodes: String(N), vChannels: String(readyChans.length),
       events: S.events, lastCmd: S.lastCmd,
-      enterWizard: this.enterWizard, openPay: this.openPay, openFund: this.openFund, openCap: this.openCap, clearSel: this.clearSel, goFloor: this.goFloor, confirmCloseChannel: this.confirmCloseChannel, forgeCycle: () => this._forgeCycle(), cyclePayFrom: this.cyclePayFrom, cyclePayTo: this.cyclePayTo,
+      enterWizard: this.enterWizard, openPay: this.openPay, openFund: this.openFund, openCap: this.openCap, clearSel: this.clearSel, goFloor: this.goFloor, confirmCloseChannel: this.confirmCloseChannel, requestForceClose: this.requestForceClose, forgeCycle: () => this._forgeCycle(), cyclePayFrom: this.cyclePayFrom, cyclePayTo: this.cyclePayTo,
       zoomPct: String(S.zoomPct), zoomIn: this.zoomIn, zoomOut: this.zoomOut, zoomFit: this.fitView,
       bootSteps, bootLabel, bootPctW: Math.round(bs / total * 100) + '%',
       isNode: isFloor && !!n, isChannel: isFloor && !!ch,
@@ -1524,6 +1652,19 @@ class Component extends DCLogic {
       invoiceAmtDisp: this.fmt(S.invoiceAmt), invoiceAddr: S.invoiceAddr, invoiceHasAddr: !!S.invoiceAddr, invoiceBusy: S.invoiceBusy, invoiceNodeName: n ? n.name : '',
       spark: n ? (nodeChans.length ? nodeChans.map(c => ({ h: Math.max(4, parseInt(c.localW, 10) || 0) + '%' })) : [{ h: '4%' }]) : [],
       chFrom: ch ? this.node(ch.from).name : '', chTo: ch ? this.node(ch.to).name : '', chCap: ch ? this.fmt(ch.cap) : '', chLocal: ch ? this.fmt(chLocal) : '', chRemote: ch ? this.fmt(ch.cap - chLocal) : '', chHash: ch ? ch.hash : '', chUnit: ch && ch.udt ? 'UDT' : 'CKB', chIsUdt: !!(ch && ch.udt),
+      forceCloseUnavailable: !ch || !ch.channelId || !!ch.pending,
+      forceCloseOpen: S.forceCloseOpen, forceCloseNode: forceTarget.node || '', forceCloseChannelId: forceTarget.channelId || '', forceCloseConfirm: S.forceCloseConfirm,
+      setForceCloseConfirm: this.setForceCloseConfirm, cancelForceClose: this.cancelForceClose, confirmForceClose: this.confirmForceClose, refreshForceClose: this.refreshForceClose,
+      forceCloseBusy: S.forceCloseBusy, forceCloseError: S.forceCloseError, forceCloseHasReport: !!forceReport,
+      forceCloseCanRequest: !forceReport, forceCloseCanRefresh: !!forceReport && !forceComplete && !S.forceCloseBusy,
+      forceCloseSubmitDisabled: S.forceCloseBusy || !forceTarget.channelId || S.forceCloseConfirm !== forceTarget.channelId,
+      forceCloseDismissLabel: forceReport ? 'CLOSE' : 'CANCEL', forceCloseOutcome: forceOutcome, forceCloseOutcomeColor: forceOutcomeColor,
+      forceCloseFiberState: forceReport ? (forceReport.channelState + ((forceReport.channelFlags || []).length ? ' · ' + forceReport.channelFlags.join(' | ') : '')) : '',
+      forceCloseCommitment: forceReport && forceReport.commitmentTransactionHash ? forceReport.commitmentTransactionHash : 'not available',
+      forceCloseTransaction: forceTx ? forceTx.hash : 'not broadcast',
+      forceCloseConfirmation: forceTx ? (String(forceTx.status || 'unknown').toUpperCase() + (forceTx.blockNumber == null ? '' : ' · BLOCK ' + forceTx.blockNumber)) : 'NOT CONFIRMED',
+      forceCloseFinalState: forceFinal ? (forceFinal.state + ((forceFinal.flags || []).length ? ' · ' + forceFinal.flags.join(' | ') : '')) : 'pending',
+      forceCloseNext: forceReport ? (forceReport.nextAction || 'none') : '',
       payOpen: S.payOpen, closePay: this.closePay, incPay: this.incPay, decPay: this.decPay, confirmPay: this.confirmPay, payAmtDisp: this.fmt(S.payAmt),
       payFromName: pf ? pf.name : '', payToName: pt ? pt.name : '', payFromHue: pf ? pf.hue : 'var(--ember)', payToHue: pt ? pt.hue : 'var(--violet)', payHopsLabel: String(payHasRoute ? dispPath.length - 1 : 0), payRoute,
       sendBg: payHasRoute ? 'var(--ember)' : 'var(--panel-2)', sendFg: payHasRoute ? '#1a0b06' : 'var(--faint)', sendLabel: payHasRoute ? 'SEND SPARK ⚡' : 'NO ROUTE',

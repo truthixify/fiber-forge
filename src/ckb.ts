@@ -31,6 +31,14 @@ export interface OutPoint {
   index: number;
 }
 
+/** The CKB node's observation of a transaction. */
+export interface CkbTransactionStatus {
+  status: string;
+  blockHash: string | null;
+  blockNumber: number | null;
+  reason: string | null;
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function rawRpc(
@@ -103,6 +111,31 @@ export class DevChain {
   /** The current tip block number. */
   async tipBlock(): Promise<number> {
     return Number(await rawRpc(this.rpcUrl, "get_tip_block_number", []));
+  }
+
+  /** Read a transaction's pool/chain status without returning its full payload. */
+  async transactionStatus(txHash: string): Promise<CkbTransactionStatus> {
+    const result = (await rawRpc(this.rpcUrl, "get_transaction", [
+      txHash,
+      "0x1",
+    ])) as {
+      tx_status?: {
+        status?: string;
+        block_hash?: string | null;
+        block_number?: string | null;
+        reason?: string | null;
+      };
+    } | null;
+    const status = result?.tx_status;
+    return {
+      status: status?.status ?? "unknown",
+      blockHash: status?.block_hash ?? null,
+      blockNumber:
+        status?.block_number === undefined || status.block_number === null
+          ? null
+          : Number(status.block_number),
+      reason: status?.reason ?? null,
+    };
   }
 
   /** The secp256k1 CKB address for a raw private key (the node's on-chain wallet). */
