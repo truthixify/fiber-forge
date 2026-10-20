@@ -66,6 +66,14 @@ import {
   parseFaultFile,
 } from "./faults.js";
 import { encryptKey, generatePrivateKey } from "./keys.js";
+import {
+  LightningBackend,
+  type LightningBackendPlan,
+  type LightningBackendStartOptions,
+  type LightningBackendStatus,
+  lightningVolumeNames,
+  planLightningBackend,
+} from "./lightning.js";
 import { runtimeImages } from "./package-metadata.js";
 import { findFreePort, findFreePortBlock, isPortFree } from "./ports.js";
 import {
@@ -605,6 +613,10 @@ export class Orchestrator {
       await this.engine.removeNetwork(`forge-${net}`);
     }
     await this.engine.removeVolume(`forge-${net}-ckb-data`);
+    const backendVolumes = lightningVolumeNames(net);
+    for (const volume of Object.values(backendVolumes)) {
+      await this.engine.removeVolume(volume);
+    }
     const netDir = join(this.stateDir, net);
     try {
       await rm(netDir, { recursive: true, force: true });
@@ -1364,6 +1376,64 @@ export class Orchestrator {
     };
   }
 
+  /** Start the optional, private Bitcoin/LND backend on an existing managed Fiber network. */
+  async startLightningBackend(
+    net: string,
+    options: LightningBackendStartOptions = {},
+  ): Promise<LightningBackendStatus> {
+    const state = await this.readState(net);
+    const plan = this.lightningPlan(state);
+    const backend = new LightningBackend(this.engine);
+    const status = await backend.start(plan, options);
+    try {
+      await writeFile(
+        join(this.stateDir, net, "lightning.json"),
+        JSON.stringify(plan, null, 2),
+      );
+      return status;
+    } catch (error) {
+      const persistenceFailure = new ForgeError(
+        "PROVISION_FAILED",
+        `could not persist the Lightning backend plan for "${net}"`,
+        {
+          resource: net,
+          action: "fix the network state directory permissions and retry",
+          cause: error,
+        },
+      );
+      try {
+        await backend.down(plan);
+      } catch (rollbackError) {
+        throw new ForgeError(
+          "ROLLBACK_FAILED",
+          `${persistenceFailure.message}; Lightning backend rollback was also incomplete: ${errorDetails(rollbackError).message}`,
+          {
+            resource: net,
+            action: `fix Docker and run "fiber-forge down ${net}"`,
+            cause: new AggregateError([persistenceFailure, rollbackError]),
+          },
+        );
+      }
+      throw persistenceFailure;
+    }
+  }
+
+  /** Return a sanitized, JSON-safe view of the optional Bitcoin/LND backend. */
+  async lightningBackendStatus(net: string): Promise<LightningBackendStatus> {
+    const state = await this.readState(net);
+    return new LightningBackend(this.engine).status(this.lightningPlan(state));
+  }
+
+  /** Remove every optional Bitcoin/LND container and data volume for a managed network. */
+  async stopLightningBackend(net: string): Promise<LightningBackendStatus> {
+    const state = await this.readState(net);
+    const backend = new LightningBackend(this.engine);
+    const plan = this.lightningPlan(state);
+    await backend.down(plan);
+    await rm(join(this.stateDir, net, "lightning.json"), { force: true });
+    return backend.status(plan);
+  }
+
   /**
    * Tear a network down. By default removes its containers, network, and ckb data volume, keeping
    * the state dir. `keep` preserves the CKB data volume too; `purge` also deletes the state dir,
@@ -1428,9 +1498,19 @@ export class Orchestrator {
         );
       }
     }
+    for (const volume of Object.values(lightningVolumeNames(net))) {
+      try {
+        await this.engine.removeVolume(volume);
+      } catch (error) {
+        failures.push(
+          `remove volume ${volume}: ${errorDetails(error).message}`,
+        );
+      }
+    }
     if (failures.length === 0) {
       try {
         await rm(join(this.stateDir, net, "faults.json"), { force: true });
+        await rm(join(this.stateDir, net, "lightning.json"), { force: true });
       } catch (error) {
         failures.push(
           `remove fault state ${net}: ${errorDetails(error).message}`,
@@ -3179,6 +3259,21 @@ export class Orchestrator {
         cause: error,
       });
     }
+  }
+
+  private lightningPlan(state: NetworkState): LightningBackendPlan {
+    const match = state.ckbIp?.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/);
+    if (!match) {
+      throw new ForgeError(
+        "PROVISION_FAILED",
+        `network "${state.net}" does not record a supported IPv4 layout`,
+        {
+          resource: state.net,
+          action: "recreate the network with the current Fiber Forge version",
+        },
+      );
+    }
+    return planLightningBackend(state.net, state.network, match[1]);
   }
 
   private requireNode(

@@ -11,6 +11,7 @@ import { type NetworkLayout } from "./config.js";
 import { DockerEngine } from "./engine.js";
 import { errorDetails } from "./errors.js";
 import { type FaultKind, type FaultReport } from "./faults.js";
+import { type LightningBackendStatus } from "./lightning.js";
 import {
   DEFAULT_FORCE_CLOSE_TIMEOUT_MS,
   type ChannelSettlementReport,
@@ -294,6 +295,33 @@ function printSettlement(report: ChannelSettlementReport): void {
   }
   if (report.nextAction) {
     console.log(`  ${ui.muted("next")}         ${ui.text(report.nextAction)}`);
+  }
+  console.log("");
+}
+
+function printLightningStatus(status: LightningBackendStatus): void {
+  const state =
+    status.state === "ready"
+      ? ui.success(status.state)
+      : status.state === "absent"
+        ? ui.muted(status.state)
+        : ui.error(status.state);
+  console.log(`\n  ${ui.text(status.net)}   ${state}`);
+  console.log(
+    `  ${ui.muted("bitcoin")}  ${ui.text(status.bitcoin.container)}   ${ui.muted(status.bitcoin.blockHeight === null ? "height unknown" : `height ${status.bitcoin.blockHeight}`)}`,
+  );
+  for (const [name, node] of [
+    ["lnd hub", status.hub],
+    ["lnd user", status.user],
+  ] as const) {
+    console.log(
+      `  ${ui.muted(name)}  ${ui.text(node.container)}   ${ui.muted(node.syncedToChain === true ? "chain synced" : "not ready")}`,
+    );
+  }
+  if (status.channel) {
+    console.log(
+      `  ${ui.muted("channel")}  ${ui.success("active")}   ${ui.text(`${status.channel.capacitySats} sats`)}`,
+    );
   }
   console.log("");
 }
@@ -1083,6 +1111,58 @@ export function buildCli(): Command {
         }
         if (!result.reproduced) process.exitCode = 2;
       },
+    );
+
+  program
+    .command("lightning")
+    .description("manage the optional local Bitcoin/LND backend")
+    .addCommand(
+      new Command("up")
+        .argument("<net>", "existing managed Fiber network")
+        .option("--timeout <ms>", "overall backend setup timeout", (value) =>
+          Number.parseInt(value, 10),
+        )
+        .option("--json", "print machine-readable JSON")
+        .action(
+          async (
+            net: string,
+            options: { timeout?: number; json?: boolean },
+          ) => {
+            const status = await withProcessAbort((signal) =>
+              orchestrator().startLightningBackend(net, {
+                signal,
+                ...(options.timeout === undefined
+                  ? {}
+                  : { timeoutMs: options.timeout }),
+                onProgress: options.json
+                  ? undefined
+                  : (message) => console.error(`  ${ui.muted(message)}`),
+              }),
+            );
+            if (options.json) printJson(status);
+            else printLightningStatus(status);
+          },
+        ),
+    )
+    .addCommand(
+      new Command("status")
+        .argument("<net>", "managed Fiber network")
+        .option("--json", "print machine-readable JSON")
+        .action(async (net: string, options: { json?: boolean }) => {
+          const status = await orchestrator().lightningBackendStatus(net);
+          if (options.json) printJson(status);
+          else printLightningStatus(status);
+        }),
+    )
+    .addCommand(
+      new Command("down")
+        .argument("<net>", "managed Fiber network")
+        .option("--json", "print machine-readable JSON")
+        .action(async (net: string, options: { json?: boolean }) => {
+          const status = await orchestrator().stopLightningBackend(net);
+          if (options.json) printJson(status);
+          else printLightningStatus(status);
+        }),
     );
 
   program

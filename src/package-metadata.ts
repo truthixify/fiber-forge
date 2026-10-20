@@ -8,6 +8,10 @@ interface PackageMetadata {
       ckb: string;
       fiber: string;
     };
+    cchImages: {
+      bitcoin: string;
+      lnd: string;
+    };
   };
 }
 
@@ -21,10 +25,20 @@ if (!metadata.name || !metadata.version) {
 if (!metadata.fiberForge?.images?.ckb || !metadata.fiberForge.images.fiber) {
   throw new Error("package.json does not contain the pinned runtime images");
 }
+if (
+  !metadata.fiberForge.cchImages?.bitcoin ||
+  !metadata.fiberForge.cchImages.lnd
+) {
+  throw new Error("package.json does not contain the pinned CCH images");
+}
 
 export const packageName = metadata.name;
 export const packageVersion = metadata.version;
 export const runtimeImages = Object.freeze({
   ckb: metadata.fiberForge.images.ckb,
   fiber: metadata.fiberForge.images.fiber,
+});
+export const cchImages = Object.freeze({
+  bitcoin: metadata.fiberForge.cchImages.bitcoin,
+  lnd: metadata.fiberForge.cchImages.lnd,
 });

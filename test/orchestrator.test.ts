@@ -7,6 +7,7 @@ import { planLayout } from "../src/config";
 import { type ContainerSpec, FakeEngine } from "../src/engine";
 import { type FaultCapabilities } from "../src/engine";
 import { ForgeError } from "../src/errors";
+import { lightningVolumeNames } from "../src/lightning";
 import {
   FORGE_LABEL,
   type NetworkState,
@@ -1007,6 +1008,24 @@ describe("Orchestrator.down", () => {
       network: "forge-duo",
       labels: { [FORGE_LABEL]: "duo" },
     });
+    const lightningVolumes = lightningVolumeNames("duo");
+    await engine.run({
+      name: "forge-duo-lnd-hub",
+      image: "i",
+      network: "forge-duo",
+      volumes: [
+        { source: lightningVolumes.bitcoin, target: "/bitcoin" },
+        { source: lightningVolumes.hub, target: "/root/.lnd" },
+      ],
+      labels: { [FORGE_LABEL]: "duo" },
+    });
+    await engine.run({
+      name: "forge-duo-lnd-user",
+      image: "i",
+      network: "forge-duo",
+      volumes: [{ source: lightningVolumes.user, target: "/root/.lnd" }],
+      labels: { [FORGE_LABEL]: "duo" },
+    });
     await engine.ensureNetwork("forge-duo", "172.30.0.0/16");
     expect(await engine.volumeExists("forge-duo-ckb-data")).toBe(true);
 
@@ -1014,8 +1033,13 @@ describe("Orchestrator.down", () => {
 
     expect(await engine.status("forge-duo-ckb")).toBe("absent");
     expect(await engine.status("forge-duo-node-1")).toBe("absent");
+    expect(await engine.status("forge-duo-lnd-hub")).toBe("absent");
+    expect(await engine.status("forge-duo-lnd-user")).toBe("absent");
     expect(engine.networks.has("forge-duo")).toBe(false);
     expect(await engine.volumeExists("forge-duo-ckb-data")).toBe(false);
+    for (const volume of Object.values(lightningVolumes)) {
+      expect(await engine.volumeExists(volume)).toBe(false);
+    }
   });
 
   it("is idempotent when containers and state are already absent", async () => {

@@ -5,6 +5,7 @@
  */
 
 import Docker from "dockerode";
+import { PassThrough } from "node:stream";
 import { ForgeError } from "./errors.js";
 
 export type ContainerStatus = "running" | "exited" | "absent";
@@ -53,6 +54,21 @@ export interface ContainerSpec {
   labels?: Record<string, string>;
 }
 
+/** Bounded output from one non-interactive command in a managed container. */
+export interface ContainerExecResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
+}
+
+export interface ContainerExecOptions {
+  /** Maximum bytes retained from each output stream. Defaults to 256 KiB. */
+  maxOutputBytes?: number;
+  signal?: AbortSignal;
+}
+
 export interface ContainerEngine {
   /** Docker daemon version used for compatibility evidence. */
   version(): Promise<string>;
@@ -69,6 +85,12 @@ export interface ContainerEngine {
   volumeExists(name: string): Promise<boolean>;
   /** Create and start a container from the spec (removing any prior container of that name). */
   run(spec: ContainerSpec): Promise<void>;
+  /** Run a bounded, non-interactive command without logging its arguments. */
+  exec(
+    name: string,
+    command: readonly string[],
+    options?: ContainerExecOptions,
+  ): Promise<ContainerExecResult>;
   stop(name: string): Promise<void>;
   /** Abruptly terminate a running container without removing it or its mounted state. */
   kill(name: string): Promise<void>;
@@ -109,6 +131,11 @@ export class FakeEngine implements ContainerEngine {
     { spec: ContainerSpec; status: ContainerStatus }
   >();
   readonly log: string[] = [];
+  execHandler?: (
+    name: string,
+    command: readonly string[],
+    options: ContainerExecOptions,
+  ) => Promise<ContainerExecResult> | ContainerExecResult;
 
   async version(): Promise<string> {
     return "fake";
@@ -181,6 +208,41 @@ export class FakeEngine implements ContainerEngine {
     this.log.push(
       `run ${spec.name} ${spec.image}${spec.ip ? " @" + spec.ip : ""}`,
     );
+  }
+
+  async exec(
+    name: string,
+    command: readonly string[],
+    options: ContainerExecOptions = {},
+  ): Promise<ContainerExecResult> {
+    const entry = this.containers.get(name);
+    if (!entry) {
+      throw new ForgeError(
+        "CONTAINER_NOT_FOUND",
+        `container "${name}" does not exist`,
+        { resource: name, action: "start the container before retrying" },
+      );
+    }
+    if (entry.status !== "running") {
+      throw new ForgeError(
+        "DOCKER_OPERATION_FAILED",
+        `container "${name}" is not running`,
+        { resource: name, action: "start the container before retrying" },
+      );
+    }
+    if (options.signal?.aborted) {
+      throw options.signal.reason ?? new Error("container command was aborted");
+    }
+    this.log.push(`exec ${name} ${command[0] ?? "<empty>"}`);
+    return this.execHandler
+      ? this.execHandler(name, command, options)
+      : {
+          exitCode: 0,
+          stdout: "",
+          stderr: "",
+          stdoutTruncated: false,
+          stderrTruncated: false,
+        };
   }
 
   async stop(name: string): Promise<void> {
@@ -473,6 +535,93 @@ export class DockerEngine implements ContainerEngine {
         `could not start container "${spec.name}"`,
         spec.name,
         "free its requested ports, inspect Docker, then retry",
+      );
+    }
+  }
+
+  async exec(
+    name: string,
+    command: readonly string[],
+    options: ContainerExecOptions = {},
+  ): Promise<ContainerExecResult> {
+    if (command.length === 0 || !command[0]) {
+      throw new ForgeError(
+        "DOCKER_OPERATION_FAILED",
+        "container command must include an executable",
+        { resource: name, action: "provide a non-empty command and retry" },
+      );
+    }
+    const maxOutputBytes = options.maxOutputBytes ?? 256 * 1024;
+    if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes <= 0) {
+      throw new ForgeError(
+        "DOCKER_OPERATION_FAILED",
+        "container command output limit must be a positive safe integer",
+        {
+          resource: name,
+          action: "provide a positive maxOutputBytes value and retry",
+        },
+      );
+    }
+
+    try {
+      const container = this.docker.getContainer(name);
+      const operation = await container.exec({
+        AttachStdout: true,
+        AttachStderr: true,
+        Tty: false,
+        Cmd: [...command],
+        abortSignal: options.signal,
+      });
+      const stream = await operation.start({
+        hijack: true,
+        stdin: false,
+        Tty: false,
+        abortSignal: options.signal,
+      });
+      const stdout = new PassThrough();
+      const stderr = new PassThrough();
+      const stdoutCapture = captureBounded(stdout, maxOutputBytes);
+      const stderrCapture = captureBounded(stderr, maxOutputBytes);
+      this.docker.modem.demuxStream(stream, stdout, stderr);
+      try {
+        await waitForStream(stream);
+      } finally {
+        stdout.end();
+        stderr.end();
+      }
+      const [stdoutResult, stderrResult, inspection] = await Promise.all([
+        stdoutCapture,
+        stderrCapture,
+        operation.inspect({ abortSignal: options.signal }),
+      ]);
+      return {
+        exitCode: inspection.ExitCode ?? 1,
+        stdout: stdoutResult.text,
+        stderr: stderrResult.text,
+        stdoutTruncated: stdoutResult.truncated,
+        stderrTruncated: stderrResult.truncated,
+      };
+    } catch (error) {
+      if (error instanceof ForgeError) throw error;
+      if (isNotFound(error)) {
+        throw new ForgeError(
+          "CONTAINER_NOT_FOUND",
+          `container "${name}" does not exist`,
+          {
+            resource: name,
+            action: "start the container before retrying",
+            cause: error,
+          },
+        );
+      }
+      throw new ForgeError(
+        "DOCKER_OPERATION_FAILED",
+        `could not execute a command in container "${name}"`,
+        {
+          resource: name,
+          action: "inspect the container state and retry",
+          cause: error,
+        },
       );
     }
   }
@@ -786,6 +935,45 @@ export class DockerEngine implements ContainerEngine {
       );
     }
   }
+}
+
+function captureBounded(
+  stream: PassThrough,
+  maxBytes: number,
+): Promise<{ text: string; truncated: boolean }> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let captured = 0;
+    let truncated = false;
+    stream.on("data", (value: Buffer | string) => {
+      const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
+      const remaining = maxBytes - captured;
+      if (remaining > 0) {
+        const kept = chunk.subarray(0, remaining);
+        chunks.push(kept);
+        captured += kept.length;
+      }
+      if (chunk.length > remaining) truncated = true;
+    });
+    stream.once("error", reject);
+    stream.once("end", () =>
+      resolve({ text: Buffer.concat(chunks).toString("utf8"), truncated }),
+    );
+  });
+}
+
+function waitForStream(stream: NodeJS.ReadableStream): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      callback();
+    };
+    stream.once("error", (error) => finish(() => reject(error)));
+    stream.once("end", () => finish(resolve));
+    stream.once("close", () => finish(resolve));
+  });
 }
 
 /**

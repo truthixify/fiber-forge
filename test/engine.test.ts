@@ -1,4 +1,5 @@
 import type Docker from "dockerode";
+import { PassThrough } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { DockerEngine, FakeEngine } from "../src/engine";
 
@@ -123,6 +124,40 @@ describe("FakeEngine", () => {
     });
     expect(await e.listByLabel("forge", "x")).toEqual(["a"]);
   });
+
+  it("executes through a fixture without recording command arguments", async () => {
+    const e = new FakeEngine();
+    await e.run({ name: "n1", image: "img", network: "forge-x" });
+    e.execHandler = async (_name, command) => ({
+      exitCode: 0,
+      stdout: command.at(-1) ?? "",
+      stderr: "",
+      stdoutTruncated: false,
+      stderrTruncated: false,
+    });
+
+    const secret = "runtime-secret-value";
+    expect(
+      await e.exec("n1", ["client", `--password=${secret}`]),
+    ).toMatchObject({
+      exitCode: 0,
+      stdout: `--password=${secret}`,
+    });
+    expect(e.log).toContain("exec n1 client");
+    expect(e.log.join("\n")).not.toContain(secret);
+  });
+
+  it("rejects exec against an absent or stopped container", async () => {
+    const e = new FakeEngine();
+    await expect(e.exec("missing", ["true"])).rejects.toMatchObject({
+      code: "CONTAINER_NOT_FOUND",
+    });
+    await e.run({ name: "n1", image: "img", network: "forge-x" });
+    await e.stop("n1");
+    await expect(e.exec("n1", ["true"])).rejects.toMatchObject({
+      code: "DOCKER_OPERATION_FAILED",
+    });
+  });
 });
 
 describe("DockerEngine errors", () => {
@@ -228,6 +263,57 @@ describe("DockerEngine errors", () => {
       engine.run({ name: "n1", image: "fnn:test", network: "n" }),
     ).rejects.toMatchObject({
       code: "CONTAINER_START_FAILED",
+      resource: "n1",
+    });
+  });
+
+  it("captures bounded exec output and preserves the exit code", async () => {
+    const stream = new PassThrough();
+    stream.end("abcdef");
+    const inspect = vi.fn().mockResolvedValue({ ExitCode: 7 });
+    const start = vi.fn().mockResolvedValue(stream);
+    const exec = vi.fn().mockResolvedValue({ start, inspect });
+    const docker = {
+      getContainer: vi.fn(() => ({ exec })),
+      modem: {
+        demuxStream: vi.fn(
+          (source: PassThrough, stdout: PassThrough, _stderr: PassThrough) =>
+            source.on("data", (chunk) => stdout.write(chunk)),
+        ),
+      },
+    } as unknown as Docker;
+
+    const result = await new DockerEngine(docker).exec(
+      "n1",
+      ["client", "sensitive-argument"],
+      { maxOutputBytes: 3 },
+    );
+
+    expect(result).toEqual({
+      exitCode: 7,
+      stdout: "abc",
+      stderr: "",
+      stdoutTruncated: true,
+      stderrTruncated: false,
+    });
+    expect(exec).toHaveBeenCalledWith(
+      expect.objectContaining({ Cmd: ["client", "sensitive-argument"] }),
+    );
+  });
+
+  it("does not expose exec arguments in wrapped Docker errors", async () => {
+    const secret = "do-not-report-this";
+    const docker = {
+      getContainer: vi.fn(() => ({
+        exec: vi.fn().mockRejectedValue(new Error(`bad argument ${secret}`)),
+      })),
+    } as unknown as Docker;
+
+    await expect(
+      new DockerEngine(docker).exec("n1", ["client", secret]),
+    ).rejects.toMatchObject({
+      code: "DOCKER_OPERATION_FAILED",
+      message: 'could not execute a command in container "n1"',
       resource: "n1",
     });
   });

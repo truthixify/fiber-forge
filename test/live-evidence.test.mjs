@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   assertImagePlatform,
   buildEvidence,
+  imageGroupReferences,
   manifestPlatforms,
   normalizeArchitecture,
   sanitizeText,
@@ -57,6 +58,24 @@ describe("live evidence sanitization", () => {
 });
 
 describe("runtime image platform preflight", () => {
+  it("keeps optional CCH images out of ordinary runtime pulls", () => {
+    const packageJson = {
+      fiberForge: {
+        images: { ckb: "core-ckb", fiber: "core-fiber" },
+        cchImages: { bitcoin: "optional-bitcoin", lnd: "optional-lnd" },
+      },
+    };
+
+    expect(imageGroupReferences(packageJson, "images")).toEqual([
+      "core-ckb",
+      "core-fiber",
+    ]);
+    expect(imageGroupReferences(packageJson, "cchImages")).toEqual([
+      "optional-bitcoin",
+      "optional-lnd",
+    ]);
+  });
+
   it("normalizes host and Docker architecture aliases", () => {
     expect(normalizeArchitecture("aarch64")).toBe("arm64");
     expect(normalizeArchitecture("x64")).toBe("amd64");

@@ -1,0 +1,45 @@
+name: cch-e2e
+
+# Optional CCH dependencies are isolated from the ordinary Fiber live gate. This job currently
+# proves the disposable Bitcoin/LND lifecycle; the integrated CCH flow extends the same gate.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/cch-e2e.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/live-evidence.mjs"
+      - "src/engine.ts"
+      - "src/lightning.ts"
+      - "test/lightning-e2e.test.ts"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cch-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lightning-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Pre-pull pinned CCH dependency images
+        timeout-minutes: 8
+        run: node scripts/live-evidence.mjs pull-cch-images
+      - run: npm run build
+      - name: Verify the real Bitcoin/LND lifecycle
+        timeout-minutes: 6
+        env:
+          FORGE_LIGHTNING_E2E: "1"
+        run: npx vitest run test/lightning-e2e.test.ts --reporter=verbose

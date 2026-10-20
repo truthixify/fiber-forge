@@ -380,11 +380,28 @@ export function assertImagePlatform(reference, platforms, os, architecture) {
   );
 }
 
-async function pullRuntimeImages() {
+export function imageGroupReferences(packageJson, group) {
+  const configured = packageJson.fiberForge?.[group];
+  if (!configured || typeof configured !== "object") {
+    throw new Error(`package.json does not define fiberForge.${group}`);
+  }
+  const references = Object.values(configured);
+  if (
+    references.length === 0 ||
+    references.some(
+      (reference) => typeof reference !== "string" || reference.length === 0,
+    )
+  ) {
+    throw new Error(`package.json contains an invalid fiberForge.${group}`);
+  }
+  return references;
+}
+
+async function pullImageGroup(group) {
   const packageJson = JSON.parse(
     await readFile(join(repoDir, "package.json"), "utf8"),
   );
-  const references = Object.values(packageJson.fiberForge.images);
+  const references = imageGroupReferences(packageJson, group);
   const dockerInfoResult = await runCommand("docker", [
     "info",
     "--format",
@@ -921,13 +938,17 @@ async function finalizeLiveEvidence() {
 async function main() {
   const mode = process.argv[2];
   if (mode === "pull-images") {
-    await pullRuntimeImages();
+    await pullImageGroup("images");
+    return;
+  }
+  if (mode === "pull-cch-images") {
+    await pullImageGroup("cchImages");
     return;
   }
   if (mode === "all") {
     let runExitCode = 0;
     try {
-      await pullRuntimeImages();
+      await pullImageGroup("images");
       await runLiveEvidence();
       runExitCode = process.exitCode ?? 0;
     } catch (error) {
@@ -969,7 +990,7 @@ async function main() {
     return;
   }
   throw new Error(
-    "usage: node scripts/live-evidence.mjs <pull-images|all|run|finalize>",
+    "usage: node scripts/live-evidence.mjs <pull-images|pull-cch-images|all|run|finalize>",
   );
 }
 

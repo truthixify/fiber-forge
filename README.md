@@ -112,6 +112,11 @@ fiber-forge export my-net --scenario ./examples/outage-recovery.yml --report rep
 fiber-forge bundle inspect outage.ffbundle --json # validates without Docker access
 fiber-forge replay outage.ffbundle --network outage-replay --json # always purges the replay network
 fiber-forge status trio --json | jq              # every data command accepts --json
+
+# optional local Bitcoin/LND backend (used only by CCH workflows)
+fiber-forge lightning up trio
+fiber-forge lightning status trio --json
+fiber-forge lightning down trio
 ```
 
 Failures from `--json` commands are emitted as one parseable object with a stable `error.code`, the
@@ -201,8 +206,10 @@ fault has an inspectable reset path; teardown also removes a still-active fault.
 [Controlled fault injection](docs/fault-injection.md).
 
 The code that talks to the nodes and the chain is split into small modules — `topology`, `keys`,
-`rpc`, `engine`, `config`, `ckb`, `orchestrator`, `scenario`, `presets`, `cli`, and `daemon` — each
-tested against a fake, so `make ci` never needs Docker.
+`rpc`, `engine`, `config`, `ckb`, `lightning`, `orchestrator`, `scenario`, `presets`, `cli`, and
+`daemon` — each tested against a fake, so `make ci` never needs Docker. The optional
+[Lightning backend](docs/lightning-backend.md) uses private Bitcoin/LND services and is loaded only
+when explicitly requested.
 
 ## Development
 
@@ -228,7 +235,8 @@ also checks the Docker daemon architecture and both image manifest lists before 
 - **Routing** — multi-path payments, per-hop fee and route inspection, and a view of the gossip graph.
 - **Scenarios** — a curated library of portable failure and recovery recipes.
 - **Cross-chain** — the local-only [CCH compatibility and trust boundary](docs/cch-feasibility.md)
-  is proven in both directions; product orchestration and independent live CI remain roadmap work.
+  is proven in both directions, and the [disposable Lightning backend](docs/lightning-backend.md) is
+  automated; the integrated CCH workflow and independent cross-network CI remain roadmap work.
 - **Reproducibility** — signed bundle provenance and broader cross-host replay evidence.
 
 Force-close is an explicit local-dev operation with full-ID confirmation and terminal settlement
