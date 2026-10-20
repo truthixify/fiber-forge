@@ -259,11 +259,14 @@ export class DockerEngine implements ContainerEngine {
       await this.ensureImage(spec.image);
 
       const exposedPorts: Record<string, object> = {};
-      const portBindings: Record<string, { HostPort: string }[]> = {};
+      const portBindings: Record<
+        string,
+        { HostIp: string; HostPort: string }[]
+      > = {};
       for (const p of spec.ports ?? []) {
         const key = `${p.container}/tcp`;
         exposedPorts[key] = {};
-        portBindings[key] = [{ HostPort: String(p.host) }];
+        portBindings[key] = [{ HostIp: "127.0.0.1", HostPort: String(p.host) }];
       }
 
       const container = await this.docker.createContainer({

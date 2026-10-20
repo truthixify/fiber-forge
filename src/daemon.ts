@@ -416,5 +416,7 @@ function attachStateSocket(server: Server, backend: Backend): void {
 /** Start the daemon listening on `port` and return the server. */
 export function serveGui(backend: Backend, port: number): Promise<Server> {
   const server = createDaemon(backend);
-  return new Promise((resolve) => server.listen(port, () => resolve(server)));
+  return new Promise((resolve) =>
+    server.listen(port, "127.0.0.1", () => resolve(server)),
+  );
 }

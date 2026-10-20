@@ -69,6 +69,32 @@ describe("FakeEngine", () => {
 });
 
 describe("DockerEngine errors", () => {
+  it("publishes container RPC ports on IPv4 loopback only", async () => {
+    const createContainer = vi.fn().mockResolvedValue({ start: vi.fn() });
+    const docker = {
+      getContainer: vi.fn(() => removableContainer()),
+      listImages: vi.fn().mockResolvedValue([{}]),
+      createContainer,
+    } as unknown as Docker;
+
+    await new DockerEngine(docker).run({
+      name: "n1",
+      image: "fnn:test",
+      network: "forge-test",
+      ports: [{ host: 8300, container: 8227 }],
+    });
+
+    expect(createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        HostConfig: expect.objectContaining({
+          PortBindings: {
+            "8227/tcp": [{ HostIp: "127.0.0.1", HostPort: "8300" }],
+          },
+        }),
+      }),
+    );
+  });
+
   it("classifies an unavailable Docker daemon", async () => {
     const docker = {
       listNetworks: vi.fn().mockRejectedValue(

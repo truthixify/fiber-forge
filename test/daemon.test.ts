@@ -1,7 +1,7 @@
 import { type AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { type NetworkLayout } from "../src/config";
-import { type Backend, createDaemon } from "../src/daemon";
+import { type Backend, serveGui } from "../src/daemon";
 import { type NetworkView } from "../src/orchestrator";
 
 const view: NetworkView = {
@@ -59,10 +59,11 @@ async function get(port: number, path: string): Promise<Response> {
 
 describe("daemon", () => {
   it("serves the GUI, network list, and per-network state", async () => {
-    const server = createDaemon(backend);
-    await new Promise<void>((resolve) => server.listen(0, resolve));
-    const port = (server.address() as AddressInfo).port;
+    const server = await serveGui(backend, 0);
+    const address = server.address() as AddressInfo;
+    const port = address.port;
     try {
+      expect(address.address).toBe("127.0.0.1");
       const html = await (await get(port, "/")).text();
       expect(html).toContain('window.__FORGE__={"central":true}');
 
