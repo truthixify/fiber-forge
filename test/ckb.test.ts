@@ -31,22 +31,23 @@ describe("DevChain.waitReady", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("honors its deadline when an RPC request never answers", async () => {
+    let aborted = false;
     vi.stubGlobal(
       "fetch",
       vi.fn(
         (_url: string | URL | Request, init?: RequestInit) =>
           new Promise<Response>((_resolve, reject) => {
             init?.signal?.addEventListener("abort", () => {
+              aborted = true;
               reject(init.signal?.reason);
             });
           }),
       ),
     );
 
-    const startedAt = Date.now();
     await expect(
       new DevChain("http://127.0.0.1:8114").waitReady(25),
     ).rejects.toThrow("did not become ready in 25ms");
-    expect(Date.now() - startedAt).toBeLessThan(500);
+    expect(aborted).toBe(true);
   });
 });

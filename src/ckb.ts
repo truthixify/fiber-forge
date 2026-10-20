@@ -84,7 +84,7 @@ export class DevChain {
       } catch {
         // not up yet
       }
-      if (Date.now() > deadline) {
+      if (Date.now() >= deadline) {
         throw new Error(
           `ckb dev chain at ${this.rpcUrl} did not become ready in ${timeoutMs}ms`,
         );
