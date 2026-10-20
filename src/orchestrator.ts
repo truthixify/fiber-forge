@@ -95,12 +95,17 @@ export function nodeContainerSpec(
   nodeDir: string,
   fnnImage = DEFAULT_FNN_IMAGE,
 ): ContainerSpec {
+  // Match bind-mounted state ownership so purge can remove node-created files on native Linux.
+  const user =
+    typeof process.getuid === "function" && typeof process.getgid === "function"
+      ? `${process.getuid()}:${process.getgid()}`
+      : undefined;
   return {
     name: node.container,
     image: fnnImage,
     network: layout.network,
     ip: node.ip,
-    user: "0",
+    user,
     env: {
       FIBER_SECRET_KEY_PASSWORD: node.password,
       FIBER_LISTENING_ADDR: `/ip4/0.0.0.0/tcp/${FNN_P2P_PORT}`,

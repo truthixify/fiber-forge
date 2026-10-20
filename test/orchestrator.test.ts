@@ -37,6 +37,12 @@ describe("container specs", () => {
     const spec = nodeContainerSpec(layout, layout.nodes[0], "/state/node-1");
     expect(spec.name).toBe("forge-duo-node-1");
     expect(spec.ip).toBe("10.5.7.11");
+    expect(spec.user).toBe(
+      typeof process.getuid === "function" &&
+        typeof process.getgid === "function"
+        ? `${process.getuid()}:${process.getgid()}`
+        : undefined,
+    );
     expect(spec.env?.FIBER_SECRET_KEY_PASSWORD).toBe("forge-duo-alice");
     expect(spec.env?.FIBER_ANNOUNCE_PRIVATE_ADDR).toBe("true");
     expect(spec.env?.FIBER_LISTENING_ADDR).toBe("/ip4/0.0.0.0/tcp/8228");
