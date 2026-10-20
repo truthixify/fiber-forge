@@ -16,10 +16,11 @@ developers use Polar for this kind of local testing; fiber-forge aims to be the 
 
 You need two things installed:
 
-- **Docker, and it must be running.** fiber-forge runs each node in its own container, so the Docker
-  daemon has to be up before you start — Docker Desktop on macOS or Windows, or the Docker engine on
-  Linux. The first time you run `up`, fiber-forge downloads the `nervos/ckb` and `nervos/fiber`
-  images for you; that happens once and makes the first run take a little longer.
+- **Docker, and it must be running.** fiber-forge runs each node in its own container. Linux amd64
+  with Docker Engine and macOS arm64 with Docker Desktop are backed by complete live verification;
+  WSL2 remains unverified. The first time you run `up`, fiber-forge downloads the `nervos/ckb` and
+  `nervos/fiber` images, so that run takes a little longer. See the
+  [host compatibility matrix](docs/compatibility.md) for exact versions, evidence, and limitations.
 - **Node.js 20 or newer**, so you can run the CLI with `npx`.
 
 Then run:
@@ -177,7 +178,8 @@ make e2e       # packed-artifact smoke + live Docker proofs + local evidence
 Run `make ci` before every push. Unit CI and live Docker verification are separate gates; every live
 run publishes a bounded summary and sanitized diagnostics for 14 days. See
 [Live verification](docs/verification.md) for the evidence schema and trigger/release policy.
-Pushing a `v*` tag publishes to npm only after the same live workflow passes.
+Pushing a `v*` tag publishes to npm only after the same live workflow passes. The local live command
+also checks the Docker daemon architecture and both image manifest lists before pulling.
 
 ## Roadmap
 

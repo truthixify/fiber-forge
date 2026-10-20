@@ -6,8 +6,9 @@ Fiber Forge separates fast unit/package CI from Docker-backed runtime evidence:
   type checks, unit tests, builds, SDK consumer checks, and the packed-artifact smoke on every push
   and pull request.
 - [`e2e.yml`](https://github.com/truthixify/fiber-forge/actions/workflows/e2e.yml) installs and checks
-  the packed artifact, then runs real CKB/Fiber provisioning, multi-hop CKB payment, relay recovery,
-  rollback, UDT, and cleanup paths.
+  the packed artifact, verifies native manifests for both pinned images before pulling, then runs
+  real CKB/Fiber provisioning, multi-hop CKB payment, relay recovery, rollback, UDT, and cleanup
+  paths.
 
 ## Trigger And Release Policy
 
@@ -51,3 +52,5 @@ make e2e
 ```
 
 The same three evidence files are written to `artifacts/live-e2e/`, which is ignored by Git.
+Supported environments and durable environment-specific records are listed in the
+[host compatibility matrix](compatibility.md).

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "result": "passed",
+  "environment": "macos-arm64-docker-desktop",
+  "validatedAt": "2026-10-20T03:41:18.785Z",
+  "source": {
+    "type": "local-live-e2e",
+    "command": "FORGE_E2E_ARTIFACT_DIR=artifacts/macos-arm64-2026-10-20 npm run test:e2e",
+    "commit": "1fc63dae3bfacf0f30eddc273b520d70e01a873d"
+  },
+  "package": "@truthixify/fiber-forge@0.2.9",
+  "host": {
+    "os": "Darwin",
+    "release": "24.6.0",
+    "architecture": "arm64",
+    "node": "v24.13.0",
+    "docker": "29.3.1"
+  },
+  "dockerDaemon": {
+    "os": "linux",
+    "architecture": "arm64"
+  },
+  "manifestPlatforms": {
+    "nervos/ckb:v0.201.0": ["linux/amd64", "linux/arm64/v8"],
+    "nervos/fiber:0.9.0-rc7": ["linux/amd64", "linux/arm64"]
+  },
+  "images": {
+    "ckb": {
+      "reference": "nervos/ckb:v0.201.0",
+      "id": "sha256:b995cd8b5f35571283d066f011317ef88b6d8e42f10c8b63c4c9ecf7b5cb647e",
+      "os": "linux",
+      "architecture": "arm64"
+    },
+    "fiber": {
+      "reference": "nervos/fiber:0.9.0-rc7",
+      "id": "sha256:827d2eb4f557811c0f0f81268f993aae73d979eacfe48d36bd41d9041fe36081",
+      "os": "linux",
+      "architecture": "arm64"
+    }
+  },
+  "paths": {
+    "packedArtifact": "passed",
+    "provisioning": "passed",
+    "multiHopCkb": "passed",
+    "recovery": "passed",
+    "rollback": "passed",
+    "udt": "passed",
+    "cleanup": "passed"
+  }
+}

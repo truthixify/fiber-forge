@@ -81,6 +81,8 @@
     "docs/sdk.md",
     "docs/recovery.md",
     "docs/lifecycle-errors.md",
-    "docs/verification.md"
+    "docs/verification.md",
+    "docs/compatibility.md",
+    "docs/evidence"
   ]
 }

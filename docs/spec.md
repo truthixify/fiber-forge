@@ -31,12 +31,12 @@ graph GUI.
 
 **MVP:** CKB-denominated channels; the named presets (`duo`/`trio`/`hub`), parametric `shape:N`
 topologies (`line`/`ring`/`star`), and custom YAML; graph GUI with open/pay/close actions and log
-streaming; deterministic teardown; works on macOS + Linux (amd64 + arm64).
+streaming; deterministic teardown; validated on Linux amd64 and macOS arm64 with Docker Desktop.
 **Stretch:** UDT asset preset (deploy an xUDT on the devnet, whitelist it in node configs,
 open a UDT channel); scenario scripts (`fiber-forge run payments.yml` traffic generator); headless CI
 mode (`fiber-forge up --no-ui --json`).
 **Non-goals:** testnet/mainnet management (local devnet only); node version matrixing (pinned
-image); Windows-native (WSL2 is the supported path).
+image); Windows-native. WSL2 is the intended Windows path but remains unverified.
 
 ## 4. Architecture
 
@@ -148,8 +148,9 @@ participants get it in one command."
 
 ## 11. Risks and mitigations
 
-- **Image/platform gaps** (arm64 Mac vs amd64 image): detect at startup, use `--platform`
-  emulation fallback, document; worst case build-from-source Dockerfile included.
+- **Image/platform gaps:** the live runner reports the Docker daemon platform and both pinned image
+  manifest lists before pulling, then requires a native match. Cross-architecture emulation is not
+  an automatic fallback and remains unverified.
 - **Funding/confirmation flakiness:** dev chain tuned to ~1s blocks; funding module waits on
   actual cell availability, not time.
 - **Channel-open edge states:** state machine treats anything not `CHANNEL_READY` within a

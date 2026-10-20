@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "result": "passed",
+  "environment": "linux-amd64",
+  "validatedAt": "2026-10-20T03:24:43.922Z",
+  "source": {
+    "type": "github-actions",
+    "run": "https://github.com/truthixify/fiber-forge/actions/runs/39363776395",
+    "artifact": "live-e2e-39363776395-1",
+    "commit": "5477add6fe8a5c816639db09eb0e30200653fda4"
+  },
+  "package": "@truthixify/fiber-forge@0.2.9",
+  "host": {
+    "os": "Linux",
+    "release": "6.17.0-1022-azure",
+    "architecture": "x64",
+    "node": "v20.20.2",
+    "docker": "28.0.4"
+  },
+  "images": {
+    "ckb": {
+      "reference": "nervos/ckb:v0.201.0",
+      "id": "sha256:946108f5532d084e2d6a68ed1e57e284829da612264c0150705ec70b22bf6ed6",
+      "os": "linux",
+      "architecture": "amd64"
+    },
+    "fiber": {
+      "reference": "nervos/fiber:0.9.0-rc7",
+      "id": "sha256:f04c680caa501d5982c868f1e84df65eebe20e55a9c99fed1be01077c1bb5a9d",
+      "os": "linux",
+      "architecture": "amd64"
+    }
+  },
+  "paths": {
+    "packedArtifact": "passed",
+    "provisioning": "passed",
+    "multiHopCkb": "passed",
+    "recovery": "passed",
+    "rollback": "passed",
+    "udt": "passed",
+    "cleanup": "passed"
+  }
+}
