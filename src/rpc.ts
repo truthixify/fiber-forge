@@ -14,13 +14,17 @@ export interface RpcTransport {
 
 /** JSON-RPC 2.0 over HTTP (fetch). */
 export class HttpTransport implements RpcTransport {
-  constructor(private readonly url: string) {}
+  constructor(
+    private readonly url: string,
+    private readonly timeoutMs = 10_000,
+  ) {}
 
   async call(method: string, params: unknown[]): Promise<unknown> {
     const response = await fetch(this.url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id: 1, jsonrpc: "2.0", method, params }),
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
     if (!response.ok) {
       throw new Error(`${method}: HTTP ${response.status}`);

@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type Channel,
   type NodeInfo,
   type RpcTransport,
   FnnRpc,
+  HttpTransport,
   ckbToShannonHex,
   channelStateName,
   dialAddress,
@@ -23,6 +24,28 @@ class FakeTransport implements RpcTransport {
     return this.responder(method, params);
   }
 }
+
+describe("HttpTransport", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("aborts an RPC request that never answers", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string | URL | Request, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(init.signal?.reason);
+            });
+          }),
+      ),
+    );
+
+    await expect(
+      new HttpTransport("http://127.0.0.1:8227", 10).call("node_info", []),
+    ).rejects.toThrow(/timeout|aborted/i);
+  });
+});
 
 describe("FnnRpc", () => {
   it("reads node_info", async () => {

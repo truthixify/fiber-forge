@@ -37,12 +37,17 @@ async function rawRpc(
   url: string,
   method: string,
   params: unknown[],
+  timeoutMs = 10_000,
 ): Promise<unknown> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ id: 1, jsonrpc: "2.0", method, params }),
+    signal: AbortSignal.timeout(timeoutMs),
   });
+  if (!response.ok) {
+    throw new Error(`${method}: HTTP ${response.status}`);
+  }
   const body = (await response.json()) as { result?: unknown; error?: unknown };
   if (body.error !== undefined && body.error !== null) {
     throw new Error(`${method}: ${JSON.stringify(body.error)}`);
@@ -65,14 +70,24 @@ export class DevChain {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       try {
-        if (await rawRpc(this.rpcUrl, "get_tip_block_number", [])) {
+        const remaining = Math.max(1, deadline - Date.now());
+        if (
+          await rawRpc(
+            this.rpcUrl,
+            "get_tip_block_number",
+            [],
+            Math.min(5_000, remaining),
+          )
+        ) {
           return;
         }
       } catch {
         // not up yet
       }
       if (Date.now() > deadline) {
-        throw new Error("ckb dev chain did not become ready in time");
+        throw new Error(
+          `ckb dev chain at ${this.rpcUrl} did not become ready in ${timeoutMs}ms`,
+        );
       }
       await sleep(500);
     }

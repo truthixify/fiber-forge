@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DevChain } from "../src/ckb";
 
 // Address derivation is deterministic and offline — a deliberately unreachable URL proves it does
@@ -24,5 +24,29 @@ describe("DevChain.addressOfPrivateKey", () => {
     ).toBe(
       "ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqgx5lf4pczpamsfam48evs0c8nvwqqa59qapt46f",
     );
+  });
+});
+
+describe("DevChain.waitReady", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("honors its deadline when an RPC request never answers", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string | URL | Request, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(init.signal?.reason);
+            });
+          }),
+      ),
+    );
+
+    const startedAt = Date.now();
+    await expect(
+      new DevChain("http://127.0.0.1:8114").waitReady(25),
+    ).rejects.toThrow("did not become ready in 25ms");
+    expect(Date.now() - startedAt).toBeLessThan(500);
   });
 });
