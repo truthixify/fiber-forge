@@ -1,14 +1,18 @@
-# A sample fiber-forge scenario: a little payment traffic over a running network.
-# Run with:  fiber-forge run <net> examples/payments.yml
+# A checked payment scenario for examples/topology.yml.
+# Run with: fiber-forge up examples/topology.yml --no-gui
+#           fiber-forge run my-net examples/payments.yml
 #
-# Each step is exactly one action: pay / open / close / fund / invoice / wait (ms).
-# The whole list repeats `loop` times.
+# The whole list repeats `loop` times and each payment must settle successfully.
+version: 1
 loop: 3
 steps:
-  - pay: { from: feynman, to: curie, amount: 100 }
+  - pay: { from: alice, to: carol, amount: 100 }
+    expect: { payment_status: Success }
   - wait: 800
-  - pay: { from: curie, to: tesla, amount: 50, description: coffee }
+  - pay: { from: bob, to: carol, amount: 50, description: coffee }
+    expect: { payment_status: Success }
   - wait: 800
-  - fund: { node: feynman, amount: 5000 }
-  - pay: { from: tesla, to: feynman, amount: 25 }
+  - fund: { node: alice, amount: 5000 }
+  - pay: { from: carol, to: alice, amount: 25 }
+    expect: { payment_status: Success }
   - wait: 1200

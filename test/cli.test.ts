@@ -1,4 +1,7 @@
 import { createServer } from "node:net";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildCli, main, resolveTopology } from "../src/cli";
 
@@ -162,5 +165,59 @@ describe("resolveTopology", () => {
       },
     });
     expect(process.exitCode).toBe(1);
+  });
+
+  it("emits a scenario report and exit code 2 for failed assertions", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "fiber-forge-scenario-"));
+    const file = join(directory, "failure.yml");
+    await writeFile(
+      file,
+      [
+        "version: 1",
+        "steps:",
+        "  - assert:",
+        "      node_status: { node: alice, equals: running }",
+        "      timeout_ms: 0",
+      ].join("\n"),
+    );
+    const stdout = vi.spyOn(console, "log").mockImplementation(() => {});
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await main([
+        "node",
+        "fiber-forge",
+        "run",
+        "cli-scenario-missing",
+        file,
+        "--json",
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+
+    expect(stderr).not.toHaveBeenCalled();
+    expect(stdout).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(stdout.mock.calls[0][0]))).toMatchObject({
+      format: "fiber-forge-scenario-report",
+      version: 1,
+      network: "cli-scenario-missing",
+      passed: false,
+      summary: { total: 1, passed: 0, failed: 1 },
+      steps: [
+        {
+          action: "assert",
+          passed: false,
+          assertions: [
+            {
+              type: "node_status",
+              passed: false,
+              actual: { errorCode: "NETWORK_NOT_FOUND" },
+            },
+          ],
+        },
+      ],
+    });
+    expect(process.exitCode).toBe(2);
   });
 });

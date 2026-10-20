@@ -355,6 +355,21 @@ describe("container specs", () => {
 });
 
 describe("Orchestrator node lifecycle", () => {
+  it("classifies raw Fiber payment failures without exposing invoice data", async () => {
+    const { orchestrator, stateDir } = await lifecycleFixture();
+    try {
+      await expect(
+        orchestrator.pay("duo", "alice", "bob", 1),
+      ).rejects.toMatchObject({
+        code: "PAYMENT_FAILED",
+        message: 'payment from "alice" to "bob" failed',
+        resource: "duo/alice/bob",
+      });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("stops only the requested node and treats a repeated stop as a no-op", async () => {
     const { engine, orchestrator, stateDir } = await lifecycleFixture();
     try {

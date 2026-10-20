@@ -923,9 +923,7 @@ export function buildCli(): Command {
 
   program
     .command("run")
-    .description(
-      "run a scenario script (pay/open/close/fund/wait) against a network",
-    )
+    .description("run a checked, declarative scenario against a network")
     .argument("<net>", "network name")
     .argument("<file>", "path to a scenario YAML file")
     .option("--json", "print machine-readable JSON")
@@ -933,19 +931,24 @@ export function buildCli(): Command {
       const scenario = parseScenario(await readFile(resolve(file), "utf8"));
       const orch = orchestrator();
       if (options.json) {
-        const steps = await runScenario(orch, net, scenario);
-        printJson({ net, steps });
+        const report = await runScenario(orch, net, scenario);
+        printJson(report);
+        if (!report.passed) process.exitCode = 2;
         return;
       }
       console.log(
         `\n  ${ui.accent("fiber-forge")}  ${ui.dim("·")}  ${ui.muted("scenario " + file)}\n`,
       );
-      await runScenario(orch, net, scenario, (r) => {
+      const report = await runScenario(orch, net, scenario, (r) => {
         console.log(
-          `  ${ui.dim(String(r.index + 1).padStart(2))}  ${ui.text(ui.caps(r.action).padEnd(8))}  ${ui.muted(r.summary)}`,
+          `  ${r.passed ? ui.success("✔") : ui.error("✗")} ${ui.dim(String(r.index + 1).padStart(2))}  ${ui.text(ui.caps(r.action).padEnd(8))}  ${ui.muted(r.summary)}`,
         );
       });
-      console.log("");
+      const result = report.passed
+        ? ui.success(`${report.summary.passed}/${report.summary.total} passed`)
+        : ui.error(`${report.summary.failed}/${report.summary.total} failed`);
+      console.log(`\n  ${result}   ${ui.muted(`${report.durationMs}ms`)}\n`);
+      if (!report.passed) process.exitCode = 2;
     });
 
   program

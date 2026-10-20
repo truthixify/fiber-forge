@@ -273,7 +273,11 @@ export interface NetworkView {
     pubkey: string;
     status: string;
     onchainCkb: number;
+    /** Exact CKB wallet balance in shannons for machine comparisons. */
+    onchainCkbShannon?: string;
     udtBalance: number;
+    /** Exact dev-UDT wallet balance in 8-decimal base units. */
+    udtBalanceBaseUnits?: string;
   }[];
   channels: {
     from: string;
@@ -940,10 +944,14 @@ export class Orchestrator {
     const nodes = [];
     for (const node of state.nodes) {
       let onchainCkb = 0;
+      let onchainCkbShannon: bigint | undefined;
       let udtBalance = 0;
+      let udtBalanceBaseUnits: bigint | undefined;
       try {
-        onchainCkb = Number(await chain.balanceOf(node.ckbAddress));
-        udtBalance = Number(await chain.udtBalanceOf(node.ckbAddress)) / 1e8;
+        onchainCkbShannon = await chain.balanceShannonsOf(node.ckbAddress);
+        udtBalanceBaseUnits = await chain.udtBalanceOf(node.ckbAddress);
+        onchainCkb = Number(onchainCkbShannon / 100_000_000n);
+        udtBalance = Number(udtBalanceBaseUnits) / 1e8;
       } catch {
         // chain unreachable
       }
@@ -954,7 +962,13 @@ export class Orchestrator {
         pubkey: node.pubkey,
         status: await this.engine.status(node.container),
         onchainCkb,
+        ...(onchainCkbShannon === undefined
+          ? {}
+          : { onchainCkbShannon: onchainCkbShannon.toString() }),
         udtBalance,
+        ...(udtBalanceBaseUnits === undefined
+          ? {}
+          : { udtBalanceBaseUnits: udtBalanceBaseUnits.toString() }),
       });
     }
 
@@ -1491,15 +1505,34 @@ export class Orchestrator {
     description?: string,
     udt?: boolean,
   ): Promise<PaymentReport> {
-    const invoice = await this.createInvoice(net, to, amount, description, udt);
-    const status = await this.payInvoiceInternal(net, from, invoice);
-    return {
-      from,
-      to,
-      amountCkb: amount,
-      paymentHash: status.paymentHash,
-      status: status.status,
-    };
+    try {
+      const invoice = await this.createInvoice(
+        net,
+        to,
+        amount,
+        description,
+        udt,
+      );
+      const status = await this.payInvoiceInternal(net, from, invoice);
+      return {
+        from,
+        to,
+        amountCkb: amount,
+        paymentHash: status.paymentHash,
+        status: status.status,
+      };
+    } catch (error) {
+      if (error instanceof ForgeError) throw error;
+      throw new ForgeError(
+        "PAYMENT_FAILED",
+        `payment from "${from}" to "${to}" failed`,
+        {
+          cause: error,
+          resource: `${net}/${from}/${to}`,
+          action: "inspect node connectivity and channel balances, then retry",
+        },
+      );
+    }
   }
 
   /** Mint `amountUdt` whole units of the dev UDT into a node's wallet; returns the tx hash. */
@@ -1524,14 +1557,23 @@ export class Orchestrator {
     from: string,
     invoice: string,
   ): Promise<PaymentReport> {
-    const result = await this.payInvoiceInternal(net, from, invoice);
-    return {
-      from,
-      to: "",
-      amountCkb: 0,
-      paymentHash: result.paymentHash,
-      status: result.status,
-    };
+    try {
+      const result = await this.payInvoiceInternal(net, from, invoice);
+      return {
+        from,
+        to: "",
+        amountCkb: 0,
+        paymentHash: result.paymentHash,
+        status: result.status,
+      };
+    } catch (error) {
+      if (error instanceof ForgeError) throw error;
+      throw new ForgeError("PAYMENT_FAILED", `payment from "${from}" failed`, {
+        cause: error,
+        resource: `${net}/${from}`,
+        action: "inspect node connectivity and channel balances, then retry",
+      });
+    }
   }
 
   /** Open a channel between two already-running nodes and wait until it is ready. */

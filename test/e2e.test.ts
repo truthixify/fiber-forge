@@ -19,6 +19,7 @@ import {
   isChannelReady,
   peerIdOf,
 } from "../src/rpc";
+import { parseScenario, runScenario } from "../src/scenario";
 import { type Topology } from "../src/topology";
 
 // Live tests need a Docker daemon and pull the pinned CKB and Fiber images.
@@ -481,7 +482,7 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
       expect(stopped.status).toBe("stopped");
       await expect(
         orchestrator.payInvoice(RECOVERY_NET, sender, interruptedInvoice),
-      ).rejects.toThrow(/Failed to build route|Insufficient balance/i);
+      ).rejects.toMatchObject({ code: "PAYMENT_FAILED" });
 
       const expectedPeers = [
         [infos[1].pubkey],
@@ -668,30 +669,41 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
         infos.map((info) => info.pubkey),
       );
 
-      const killed = await orchestrator.applyFault(
-        RECOVERY_NET,
-        "node-kill",
-        relay,
+      const outageScenario = parseScenario(
+        [
+          "version: 1",
+          "steps:",
+          `  - fault: { action: apply, kind: node-kill, target: ${relay} }`,
+          "    expect: { node_status: stopped, timeout_ms: 10000 }",
+          `  - pay: { from: ${sender}, to: ${receiver}, amount: 100, description: scenario outage proof }`,
+          "    expect: { error_code: PAYMENT_FAILED }",
+          `  - fault: { action: reset, kind: node-kill, target: ${relay} }`,
+          "    expect: { node_status: running, timeout_ms: 60000 }",
+        ].join("\n"),
       );
-      expect(killed.observed).toMatchObject({
-        state: "active",
-        containerStatus: "stopped",
+      const outageReport = await runScenario(
+        orchestrator,
+        RECOVERY_NET,
+        outageScenario,
+      );
+      expect(outageReport).toMatchObject({
+        format: "fiber-forge-scenario-report",
+        passed: true,
+        summary: { total: 3, passed: 3, failed: 0 },
       });
-      const killedInvoice = await orchestrator.createInvoice(
-        RECOVERY_NET,
-        receiver,
-        100,
-        "abrupt relay kill proof",
+      expect(outageReport.steps[1]).toMatchObject({
+        passed: true,
+        assertions: [
+          {
+            type: "error_code",
+            expected: "PAYMENT_FAILED",
+            actual: "PAYMENT_FAILED",
+          },
+        ],
+      });
+      const killRecovery = await reconcile(
+        await orchestrator.inspectNode(RECOVERY_NET, relay),
       );
-      await expect(
-        orchestrator.payInvoice(RECOVERY_NET, sender, killedInvoice),
-      ).rejects.toThrow(/Failed to build route|Insufficient balance|no path/i);
-      const killReset = await orchestrator.resetFault(
-        RECOVERY_NET,
-        "node-kill",
-        relay,
-      );
-      const killRecovery = await reconcile(killReset);
       expect(killRecovery.pubkeys).toEqual(infos.map((info) => info.pubkey));
 
       const forceCloseChannelId = channelIdsBefore[0][0];

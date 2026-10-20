@@ -86,6 +86,7 @@
     "assets",
     "docs/sdk.md",
     "docs/recovery.md",
+    "docs/scenarios.md",
     "docs/force-close.md",
     "docs/fault-injection.md",
     "docs/lifecycle-errors.md",
@@ -94,6 +95,9 @@
     "docs/github-action.md",
     "docs/integration.md",
     "docs/sandbox.md",
+    "examples/payments.yml",
+    "examples/outage-recovery.yml",
+    "examples/topology.yml",
     "docs/evidence"
   ]
 }

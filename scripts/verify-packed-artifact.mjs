@@ -42,9 +42,13 @@ const requiredPackageFiles = [
   "docs/github-action.md",
   "docs/integration.md",
   "docs/recovery.md",
+  "docs/scenarios.md",
   "docs/sandbox.md",
   "docs/sdk.md",
   "docs/verification.md",
+  "examples/outage-recovery.yml",
+  "examples/payments.yml",
+  "examples/topology.yml",
   "package.json",
   "src/cli.ts",
 ];
@@ -143,9 +147,13 @@ function validatePackListing(metadata) {
         "docs/github-action.md",
         "docs/integration.md",
         "docs/recovery.md",
+        "docs/scenarios.md",
         "docs/sandbox.md",
         "docs/sdk.md",
         "docs/verification.md",
+        "examples/outage-recovery.yml",
+        "examples/payments.yml",
+        "examples/topology.yml",
         "src/",
       ].some((allowedPath) =>
         allowedPath.endsWith("/")

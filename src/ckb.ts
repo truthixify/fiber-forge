@@ -175,12 +175,17 @@ export class DevChain {
 
   /** On-chain balance of an address, in whole CKB. */
   async balanceOf(address: string): Promise<bigint> {
+    return (await this.balanceShannonsOf(address)) / 100_000_000n;
+  }
+
+  /** Exact on-chain balance of an address, in shannons. */
+  async balanceShannonsOf(address: string): Promise<bigint> {
     const lock = (await ccc.Address.fromString(address, this.client)).script;
     let total = 0n;
     for await (const cell of this.client.findCellsByLock(lock)) {
       total += cell.cellOutput.capacity;
     }
-    return total / 100_000_000n;
+    return total;
   }
 
   private async ensureDevScripts(): Promise<void> {

@@ -1,0 +1,19 @@
+# A checked relay outage and recovery scenario for examples/topology.yml.
+# Cleanup is declarative: the reset step runs even when the expected payment failure does not match.
+version: 1
+steps:
+  - fault: { action: apply, kind: node-kill, target: bob }
+    expect: { node_status: stopped, timeout_ms: 10000 }
+
+  - pay: { from: alice, to: carol, amount: 10, description: outage proof }
+    expect: { error_code: PAYMENT_FAILED }
+
+  - fault: { action: reset, kind: node-kill, target: bob }
+    expect: { node_status: running, timeout_ms: 60000 }
+
+  - assert:
+      channel_state: { node: alice, peer: bob, equals: ChannelReady }
+      timeout_ms: 60000
+
+  - pay: { from: alice, to: carol, amount: 10, description: recovery proof }
+    expect: { payment_status: Success }

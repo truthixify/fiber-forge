@@ -106,13 +106,18 @@ fiber-forge channel open trio feynman galileo 5000 --udt
 fiber-forge pay trio feynman galileo 100 --udt
 
 # traffic and scripting
-fiber-forge run trio ./examples/payments.yml     # run a scenario of scripted traffic
+fiber-forge run my-net ./examples/payments.yml   # checked actions and assertions
+fiber-forge run my-net ./examples/outage-recovery.yml --json
 fiber-forge status trio --json | jq              # every data command accepts --json
 ```
 
 Failures from `--json` commands are emitted as one parseable object with a stable `error.code`, the
 affected resource when known, and a suggested next action. See
 [Lifecycle errors](docs/lifecycle-errors.md) for the schema and code table.
+
+Scenarios are versioned declarative test specifications with bounded polling, typed node/channel/
+payment/balance assertions, sanitized JSON reports, and CI exit codes. The checked examples pair with
+`examples/topology.yml`; see [Checked scenarios](docs/scenarios.md) for the complete schema.
 
 ## Library API
 

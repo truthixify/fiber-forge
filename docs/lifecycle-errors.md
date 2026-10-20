@@ -44,6 +44,7 @@ when Fiber Forge can identify a specific target and safe next step.
 | `NODE_STATE_MISMATCH` | Docker did not reach or retain the requested running/stopped state. |
 | `OPERATION_ABORTED` | The caller's abort signal stopped provisioning; automatic rollback completed first. |
 | `OPERATION_TIMEOUT` | The overall provisioning deadline elapsed; automatic rollback completed first. |
+| `PAYMENT_FAILED` | Fiber could not create or route the requested payment; inspect connectivity and channel balances. |
 | `PROVISION_FAILED` | Provisioning failed at a named node, peer, channel, or routing phase. |
 | `ROLLBACK_FAILED` | Provisioning failed and automatic cleanup also encountered an error. |
 | `DOCKER_OPERATION_FAILED` | Another named Docker inspection or cleanup operation failed. |

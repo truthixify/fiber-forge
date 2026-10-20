@@ -26,6 +26,8 @@ graph GUI.
    each on its own subnet and host ports.
 4. Docs: quickstart, topology schema reference, "point your app at a fiber-forge node" guide.
 5. Public ESM SDK at `@truthixify/fiber-forge/sdk` for supported lifecycle and topology automation.
+6. Versioned scenario specifications with bounded assertions, stable error expectations, and
+   machine-readable reports suitable for CI.
 
 ## 3. Scope
 
@@ -33,8 +35,7 @@ graph GUI.
 topologies (`line`/`ring`/`star`), and custom YAML; graph GUI with open/pay/close actions and log
 streaming; deterministic teardown; validated on Linux amd64 and macOS arm64 with Docker Desktop.
 **Stretch:** UDT asset preset (deploy an xUDT on the devnet, whitelist it in node configs,
-open a UDT channel); scenario scripts (`fiber-forge run payments.yml` traffic generator); headless CI
-mode (`fiber-forge up --no-ui --json`).
+open a UDT channel); headless CI mode (`fiber-forge up --no-ui --json`).
 **Non-goals:** testnet/mainnet management (local devnet only); node version matrixing (pinned
 image); Windows-native. WSL2 is the intended Windows path but remains unverified.
 
