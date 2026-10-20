@@ -5,7 +5,11 @@ on:
       - "v*"
 
 jobs:
+  live-e2e:
+    uses: ./.github/workflows/e2e.yml
+
   publish:
+    needs: live-e2e
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

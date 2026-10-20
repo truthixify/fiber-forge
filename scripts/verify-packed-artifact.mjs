@@ -36,6 +36,7 @@ const requiredPackageFiles = [
   "docs/lifecycle-errors.md",
   "docs/recovery.md",
   "docs/sdk.md",
+  "docs/verification.md",
   "package.json",
   "src/cli.ts",
 ];
@@ -129,6 +130,7 @@ function validatePackListing(metadata) {
         "docs/lifecycle-errors.md",
         "docs/recovery.md",
         "docs/sdk.md",
+        "docs/verification.md",
         "src/",
       ].some((allowedPath) =>
         allowedPath.endsWith("/")

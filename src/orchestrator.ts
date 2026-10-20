@@ -7,6 +7,7 @@
  */
 
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -44,8 +45,11 @@ import {
 import { isValidNetworkName, type Topology } from "./topology.js";
 
 export const FORGE_LABEL = "fiber-forge";
-export const DEFAULT_FNN_IMAGE = "nervos/fiber:0.9.0-rc7";
-export const DEFAULT_CKB_IMAGE = "nervos/ckb:v0.201.0";
+const packageMetadata = createRequire(import.meta.url)("../package.json") as {
+  fiberForge: { images: { ckb: string; fiber: string } };
+};
+export const DEFAULT_FNN_IMAGE = packageMetadata.fiberForge.images.fiber;
+export const DEFAULT_CKB_IMAGE = packageMetadata.fiberForge.images.ckb;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const hex = (bytes: Uint8Array) => "0x" + Buffer.from(bytes).toString("hex");

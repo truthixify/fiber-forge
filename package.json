@@ -27,6 +27,12 @@
   "publishConfig": {
     "access": "public"
   },
+  "fiberForge": {
+    "images": {
+      "ckb": "nervos/ckb:v0.201.0",
+      "fiber": "nervos/fiber:0.9.0-rc7"
+    }
+  },
   "exports": {
     "./sdk": {
       "types": "./dist/sdk.d.ts",
@@ -36,6 +42,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
+    "test:e2e": "node scripts/live-evidence.mjs all",
     "test:sdk": "tsc --noEmit -p test/fixtures/sdk-consumer/tsconfig.json && node test/fixtures/sdk-consumer/runtime.mjs",
     "test:package": "node scripts/verify-packed-artifact.mjs",
     "lint": "tsc --noEmit",
@@ -73,6 +80,7 @@
     "assets",
     "docs/sdk.md",
     "docs/recovery.md",
-    "docs/lifecycle-errors.md"
+    "docs/lifecycle-errors.md",
+    "docs/verification.md"
   ]
 }

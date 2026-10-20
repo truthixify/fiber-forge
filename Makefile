@@ -1,4 +1,4 @@
-.PHONY: setup build test sdk-test package-test lint fmt fmt-check ci clean
+.PHONY: setup build test e2e sdk-test package-test lint fmt fmt-check ci clean
 
 setup:
 	npm ci
@@ -8,6 +8,9 @@ build:
 
 test:
 	npm test
+
+e2e:
+	npm run test:e2e
 
 sdk-test: build
 	npm run test:sdk

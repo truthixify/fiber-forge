@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -21,6 +21,18 @@ const RUN = process.env.FORGE_E2E === "1";
 const assetsDir = join(import.meta.dirname, "..", "assets");
 const MULTIHOP_NET = "e2e-multihop";
 const RECOVERY_NET = "e2e-recovery";
+const FAILURE_PROBE = ["1", "true"].includes(
+  (process.env.FORGE_E2E_FAILURE_PROBE ?? "").toLowerCase(),
+);
+
+async function makeLiveStateDir(prefix: string): Promise<string> {
+  const root = process.env.FORGE_E2E_STATE_ROOT;
+  if (!root) {
+    return mkdtemp(join(tmpdir(), prefix));
+  }
+  await mkdir(root, { recursive: true });
+  return mkdtemp(join(root, prefix));
+}
 
 class NodeStartFailureEngine extends DockerEngine {
   override async run(spec: ContainerSpec): Promise<void> {
@@ -218,7 +230,7 @@ async function expectProvisionRollback(
     channels: [{ from: "alice", to: "bob", capacityCkb: 1000 }],
     funding: { perNodeCkb: 100000 },
   };
-  const stateDir = await mkdtemp(join(tmpdir(), "fiber-forge-rollback-"));
+  const stateDir = await makeLiveStateDir("rollback-");
   const orchestrator = new Orchestrator(engine, assetsDir, stateDir);
   try {
     const attempt = orchestrator.up(topology, {
@@ -283,7 +295,7 @@ describe.skipIf(!RUN)("live: trio multi-hop CKB payment", () => {
       throw new Error("trio preset is unavailable");
     }
     const engine = new DockerEngine();
-    const stateDir = await mkdtemp(join(tmpdir(), "fiber-forge-e2e-"));
+    const stateDir = await makeLiveStateDir("multihop-");
     const orchestrator = new Orchestrator(engine, assetsDir, stateDir);
     const trio = { ...selected, name: MULTIHOP_NET };
     const [sender, relay, receiver] = trio.nodes.map((node) => node.name);
@@ -313,6 +325,14 @@ describe.skipIf(!RUN)("live: trio multi-hop CKB payment", () => {
           throw stageFailure(stage, error);
         }
       })();
+      if (FAILURE_PROBE) {
+        throw stageFailure(
+          "payment",
+          new Error(
+            "intentional evidence failure probe token=FORGE_EVIDENCE_PROBE_SECRET",
+          ),
+        );
+      }
       const rpcs = layout.nodes.map(
         (node) =>
           new FnnRpc(new HttpTransport(`http://127.0.0.1:${node.rpcHostPort}`)),
@@ -402,7 +422,7 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
       throw new Error("trio preset is unavailable");
     }
     const engine = new DockerEngine();
-    const stateDir = await mkdtemp(join(tmpdir(), "fiber-forge-recovery-"));
+    const stateDir = await makeLiveStateDir("recovery-");
     const orchestrator = new Orchestrator(engine, assetsDir, stateDir);
     const trio = { ...selected, name: RECOVERY_NET };
     const [sender, relay, receiver] = trio.nodes.map((node) => node.name);
@@ -572,7 +592,8 @@ describe.skipIf(!RUN)("live: UDT asset channel + payment", () => {
 
   it("issues UDT, opens a UDT channel, and pays a UDT invoice", async () => {
     const engine = new DockerEngine();
-    const orchestrator = new Orchestrator(engine, assetsDir);
+    const stateDir = await makeLiveStateDir("udt-");
+    const orchestrator = new Orchestrator(engine, assetsDir, stateDir);
     try {
       await orchestrator.up(nodesOnly, {
         layout: { ckbHostPort: 8216, rpcHostPortBase: 8340 },
@@ -597,7 +618,7 @@ describe.skipIf(!RUN)("live: UDT asset channel + payment", () => {
       );
       expect(report.status).toBe("Success");
     } finally {
-      await orchestrator.down("e2e-udt", { purge: true });
+      await verifyCleanup(orchestrator, engine, stateDir, "e2e-udt");
     }
   }, 300_000);
 });

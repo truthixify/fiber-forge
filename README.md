@@ -5,7 +5,8 @@ development chain and several Fiber nodes, funds them, connects them as peers, a
 between them. It then serves a web GUI where you can send payments, open and close channels, and
 inspect each node. A working network is ready in under a minute.
 
-[![CI](https://github.com/truthixify/fiber-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/truthixify/fiber-forge/actions/workflows/ci.yml)
+[![Unit CI](https://github.com/truthixify/fiber-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/truthixify/fiber-forge/actions/workflows/ci.yml)
+[![Live E2E](https://github.com/truthixify/fiber-forge/actions/workflows/e2e.yml/badge.svg)](https://github.com/truthixify/fiber-forge/actions/workflows/e2e.yml)
 [![npm](https://img.shields.io/npm/v/@truthixify/fiber-forge)](https://www.npmjs.com/package/@truthixify/fiber-forge)
 
 It was built for the "Gone in 60ms" Fiber Network Infrastructure Hackathon (Category 2). Lightning
@@ -170,12 +171,13 @@ make test     # unit tests (the live Docker end-to-end test is behind FORGE_E2E=
 make ci       # formatting, types, tests, build, and packed-artifact smoke — the CI gate
 make sdk-test # build, typecheck, and execute a consumer through the package export
 make package-test # install the tarball with production dependencies and smoke the CLI + SDK
-
-FORGE_E2E=1 npx vitest run test/e2e.test.ts   # live multi-hop, relay recovery, and UDT proofs
+make e2e       # packed-artifact smoke + live Docker proofs + local evidence
 ```
 
-Run `make ci` before every push. Pushing a `v*` tag publishes to npm through
-`.github/workflows/publish.yml`.
+Run `make ci` before every push. Unit CI and live Docker verification are separate gates; every live
+run publishes a bounded summary and sanitized diagnostics for 14 days. See
+[Live verification](docs/verification.md) for the evidence schema and trigger/release policy.
+Pushing a `v*` tag publishes to npm only after the same live workflow passes.
 
 ## Roadmap
 

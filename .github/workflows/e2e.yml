@@ -1,17 +1,55 @@
-name: e2e
-# Headless live smoke: brings real CKB + fnn containers up on the runner's Docker, drives a
-# three-node CKB multi-hop payment, node recovery, rollback failures, and UDT paths, then verifies
-# teardown. Kept off the per-push path (slow: pulls images + boots a devnet) — run it on demand or
-# weekly.
+name: live-e2e
+
+# Real CKB/Fiber verification. Unit CI remains separate; this workflow installs the packed package,
+# exercises provisioning, multi-hop payment, relay recovery, rollback, and UDT paths, then always
+# publishes bounded evidence and verifies cleanup.
 on:
+  workflow_call:
+    inputs:
+      failure_probe:
+        description: Intentionally fail one live path to verify diagnostics and cleanup
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
+    inputs:
+      failure_probe:
+        description: Intentionally fail one live path to verify diagnostics and cleanup
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - ".github/workflows/e2e.yml"
+      - ".github/workflows/publish.yml"
+      - "assets/**"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/live-evidence.mjs"
+      - "scripts/verify-packed-artifact.mjs"
+      - "src/**"
+      - "test/e2e.test.ts"
+      - "test/live-evidence.test.mjs"
   schedule:
     - cron: "0 6 * * 1" # Mondays 06:00 UTC
 
+permissions:
+  contents: read
+
+concurrency:
+  group: live-e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  e2e:
+  live-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    env:
+      FORGE_E2E_ARTIFACT_DIR: artifacts/live-e2e
+      FORGE_E2E_FAILURE_PROBE: ${{ inputs.failure_probe }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -19,11 +57,27 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: pre-pull images
-        run: |
-          docker pull nervos/ckb:v0.201.0
-          docker pull nervos/fiber:0.9.0-rc7
-      - name: live e2e
+      - name: Pre-pull pinned runtime images
+        timeout-minutes: 5
+        run: node scripts/live-evidence.mjs pull-images
+      - name: Run packed-artifact and live verification
+        timeout-minutes: 16
+        run: node scripts/live-evidence.mjs run
+      - name: Finalize evidence and verify cleanup
+        if: always()
+        timeout-minutes: 2
         env:
-          FORGE_E2E: "1"
-        run: npx vitest run test/e2e.test.ts
+          FORGE_E2E_JOB_STATUS: ${{ job.status }}
+        run: node scripts/live-evidence.mjs finalize
+      - name: Upload bounded live evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: live-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/live-e2e/summary.json
+            artifacts/live-e2e/summary.md
+            artifacts/live-e2e/diagnostics.log
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 9
