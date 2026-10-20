@@ -8,10 +8,12 @@ import { type ContainerSpec, FakeEngine } from "../src/engine";
 import { ForgeError } from "../src/errors";
 import {
   FORGE_LABEL,
+  type NetworkState,
   Orchestrator,
   ckbContainerSpec,
   nodeContainerSpec,
 } from "../src/orchestrator";
+import { FnnRpc, type RpcTransport } from "../src/rpc";
 import { type Topology } from "../src/topology";
 
 async function pathExists(path: string): Promise<boolean> {
@@ -95,6 +97,131 @@ const duo: Topology = {
   funding: { perNodeCkb: 100000 },
 };
 
+interface SimulatedNode {
+  pubkey: string;
+  peerPubkey: string;
+  ready: boolean;
+  connected: boolean;
+  channelState: string;
+}
+
+async function lifecycleFixture(): Promise<{
+  engine: FakeEngine;
+  orchestrator: Orchestrator;
+  nodes: Map<number, SimulatedNode>;
+  stateDir: string;
+}> {
+  const stateDir = await mkdtemp(join(tmpdir(), "forge-lifecycle-test-"));
+  const engine = new FakeEngine();
+  const state: NetworkState = {
+    net: "duo",
+    network: "forge-duo",
+    ckbHostPort: 18114,
+    nodes: [
+      {
+        name: "alice",
+        container: "forge-duo-node-1",
+        ip: "10.5.7.11",
+        rpcHostPort: 18300,
+        pubkey: "0xalice",
+        ckbAddress: "ckt1alice",
+      },
+      {
+        name: "bob",
+        container: "forge-duo-node-2",
+        ip: "10.5.7.12",
+        rpcHostPort: 18301,
+        pubkey: "0xbob",
+        ckbAddress: "ckt1bob",
+      },
+    ],
+    channels: [{ from: "alice", to: "bob", capacityCkb: 1000 }],
+  };
+  await mkdir(join(stateDir, "duo"), { recursive: true });
+  await writeFile(join(stateDir, "duo", "layout.json"), JSON.stringify(state));
+  for (const name of [
+    "forge-duo-ckb",
+    "forge-duo-node-1",
+    "forge-duo-node-2",
+  ]) {
+    await engine.run({
+      name,
+      image: "test",
+      network: "forge-duo",
+      labels: { [FORGE_LABEL]: "duo" },
+    });
+  }
+
+  const nodes = new Map<number, SimulatedNode>([
+    [
+      18300,
+      {
+        pubkey: "0xalice",
+        peerPubkey: "0xbob",
+        ready: true,
+        connected: true,
+        channelState: "ChannelReady",
+      },
+    ],
+    [
+      18301,
+      {
+        pubkey: "0xbob",
+        peerPubkey: "0xalice",
+        ready: true,
+        connected: true,
+        channelState: "ChannelReady",
+      },
+    ],
+  ]);
+  const makeRpc = (port: number): FnnRpc => {
+    const transport: RpcTransport = {
+      async call(method: string): Promise<unknown> {
+        const simulated = nodes.get(port);
+        if (!simulated || !simulated.ready) {
+          throw new Error(`${method}: unavailable`);
+        }
+        if (method === "node_info") {
+          return {
+            pubkey: simulated.pubkey,
+            addresses: [`/ip4/0.0.0.0/tcp/8228/p2p/peer-${port}`],
+            chain_hash: "0xchain",
+            node_name: null,
+          };
+        }
+        if (method === "list_peers") {
+          return {
+            peers: simulated.connected
+              ? [{ pubkey: simulated.peerPubkey, address: "/ip4/peer" }]
+              : [],
+          };
+        }
+        if (method === "list_channels") {
+          return {
+            channels: [
+              {
+                channel_id: `0xchannel-${port}`,
+                pubkey: simulated.peerPubkey,
+                state: simulated.channelState,
+                local_balance: "0x174876e800",
+                remote_balance: "0x174876e800",
+              },
+            ],
+          };
+        }
+        throw new Error(`unexpected RPC method ${method}`);
+      },
+    };
+    return new FnnRpc(transport);
+  };
+  return {
+    engine,
+    orchestrator: new Orchestrator(engine, "/assets", stateDir, makeRpc),
+    nodes,
+    stateDir,
+  };
+}
+
 describe("container specs", () => {
   const layout = planLayout(duo, { subnetBase: "10.5.7" });
 
@@ -129,6 +256,199 @@ describe("container specs", () => {
     expect(spec.volumes).toEqual([
       { source: "/state/node-1", target: "/fiber" },
     ]);
+  });
+});
+
+describe("Orchestrator node lifecycle", () => {
+  it("stops only the requested node and treats a repeated stop as a no-op", async () => {
+    const { engine, orchestrator, stateDir } = await lifecycleFixture();
+    try {
+      const stopped = await orchestrator.stopNode("duo", "alice");
+      expect(stopped).toMatchObject({
+        action: "stop",
+        previousStatus: "running",
+        status: "stopped",
+        changed: true,
+        rpcReady: false,
+        recovery: "not-applicable",
+      });
+      expect(await engine.status("forge-duo-node-1")).toBe("exited");
+      expect(await engine.status("forge-duo-node-2")).toBe("running");
+      expect(await engine.status("forge-duo-ckb")).toBe("running");
+
+      const repeated = await orchestrator.stopNode("duo", "alice");
+      expect(repeated).toMatchObject({
+        previousStatus: "stopped",
+        status: "stopped",
+        changed: false,
+      });
+      expect(
+        engine.log.filter((line) => line === "stop forge-duo-node-1"),
+      ).toHaveLength(1);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("starts a stopped node, verifies identity, and reconciles its channel", async () => {
+    const { engine, orchestrator, stateDir } = await lifecycleFixture();
+    try {
+      await orchestrator.stopNode("duo", "alice");
+      const started = await orchestrator.startNode("duo", "alice", {
+        timeoutMs: 20,
+        reconcileTimeoutMs: 20,
+      });
+      expect(started).toMatchObject({
+        action: "start",
+        previousStatus: "stopped",
+        status: "running",
+        changed: true,
+        rpcReady: true,
+        identityMatches: true,
+        recovery: "ready",
+        nextAction: null,
+        channels: [
+          {
+            channelId: "0xchannel-18300",
+            peer: "bob",
+            state: "ChannelReady",
+            connected: true,
+          },
+        ],
+      });
+
+      const repeated = await orchestrator.startNode("duo", "alice", {
+        timeoutMs: 20,
+        reconcileTimeoutMs: 20,
+      });
+      expect(repeated.changed).toBe(false);
+      expect(
+        engine.log.filter((line) => line === "start forge-duo-node-1"),
+      ).toHaveLength(1);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("restarts the same container and reports degraded peer recovery", async () => {
+    const { engine, orchestrator, nodes, stateDir } = await lifecycleFixture();
+    try {
+      nodes.get(18300)!.connected = false;
+      const restarted = await orchestrator.restartNode("duo", "alice", {
+        timeoutMs: 20,
+        reconcileTimeoutMs: 5,
+      });
+      expect(restarted).toMatchObject({
+        action: "restart",
+        previousStatus: "running",
+        status: "running",
+        changed: true,
+        rpcReady: true,
+        identityMatches: true,
+        recovery: "action-required",
+      });
+      expect(restarted.channels[0]).toMatchObject({
+        peer: "bob",
+        connected: false,
+      });
+      expect(restarted.nextAction).toContain("fiber-forge node inspect");
+      expect(engine.log.slice(-2)).toEqual([
+        "stop forge-duo-node-1",
+        "start forge-duo-node-1",
+      ]);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("inspects stopped and missing recorded containers without mutating them", async () => {
+    const { engine, orchestrator, stateDir } = await lifecycleFixture();
+    try {
+      await engine.stop("forge-duo-node-1");
+      const stopped = await orchestrator.inspectNode("duo", "alice");
+      expect(stopped).toMatchObject({
+        action: "inspect",
+        status: "stopped",
+        changed: false,
+        recovery: "action-required",
+      });
+      expect(stopped.nextAction).toContain("node start");
+
+      await engine.remove("forge-duo-node-1");
+      const missing = await orchestrator.inspectNode("duo", "alice");
+      expect(missing.status).toBe("absent");
+      expect(missing.nextAction).toContain("recreate network");
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses stable errors for unknown nodes, missing containers, RPC timeout, and identity drift", async () => {
+    const { engine, orchestrator, nodes, stateDir } = await lifecycleFixture();
+    try {
+      await expect(orchestrator.stopNode("duo", "carol")).rejects.toMatchObject(
+        {
+          code: "NODE_NOT_FOUND",
+          resource: "duo/carol",
+        },
+      );
+
+      await engine.remove("forge-duo-node-1");
+      await expect(
+        orchestrator.startNode("duo", "alice"),
+      ).rejects.toMatchObject({
+        code: "NODE_CONTAINER_MISSING",
+        resource: "duo/alice",
+      });
+
+      await engine.run({
+        name: "forge-duo-node-1",
+        image: "test",
+        network: "forge-duo",
+        labels: { [FORGE_LABEL]: "duo" },
+      });
+      await engine.stop("forge-duo-node-1");
+      nodes.get(18300)!.ready = false;
+      await expect(
+        orchestrator.startNode("duo", "alice", {
+          timeoutMs: 5,
+          reconcileTimeoutMs: 5,
+        }),
+      ).rejects.toMatchObject({
+        code: "NODE_RPC_UNAVAILABLE",
+        resource: "duo/alice",
+      });
+
+      nodes.get(18300)!.ready = true;
+      nodes.get(18300)!.pubkey = "0xunexpected";
+      await engine.stop("forge-duo-node-1");
+      await expect(
+        orchestrator.startNode("duo", "alice", {
+          timeoutMs: 20,
+          reconcileTimeoutMs: 20,
+        }),
+      ).rejects.toMatchObject({
+        code: "NODE_IDENTITY_MISMATCH",
+        resource: "duo/alice",
+      });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects invalid lifecycle timeouts before changing a node", async () => {
+    const { engine, orchestrator, stateDir } = await lifecycleFixture();
+    try {
+      await expect(
+        orchestrator.restartNode("duo", "alice", { timeoutMs: 0 }),
+      ).rejects.toMatchObject({
+        code: "INVALID_TIMEOUT",
+        resource: "NodeLifecycleOptions.timeoutMs",
+      });
+      expect(await engine.status("forge-duo-node-1")).toBe("running");
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
   });
 });
 

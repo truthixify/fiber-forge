@@ -61,6 +61,8 @@ unsupported.
 | `planNetwork(topology, layout?)` | A `Topology`; returns a deterministic `NetworkLayout` without I/O. | Synchronous. It does not reserve ports or inspect Docker, so `up` can resolve conflicts differently when ports/subnets are omitted. |
 | `up(topology, options?)` | Returns the created `NetworkLayout` after every declared channel is ready and routing gossip is visible. | Ten-minute overall default (`DEFAULT_PROVISION_TIMEOUT_MS`), configurable with `timeoutMs`; accepts `signal`. Abort/timeout is cooperative, and rollback completes before rejection. |
 | `inspect(net)` / `list()` | Return `NetworkView` or `NetworkSummary[]`. | Best-effort inspection: unreachable nodes/chains are represented as stopped, zero, or omitted live data instead of making the whole view unavailable. RPC calls have a ten-second request bound. |
+| `inspectNode(net, node)` | Returns a `NodeLifecycleReport` without mutation. | Reads actual Docker state. A running node is checked for RPC identity, peers, and channels; stopped or externally removed containers remain explicit states. |
+| `stopNode` / `startNode` / `restartNode` | Return a shared `NodeLifecycleReport`; start/restart accept `NodeLifecycleOptions`. | Operations on the same node are serialized. Stop retains the exact container and mounted state. Start/restart wait up to 60 seconds for RPC and identity, then observe automatic peer/channel recovery for up to 10 seconds. Repeats return `changed: false` when already in the requested state. |
 | `createInvoice`, `pay`, `payInvoice` | Return an invoice or `PaymentReport`. | RPC calls are bounded to ten seconds; route discovery retries for up to 30 seconds and payment settlement is observed for up to 60 seconds. These methods do not create or remove a network. |
 | `openChannelBetween` / `closeChannel` / `channels` | Mutate or inspect channels. | Channel readiness is bounded to 120 seconds. Opens for the same network are serialized. A failed open leaves the existing network running for inspection or retry. |
 | `issueUdt` / `fund` | Return the submitted transaction hash. | Operate only against the disposable local dev chain; they never access testnet or mainnet. |
@@ -75,6 +77,11 @@ polling delay.
 
 Always put teardown in `finally`. Abort and timeout already roll back an incomplete `up`, while the
 `finally` handles failures in application code after a successful start.
+
+`NodeLifecycleReport.recovery` is `ready` only when every declared neighbor is connected and has a
+`ChannelReady` channel from the operated node. `action-required` is a truthful post-operation
+observation, not a failed process start; use `nextAction` and inspect the network before reconnecting
+or reopening anything. `restartNode` never replaces the container, key, or node database.
 
 ## Errors
 

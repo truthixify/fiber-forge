@@ -20,6 +20,7 @@ import {
   type ChannelRow,
   type NetworkSummary,
   type NetworkView,
+  type NodeLifecycleReport,
   type PaymentReport,
 } from "./orchestrator.js";
 import { preset } from "./presets.js";
@@ -28,6 +29,10 @@ import { type Topology } from "./topology.js";
 /** The orchestrator operations the daemon exposes over HTTP (the Orchestrator implements these). */
 export interface Backend {
   inspect(net: string): Promise<NetworkView>;
+  inspectNode(net: string, node: string): Promise<NodeLifecycleReport>;
+  stopNode(net: string, node: string): Promise<NodeLifecycleReport>;
+  startNode(net: string, node: string): Promise<NodeLifecycleReport>;
+  restartNode(net: string, node: string): Promise<NodeLifecycleReport>;
   list(): Promise<NetworkSummary[]>;
   channels(net: string, node?: string): Promise<ChannelRow[]>;
   pay(
@@ -238,6 +243,29 @@ export function createDaemon(backend: Backend): Server {
               Boolean(body.udt),
             ),
           );
+          return;
+        }
+        if (path === "/api/node/lifecycle") {
+          const net = str(body.net);
+          const node = str(body.node);
+          const action = str(body.action);
+          const result =
+            action === "inspect"
+              ? await backend.inspectNode(net, node)
+              : action === "stop"
+                ? await backend.stopNode(net, node)
+                : action === "start"
+                  ? await backend.startNode(net, node)
+                  : action === "restart"
+                    ? await backend.restartNode(net, node)
+                    : null;
+          if (!result) {
+            sendJson(response, 400, {
+              error: "action must be inspect, stop, start, or restart",
+            });
+            return;
+          }
+          sendJson(response, 200, result);
           return;
         }
         if (path === "/api/channel/open") {

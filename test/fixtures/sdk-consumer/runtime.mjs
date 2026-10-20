@@ -47,7 +47,12 @@ funding: { per_node_ckb: 100000 }
 `).channels.length,
   1,
 );
-assert.equal(typeof sdk.createFiberForge().up, "function");
+const forge = sdk.createFiberForge();
+assert.equal(typeof forge.up, "function");
+assert.equal(typeof forge.inspectNode, "function");
+assert.equal(typeof forge.stopNode, "function");
+assert.equal(typeof forge.startNode, "function");
+assert.equal(typeof forge.restartNode, "function");
 assert.equal(sdk.planNetwork(sdk.preset("duo")).nodes.length, 2);
 assert.deepEqual(
   sdk.errorDetails(

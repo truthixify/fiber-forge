@@ -24,7 +24,11 @@ import {
   pickSubnetBase,
   planLayout,
 } from "./config.js";
-import { type ContainerEngine, type ContainerSpec } from "./engine.js";
+import {
+  type ContainerEngine,
+  type ContainerSpec,
+  type ContainerStatus,
+} from "./engine.js";
 import { ForgeError, errorDetails } from "./errors.js";
 import { encryptKey, generatePrivateKey } from "./keys.js";
 import { findFreePort, findFreePortBlock, isPortFree } from "./ports.js";
@@ -55,6 +59,10 @@ const sleep = (ms: number) =>
   new Promise<void>((resolvePromise) => setTimeout(resolvePromise, ms));
 const hex = (bytes: Uint8Array) => "0x" + Buffer.from(bytes).toString("hex");
 export const DEFAULT_PROVISION_TIMEOUT_MS = 10 * 60_000;
+
+function nodeRuntimeStatus(status: ContainerStatus): NodeRuntimeStatus {
+  return status === "exited" ? "stopped" : status;
+}
 
 class ProvisionGuard {
   private readonly deadline: number;
@@ -249,6 +257,43 @@ export interface NetworkView {
   }[];
 }
 
+/** A supported operation on one persisted Fiber node container. */
+export type NodeLifecycleAction = "inspect" | "stop" | "start" | "restart";
+
+/** User-facing node states. Docker's `exited` state is reported as `stopped`. */
+export type NodeRuntimeStatus = "running" | "stopped" | "absent";
+
+/** One live channel observation made after a node RPC becomes ready. */
+export interface NodeChannelObservation {
+  channelId: string | null;
+  peer: string;
+  state: string;
+  connected: boolean;
+}
+
+/** Options for bounded node start and restart readiness checks. */
+export interface NodeLifecycleOptions {
+  /** Maximum time to wait for the node RPC and identity. Defaults to 60 seconds. */
+  timeoutMs?: number;
+  /** Maximum time to observe automatic peer/channel recovery. Defaults to 10 seconds. */
+  reconcileTimeoutMs?: number;
+}
+
+/** Machine-readable result shared by the SDK, CLI, daemon, and GUI. */
+export interface NodeLifecycleReport {
+  net: string;
+  node: string;
+  action: NodeLifecycleAction;
+  previousStatus: NodeRuntimeStatus;
+  status: NodeRuntimeStatus;
+  changed: boolean;
+  rpcReady: boolean;
+  identityMatches: boolean | null;
+  channels: NodeChannelObservation[];
+  recovery: "not-applicable" | "ready" | "action-required";
+  nextAction: string | null;
+}
+
 /** A channel as seen from one node. */
 export interface ChannelRow {
   node: string;
@@ -302,10 +347,15 @@ export class Orchestrator {
     private readonly engine: ContainerEngine,
     private readonly assetsDir: string,
     private readonly stateDir = join(homedir(), ".fiber-forge"),
+    private readonly makeRpc: (rpcHostPort: number) => FnnRpc = (rpcHostPort) =>
+      new FnnRpc(new HttpTransport(`http://127.0.0.1:${rpcHostPort}`)),
   ) {}
 
   /** Serializes channel opens per network: two fundings must not race for the same wallet cell. */
   private readonly openQueue = new Map<string, Promise<void>>();
+
+  /** Serializes lifecycle mutations for one node while allowing unrelated nodes to proceed. */
+  private readonly lifecycleQueue = new Map<string, Promise<void>>();
 
   private invalidPort(port: number, resource: string): ForgeError {
     return new ForgeError(
@@ -849,6 +899,141 @@ export class Orchestrator {
     return { net, block, nodes, channels };
   }
 
+  /** Inspect one recorded node without changing its container state. */
+  async inspectNode(net: string, node: string): Promise<NodeLifecycleReport> {
+    return this.queueNodeLifecycle(net, node, async () => {
+      const state = await this.readState(net);
+      const target = this.requireNode(state, node);
+      const dockerStatus = await this.engine.status(target.container);
+      const status = nodeRuntimeStatus(dockerStatus);
+      if (status !== "running") {
+        return {
+          net,
+          node,
+          action: "inspect",
+          previousStatus: status,
+          status,
+          changed: false,
+          rpcReady: false,
+          identityMatches: null,
+          channels: [],
+          recovery: "action-required",
+          nextAction:
+            status === "stopped"
+              ? `run "fiber-forge node start ${net} ${node}"`
+              : `recreate network "${net}" because container "${target.container}" is missing`,
+        };
+      }
+
+      const rpc = this.rpcFor(target.rpcHostPort);
+      let info: NodeInfo;
+      try {
+        info = await rpc.nodeInfo();
+      } catch {
+        return {
+          net,
+          node,
+          action: "inspect",
+          previousStatus: status,
+          status,
+          changed: false,
+          rpcReady: false,
+          identityMatches: null,
+          channels: [],
+          recovery: "action-required",
+          nextAction: `inspect logs with "fiber-forge logs ${net} ${node}"`,
+        };
+      }
+
+      const identityMatches = info.pubkey === target.pubkey;
+      const observed = await this.observeNodeRecovery(state, target, rpc, 0);
+      return {
+        net,
+        node,
+        action: "inspect",
+        previousStatus: status,
+        status,
+        changed: false,
+        rpcReady: true,
+        identityMatches,
+        channels: observed.channels,
+        recovery:
+          identityMatches && observed.ready ? "ready" : "action-required",
+        nextAction:
+          identityMatches && observed.ready
+            ? null
+            : identityMatches
+              ? `inspect peers and channels, then retry "fiber-forge node inspect ${net} ${node} --json"`
+              : `recreate network "${net}"; the running container identity does not match saved state`,
+      };
+    });
+  }
+
+  /** Stop one Fiber node while retaining its container and bind-mounted state. */
+  async stopNode(net: string, node: string): Promise<NodeLifecycleReport> {
+    return this.queueNodeLifecycle(net, node, async () => {
+      const state = await this.readState(net);
+      const target = this.requireNode(state, node);
+      const previousStatus = nodeRuntimeStatus(
+        await this.engine.status(target.container),
+      );
+      this.requireNodeContainer(net, node, target.container, previousStatus);
+
+      if (previousStatus === "running") {
+        await this.engine.stop(target.container);
+      }
+      const status = nodeRuntimeStatus(
+        await this.engine.status(target.container),
+      );
+      if (status !== "stopped") {
+        throw new ForgeError(
+          "NODE_STATE_MISMATCH",
+          `node "${node}" did not reach stopped state (observed ${status})`,
+          {
+            resource: `${net}/${node}`,
+            action: `inspect Docker container "${target.container}" and retry`,
+          },
+        );
+      }
+
+      return {
+        net,
+        node,
+        action: "stop",
+        previousStatus,
+        status,
+        changed: previousStatus !== status,
+        rpcReady: false,
+        identityMatches: null,
+        channels: [],
+        recovery: "not-applicable",
+        nextAction: `run "fiber-forge node start ${net} ${node}" to restore the process`,
+      };
+    });
+  }
+
+  /** Start one stopped Fiber node and report its observed identity, peers, and channel state. */
+  async startNode(
+    net: string,
+    node: string,
+    options: NodeLifecycleOptions = {},
+  ): Promise<NodeLifecycleReport> {
+    return this.queueNodeLifecycle(net, node, () =>
+      this.startNodeNow(net, node, "start", options),
+    );
+  }
+
+  /** Stop and start one Fiber node without replacing its persisted container or node data. */
+  async restartNode(
+    net: string,
+    node: string,
+    options: NodeLifecycleOptions = {},
+  ): Promise<NodeLifecycleReport> {
+    return this.queueNodeLifecycle(net, node, () =>
+      this.startNodeNow(net, node, "restart", options),
+    );
+  }
+
   /**
    * Tear a network down. By default removes its containers, network, and ckb data volume, keeping
    * the state dir. `keep` preserves the CKB data volume too; `purge` also deletes the state dir,
@@ -1191,6 +1376,272 @@ export class Orchestrator {
     return level ? filterLogsByLevel(raw, level) : raw;
   }
 
+  private queueNodeLifecycle(
+    net: string,
+    node: string,
+    operation: () => Promise<NodeLifecycleReport>,
+  ): Promise<NodeLifecycleReport> {
+    const key = `${net}/${node}`;
+    const prior = this.lifecycleQueue.get(key) ?? Promise.resolve();
+    const result = prior.catch(() => undefined).then(operation);
+    const settled = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.lifecycleQueue.set(key, settled);
+    return result.finally(() => {
+      if (this.lifecycleQueue.get(key) === settled) {
+        this.lifecycleQueue.delete(key);
+      }
+    });
+  }
+
+  private lifecycleTimeouts(options: NodeLifecycleOptions): {
+    timeoutMs: number;
+    reconcileTimeoutMs: number;
+  } {
+    const timeoutMs = options.timeoutMs ?? 60_000;
+    const reconcileTimeoutMs = options.reconcileTimeoutMs ?? 10_000;
+    for (const [resource, value] of [
+      ["NodeLifecycleOptions.timeoutMs", timeoutMs],
+      ["NodeLifecycleOptions.reconcileTimeoutMs", reconcileTimeoutMs],
+    ] as const) {
+      if (!Number.isFinite(value) || value <= 0) {
+        throw new ForgeError(
+          "INVALID_TIMEOUT",
+          `${resource} must be a positive finite number`,
+          {
+            resource,
+            action: "provide a positive timeout in milliseconds",
+          },
+        );
+      }
+    }
+    return { timeoutMs, reconcileTimeoutMs };
+  }
+
+  private requireNodeContainer(
+    net: string,
+    node: string,
+    container: string,
+    status: NodeRuntimeStatus,
+  ): void {
+    if (status === "absent") {
+      throw new ForgeError(
+        "NODE_CONTAINER_MISSING",
+        `node "${node}" is recorded but container "${container}" is missing`,
+        {
+          resource: `${net}/${node}`,
+          action: `recreate network "${net}" before retrying`,
+        },
+      );
+    }
+  }
+
+  private async startNodeNow(
+    net: string,
+    node: string,
+    action: "start" | "restart",
+    options: NodeLifecycleOptions,
+  ): Promise<NodeLifecycleReport> {
+    const { timeoutMs, reconcileTimeoutMs } = this.lifecycleTimeouts(options);
+    const state = await this.readState(net);
+    const target = this.requireNode(state, node);
+    const previousStatus = nodeRuntimeStatus(
+      await this.engine.status(target.container),
+    );
+    this.requireNodeContainer(net, node, target.container, previousStatus);
+
+    if (action === "restart" && previousStatus === "running") {
+      await this.engine.stop(target.container);
+      const stopped = nodeRuntimeStatus(
+        await this.engine.status(target.container),
+      );
+      if (stopped !== "stopped") {
+        throw new ForgeError(
+          "NODE_STATE_MISMATCH",
+          `node "${node}" did not stop before restart (observed ${stopped})`,
+          {
+            resource: `${net}/${node}`,
+            action: `inspect Docker container "${target.container}" and retry`,
+          },
+        );
+      }
+    }
+
+    if (action === "restart" || previousStatus === "stopped") {
+      await this.engine.start(target.container);
+    }
+    const status = nodeRuntimeStatus(
+      await this.engine.status(target.container),
+    );
+    if (status !== "running") {
+      throw new ForgeError(
+        "NODE_STATE_MISMATCH",
+        `node "${node}" did not reach running state (observed ${status})`,
+        {
+          resource: `${net}/${node}`,
+          action: `inspect Docker container "${target.container}" and its logs`,
+        },
+      );
+    }
+
+    const rpc = this.rpcFor(target.rpcHostPort);
+    const info = await this.waitLifecycleNodeInfo(
+      rpc,
+      timeoutMs,
+      net,
+      node,
+      target.container,
+    );
+    if (info.pubkey !== target.pubkey) {
+      throw new ForgeError(
+        "NODE_IDENTITY_MISMATCH",
+        `node "${node}" restarted with a different public key`,
+        {
+          resource: `${net}/${node}`,
+          action: `stop using network "${net}" and recreate it from a trusted topology`,
+        },
+      );
+    }
+
+    const observed = await this.observeNodeRecovery(
+      state,
+      target,
+      rpc,
+      reconcileTimeoutMs,
+    );
+    return {
+      net,
+      node,
+      action,
+      previousStatus,
+      status,
+      changed: action === "restart" || previousStatus !== status,
+      rpcReady: true,
+      identityMatches: true,
+      channels: observed.channels,
+      recovery: observed.ready ? "ready" : "action-required",
+      nextAction: observed.ready
+        ? null
+        : `inspect peers and channels, then retry "fiber-forge node inspect ${net} ${node} --json"`,
+    };
+  }
+
+  private async waitLifecycleNodeInfo(
+    rpc: FnnRpc,
+    timeoutMs: number,
+    net: string,
+    node: string,
+    container: string,
+  ): Promise<NodeInfo> {
+    const deadline = Date.now() + timeoutMs;
+    let lastError: unknown;
+    for (;;) {
+      try {
+        const info = await rpc.nodeInfo();
+        if (peerIdOf(info)) {
+          return info;
+        }
+      } catch (error) {
+        lastError = error;
+      }
+      if (Date.now() >= deadline) {
+        throw new ForgeError(
+          "NODE_RPC_UNAVAILABLE",
+          `node "${node}" is running but its RPC did not become ready within ${timeoutMs}ms`,
+          {
+            resource: `${net}/${node}`,
+            action: `inspect logs with "fiber-forge logs ${net} ${node}" and retry the start operation`,
+            cause: lastError,
+          },
+        );
+      }
+      await sleep(Math.min(250, Math.max(1, deadline - Date.now())));
+      if (
+        nodeRuntimeStatus(await this.engine.status(container)) !== "running"
+      ) {
+        throw new ForgeError(
+          "NODE_STATE_MISMATCH",
+          `node "${node}" exited while waiting for RPC readiness`,
+          {
+            resource: `${net}/${node}`,
+            action: `inspect logs with "fiber-forge logs ${net} ${node}"`,
+          },
+        );
+      }
+    }
+  }
+
+  private async observeNodeRecovery(
+    state: NetworkState,
+    target: NetworkState["nodes"][number],
+    rpc: FnnRpc,
+    timeoutMs: number,
+  ): Promise<{ channels: NodeChannelObservation[]; ready: boolean }> {
+    const peerNames = new Map(
+      state.nodes.map((node) => [node.pubkey, node.name]),
+    );
+    const expectedNames = new Set<string>();
+    for (const channel of state.channels) {
+      if (channel.from === target.name) expectedNames.add(channel.to);
+      if (channel.to === target.name) expectedNames.add(channel.from);
+    }
+    const expectedPeers = state.nodes.filter((node) =>
+      expectedNames.has(node.name),
+    );
+    const deadline = Date.now() + timeoutMs;
+    let channels: NodeChannelObservation[] = [];
+
+    for (;;) {
+      try {
+        const [liveChannels, livePeers] = await Promise.all([
+          rpc.listChannels(),
+          rpc.listPeers(),
+        ]);
+        const connectedPubkeys = new Set(livePeers.map((peer) => peer.pubkey));
+        channels = liveChannels.map((channel) => ({
+          channelId: channel.channel_id,
+          peer: peerNames.get(channel.pubkey ?? "") ?? channel.pubkey ?? "?",
+          state: channelStateName(channel) || "Unknown",
+          connected: connectedPubkeys.has(channel.pubkey ?? ""),
+        }));
+        for (const peer of expectedPeers) {
+          if (!liveChannels.some((channel) => channel.pubkey === peer.pubkey)) {
+            channels.push({
+              channelId: null,
+              peer: peer.name,
+              state: "Missing",
+              connected: connectedPubkeys.has(peer.pubkey),
+            });
+          }
+        }
+        channels.sort((a, b) =>
+          `${a.peer}/${a.channelId ?? ""}`.localeCompare(
+            `${b.peer}/${b.channelId ?? ""}`,
+          ),
+        );
+        const ready =
+          expectedPeers.every(
+            (peer) =>
+              connectedPubkeys.has(peer.pubkey) &&
+              liveChannels.some(
+                (channel) =>
+                  channel.pubkey === peer.pubkey && isChannelReady(channel),
+              ),
+          ) && liveChannels.every(isChannelReady);
+        if (ready || Date.now() >= deadline) {
+          return { channels, ready };
+        }
+      } catch {
+        if (Date.now() >= deadline) {
+          return { channels: [], ready: false };
+        }
+      }
+      await sleep(Math.min(500, Math.max(1, deadline - Date.now())));
+    }
+  }
+
   private async payInvoiceInternal(
     net: string,
     from: string,
@@ -1261,7 +1712,14 @@ export class Orchestrator {
   ): NetworkState["nodes"][number] {
     const node = state.nodes.find((n) => n.name === name);
     if (!node) {
-      throw new Error(`network ${state.net} has no node "${name}"`);
+      throw new ForgeError(
+        "NODE_NOT_FOUND",
+        `network ${state.net} has no node "${name}"`,
+        {
+          resource: `${state.net}/${name}`,
+          action: `run "fiber-forge status ${state.net}" to list its nodes`,
+        },
+      );
     }
     return node;
   }
@@ -1274,7 +1732,7 @@ export class Orchestrator {
   }
 
   private rpcFor(rpcHostPort: number): FnnRpc {
-    return new FnnRpc(new HttpTransport(`http://127.0.0.1:${rpcHostPort}`));
+    return this.makeRpc(rpcHostPort);
   }
 
   private async writeNodeDir(

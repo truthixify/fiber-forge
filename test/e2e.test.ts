@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { type ContainerSpec, DockerEngine } from "../src/engine";
 import { ForgeError } from "../src/errors";
-import { FORGE_LABEL, Orchestrator } from "../src/orchestrator";
+import {
+  FORGE_LABEL,
+  type NodeLifecycleReport,
+  Orchestrator,
+} from "../src/orchestrator";
 import { preset } from "../src/presets";
 import {
   type Channel,
@@ -452,64 +456,90 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
         "relay unavailable proof",
       );
 
-      await engine.stop(layout.nodes[1].container);
+      const stoppedReport = await orchestrator.stopNode(RECOVERY_NET, relay);
+      expect(stoppedReport).toMatchObject({
+        action: "stop",
+        status: "stopped",
+        changed: true,
+      });
+      expect(await engine.status(layout.nodes[0].container)).toBe("running");
+      expect(await engine.status(layout.nodes[2].container)).toBe("running");
+      expect(await engine.status(layout.ckbContainer)).toBe("running");
 
-      const stopped = await orchestrator.inspect(RECOVERY_NET);
-      expect(stopped.nodes.find((node) => node.name === relay)?.status).toBe(
-        "exited",
-      );
+      const repeatedStop = await orchestrator.stopNode(RECOVERY_NET, relay);
+      expect(repeatedStop.changed).toBe(false);
+
+      const stopped = await orchestrator.inspectNode(RECOVERY_NET, relay);
+      expect(stopped.status).toBe("stopped");
       await expect(
         orchestrator.payInvoice(RECOVERY_NET, sender, interruptedInvoice),
       ).rejects.toThrow(/Failed to build route|Insufficient balance/i);
 
-      await engine.start(layout.nodes[1].container);
       const expectedPeers = [
         [infos[1].pubkey],
         [infos[0].pubkey, infos[2].pubkey],
         [infos[1].pubkey],
       ];
-      let recoveryMode = "automatic";
-      let recoveredPubkeys: string[];
-      try {
-        recoveredPubkeys = await waitForNetworkRecovery(
-          rpcs,
-          [sender, relay, receiver],
-          expectedPeers,
-          10_000,
-        );
-      } catch (automaticError) {
-        recoveryMode = "manual-peer-reconnect";
-        progress.push(
-          `automatic recovery incomplete: ${(automaticError as Error).message}`,
-        );
+      const reconcile = async (
+        report: NodeLifecycleReport,
+      ): Promise<{ mode: string; pubkeys: string[] }> => {
+        let mode =
+          report.recovery === "ready" ? "automatic" : "manual-peer-reconnect";
+        if (report.recovery !== "ready") {
+          progress.push(
+            `lifecycle report requires action: ${report.nextAction}`,
+          );
+        }
         const relayPeerId = peerIdOf(infos[1]);
         if (!relayPeerId) {
           throw new Error(`restarted relay ${relay} has no peer id`);
         }
-        await ensurePeerConnected(
-          rpcs[0],
-          infos[1].pubkey,
-          dialAddress(layout.nodes[1].ip, relayPeerId),
-        );
-        recoveredPubkeys = await waitForNetworkRecovery(
-          rpcs,
-          [sender, relay, receiver],
-          expectedPeers,
-        );
-      }
-      progress.push(`recovery classification: ${recoveryMode}`);
-      expect(recoveredPubkeys).toEqual(infos.map((info) => info.pubkey));
-      const channelIdsAfter = (
-        await Promise.all(rpcs.map((rpc) => rpc.listChannels()))
-      ).map((channels) => channels.map((channel) => channel.channel_id).sort());
-      expect(channelIdsAfter).toEqual(channelIdsBefore);
-      expect(await engine.status(layout.nodes[1].container)).toBe("running");
+        try {
+          const pubkeys = await waitForNetworkRecovery(
+            rpcs,
+            [sender, relay, receiver],
+            expectedPeers,
+            report.recovery === "ready" ? 10_000 : 1_000,
+          );
+          return { mode, pubkeys };
+        } catch (automaticError) {
+          mode = "manual-peer-reconnect";
+          progress.push(
+            `automatic recovery incomplete: ${(automaticError as Error).message}`,
+          );
+          await ensurePeerConnected(
+            rpcs[0],
+            infos[1].pubkey,
+            dialAddress(layout.nodes[1].ip, relayPeerId),
+          );
+          return {
+            mode,
+            pubkeys: await waitForNetworkRecovery(
+              rpcs,
+              [sender, relay, receiver],
+              expectedPeers,
+            ),
+          };
+        }
+      };
+
+      const startedReport = await orchestrator.startNode(RECOVERY_NET, relay);
+      expect(startedReport).toMatchObject({
+        action: "start",
+        previousStatus: "stopped",
+        status: "running",
+        rpcReady: true,
+        identityMatches: true,
+      });
+      const startedRecovery = await reconcile(startedReport);
+      progress.push(`start recovery classification: ${startedRecovery.mode}`);
+      expect(startedRecovery.pubkeys).toEqual(infos.map((info) => info.pubkey));
 
       const recoveredInvoice = await orchestrator.createInvoice(
         RECOVERY_NET,
         receiver,
         100,
-        `${recoveryMode} relay recovery proof`,
+        `${startedRecovery.mode} relay recovery proof`,
       );
       const recovered = await orchestrator.payInvoice(
         RECOVERY_NET,
@@ -517,6 +547,40 @@ describe.skipIf(!RUN)("live: relay node recovery", () => {
         recoveredInvoice,
       );
       expect(recovered.status).toBe("Success");
+
+      const restartedReport = await orchestrator.restartNode(
+        RECOVERY_NET,
+        relay,
+      );
+      expect(restartedReport).toMatchObject({
+        action: "restart",
+        previousStatus: "running",
+        status: "running",
+        changed: true,
+        rpcReady: true,
+        identityMatches: true,
+      });
+      const restartedRecovery = await reconcile(restartedReport);
+      progress.push(
+        `restart recovery classification: ${restartedRecovery.mode}`,
+      );
+      expect(restartedRecovery.pubkeys).toEqual(
+        infos.map((info) => info.pubkey),
+      );
+      const channelIdsAfter = (
+        await Promise.all(rpcs.map((rpc) => rpc.listChannels()))
+      ).map((channels) => channels.map((channel) => channel.channel_id).sort());
+      expect(channelIdsAfter).toEqual(channelIdsBefore);
+      expect(await engine.status(layout.nodes[1].container)).toBe("running");
+
+      const finalPayment = await orchestrator.pay(
+        RECOVERY_NET,
+        sender,
+        receiver,
+        100,
+        `${restartedRecovery.mode} relay restart proof`,
+      );
+      expect(finalPayment.status).toBe("Success");
     } catch (error) {
       failure = await addLiveDiagnostics(error, engine, progress, RECOVERY_NET);
     } finally {

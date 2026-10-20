@@ -55,8 +55,9 @@ second of any change.
 - The graph is the network: each node — named after a scientist or philosopher, with a new set each
   time — and the channels between them, showing live balances and channel states.
 - Click a node to open its panel. It shows the node's on-chain and UDT balances, its channels, and
-  its streaming logs, which you can filter by level. The minimap in the bottom-left corner is
-  clickable too — click a node there to jump to it.
+  its streaming logs, which you can filter by level. The panel can stop, start, or restart that
+  node with confirmation and reports the actual RPC, peer, and channel state afterward. The minimap
+  in the bottom-left corner is clickable too — click a node there to jump to it.
 - Click a channel to see its capacity and the balance on each side. The **Send payment across**
   button starts a payment along that channel, with the asset (CKB or UDT) already set to match it.
 - The **Pay** button sends a payment between any two nodes and animates the route it takes.
@@ -77,6 +78,10 @@ fiber-forge up                      # choose and create a network in the GUI
 fiber-forge up ./examples/topology.yml   # create from your own topology file
 fiber-forge ls                      # list every network on disk
 fiber-forge status trio             # show nodes and channels with live state
+fiber-forge node inspect trio feynman --json
+fiber-forge node stop trio feynman  # retain the node's container and data
+fiber-forge node start trio feynman # wait for RPC and report channel recovery
+fiber-forge node restart trio feynman
 fiber-forge gui trio                # (re)open the GUI for a network
 fiber-forge down trio               # remove one network (--keep CKB volume, --purge everything)
 fiber-forge down --all              # remove every network at once
@@ -164,10 +169,11 @@ work as well. The layout is saved under `~/.fiber-forge/<net>/`, and the daemon 
 pushing updates over a WebSocket and falling back to polling.
 
 For the pinned Fiber image, restarting the same stopped relay container preserves its identity and
-channels. Peer reconnection can be automatic or require reconnecting the original opener, so the
-live recovery test gates on every node's RPC state, applies that bounded fallback when needed, and
-then proves a subsequent payment. It does not claim transparent recovery or use `down --keep` as a
-restart path. See [Node recovery](docs/recovery.md).
+channels. `fiber-forge node start` and `node restart` wait for the real RPC, verify the saved public
+key, and classify observed peer/channel recovery as `ready` or `action-required`. Peer reconnection
+can still require reconnecting the original opener, so a process restart is never presented as
+transparent channel recovery. The live test applies that bounded fallback when required and proves
+a subsequent payment over the original channel IDs. See [Node recovery](docs/recovery.md).
 
 The code that talks to the nodes and the chain is split into small modules — `topology`, `keys`,
 `rpc`, `engine`, `config`, `ckb`, `orchestrator`, `scenario`, `presets`, `cli`, and `daemon` — each
@@ -193,8 +199,8 @@ also checks the Docker daemon architecture and both image manifest lists before 
 ## Roadmap
 
 - **Richer assets** — xUDT with RCE rules, a stablecoin preset, and multiple named assets per node.
-- **Resilience** — stop and restart nodes from the GUI, simulate stuck HTLCs, and show force-close
-  and on-chain settlement.
+- **Resilience** — controlled network faults, stuck HTLC simulation, and force-close/on-chain
+  settlement visibility.
 - **Routing** — multi-path payments, per-hop fee and route inspection, and a view of the gossip graph.
 - **Scenarios** — shareable topology and traffic bundles with expected-outcome assertions.
 - **Cross-chain** — `cch` (Fiber ↔ Lightning) hub demos and BTC bridging.

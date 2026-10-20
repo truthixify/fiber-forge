@@ -61,4 +61,28 @@ describe("resolveTopology", () => {
     });
     expect(process.exitCode).toBe(1);
   });
+
+  it("registers node lifecycle commands and preserves structured JSON failures", async () => {
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await main([
+      "node",
+      "fiber-forge",
+      "node",
+      "inspect",
+      "cli-node-missing",
+      "alice",
+      "--json",
+    ]);
+
+    expect(stderr).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(stderr.mock.calls[0][0]))).toMatchObject({
+      ok: false,
+      error: {
+        code: "NETWORK_NOT_FOUND",
+        resource: "cli-node-missing",
+      },
+    });
+    expect(process.exitCode).toBe(1);
+  });
 });

@@ -243,6 +243,22 @@ export function createSandboxBackend(forge) {
       checkNet(net);
       return forge.inspect(net);
     },
+    inspectNode: (net, node) => {
+      checkNet(net);
+      return forge.inspectNode(net, node);
+    },
+    stopNode: (net, node) => {
+      checkNet(net);
+      return forge.stopNode(net, node);
+    },
+    startNode: (net, node) => {
+      checkNet(net);
+      return forge.startNode(net, node);
+    },
+    restartNode: (net, node) => {
+      checkNet(net);
+      return forge.restartNode(net, node);
+    },
     list: async () =>
       (await forge.list()).filter((network) => network.net === SANDBOX_NET),
     channels: (net, node) => {

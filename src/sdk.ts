@@ -13,6 +13,8 @@ import {
   type DownOptions,
   type NetworkSummary,
   type NetworkView,
+  type NodeLifecycleOptions,
+  type NodeLifecycleReport,
   Orchestrator,
   type PaymentReport,
   type UpOptions,
@@ -46,6 +48,11 @@ export type {
   NetworkState,
   NetworkSummary,
   NetworkView,
+  NodeChannelObservation,
+  NodeLifecycleAction,
+  NodeLifecycleOptions,
+  NodeLifecycleReport,
+  NodeRuntimeStatus,
   PaymentReport,
   UpOptions,
 } from "./orchestrator.js";
@@ -84,6 +91,18 @@ export function planNetwork(
 export interface FiberForge {
   up(topology: Topology, options?: UpOptions): Promise<NetworkLayout>;
   inspect(net: string): Promise<NetworkView>;
+  inspectNode(net: string, node: string): Promise<NodeLifecycleReport>;
+  stopNode(net: string, node: string): Promise<NodeLifecycleReport>;
+  startNode(
+    net: string,
+    node: string,
+    options?: NodeLifecycleOptions,
+  ): Promise<NodeLifecycleReport>;
+  restartNode(
+    net: string,
+    node: string,
+    options?: NodeLifecycleOptions,
+  ): Promise<NodeLifecycleReport>;
   down(net: string, options?: DownOptions): Promise<void>;
   downAll(options?: DownOptions): Promise<string[]>;
   list(): Promise<NetworkSummary[]>;

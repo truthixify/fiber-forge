@@ -13,6 +13,8 @@ import {
   type LayoutOptions,
   type NetworkLayout,
   type NetworkView,
+  type NodeLifecycleOptions,
+  type NodeLifecycleReport,
   type Topology,
   type UpOptions,
 } from "@truthixify/fiber-forge/sdk";
@@ -66,6 +68,11 @@ type ExpectedForgeErrorCode =
   | "INVALID_TIMEOUT"
   | "NETWORK_EXISTS"
   | "NETWORK_NOT_FOUND"
+  | "NODE_CONTAINER_MISSING"
+  | "NODE_IDENTITY_MISMATCH"
+  | "NODE_NOT_FOUND"
+  | "NODE_RPC_UNAVAILABLE"
+  | "NODE_STATE_MISMATCH"
   | "OPERATION_ABORTED"
   | "OPERATION_TIMEOUT"
   | "PORT_IN_USE"
@@ -101,11 +108,31 @@ const planned: NetworkLayout = planNetwork(topology, {
   rpcHostPortBase: 8300,
 });
 
-type AppForge = Pick<FiberForge, "up" | "inspect" | "pay" | "down">;
+type AppForge = Pick<
+  FiberForge,
+  | "up"
+  | "inspect"
+  | "inspectNode"
+  | "stopNode"
+  | "startNode"
+  | "restartNode"
+  | "pay"
+  | "down"
+>;
 
 async function exerciseContract(client: AppForge): Promise<void> {
   const layout: NetworkLayout = await client.up(topology, upOptions);
   const view: NetworkView = await client.inspect(layout.net);
+  const lifecycleOptions: NodeLifecycleOptions = {
+    timeoutMs: 60_000,
+    reconcileTimeoutMs: 10_000,
+  };
+  const inspected: NodeLifecycleReport = await client.inspectNode(
+    layout.net,
+    topology.nodes[0].name,
+  );
+  void inspected;
+  void lifecycleOptions;
   await client.down(view.net, downOptions);
 }
 

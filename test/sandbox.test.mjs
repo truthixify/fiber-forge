@@ -102,6 +102,14 @@ describe("hosted sandbox control boundary", () => {
   it("allows operations only against the fixed network and blocks new topologies", async () => {
     const forge = {
       inspect: vi.fn(async (net) => ({ net })),
+      inspectNode: vi.fn(async (net, node) => ({ net, node })),
+      stopNode: vi.fn(async (net, node) => ({ net, node, action: "stop" })),
+      startNode: vi.fn(async (net, node) => ({ net, node, action: "start" })),
+      restartNode: vi.fn(async (net, node) => ({
+        net,
+        node,
+        action: "restart",
+      })),
       list: vi.fn(async () => [{ net: SANDBOX_NET }, { net: "unrelated" }]),
       channels: vi.fn(),
       pay: vi.fn(),
@@ -122,6 +130,12 @@ describe("hosted sandbox control boundary", () => {
       'only permits network "sandbox"',
     );
     await expect(backend.list()).resolves.toEqual([{ net: SANDBOX_NET }]);
+    await expect(backend.stopNode(SANDBOX_NET, "bob")).resolves.toMatchObject({
+      action: "stop",
+    });
+    expect(() => backend.restartNode("other", "bob")).toThrow(
+      'only permits network "sandbox"',
+    );
     await expect(backend.up()).rejects.toThrow("topology is fixed");
     await expect(backend.openChannelBetween(SANDBOX_NET)).rejects.toThrow(
       "channel topology is fixed",

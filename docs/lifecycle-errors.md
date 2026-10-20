@@ -32,6 +32,11 @@ when Fiber Forge can identify a specific target and safe next step.
 | `INVALID_TIMEOUT` | The requested provisioning timeout is not a positive finite number. |
 | `NETWORK_EXISTS` | A same-name Fiber Forge network still has running containers. |
 | `NETWORK_NOT_FOUND` | No readable saved layout exists for the requested network. |
+| `NODE_NOT_FOUND` | The saved network has no node with the requested name. |
+| `NODE_CONTAINER_MISSING` | The saved node exists, but its retained Docker container was removed. |
+| `NODE_RPC_UNAVAILABLE` | A started node did not expose a usable RPC and peer address before its deadline. |
+| `NODE_IDENTITY_MISMATCH` | A started container's public key differs from the saved node identity. |
+| `NODE_STATE_MISMATCH` | Docker did not reach or retain the requested running/stopped state. |
 | `OPERATION_ABORTED` | The caller's abort signal stopped provisioning; automatic rollback completed first. |
 | `OPERATION_TIMEOUT` | The overall provisioning deadline elapsed; automatic rollback completed first. |
 | `PROVISION_FAILED` | Provisioning failed at a named node, peer, channel, or routing phase. |

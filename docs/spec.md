@@ -92,6 +92,9 @@ GUI (React/vite, served on localhost) ──► fiber-forge daemon HTTP+WS API (
   contract without requiring imports from package-internal source or build paths.
 - FR-10 Lifecycle failures expose a stable code, affected resource, and next action; `--json`
   commands emit a single parseable error object and a non-zero exit status.
+- FR-11 Individual Fiber nodes can be inspected, stopped, started, and restarted without replacing
+  their container or mounted state. Start/restart verifies RPC readiness and saved identity, then
+  reports observed peer/channel recovery without promising that channels recovered automatically.
 
 ## 7. Topology schema (YAML)
 

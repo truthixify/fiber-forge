@@ -47,6 +47,8 @@
   .mc{font-family:'Geist Mono','JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
   .num{font-family:'Geist Mono','JetBrains Mono',monospace;font-variant-numeric:tabular-nums;}
   button{font-family:inherit;}
+  button.ff-focus:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+  button:disabled{cursor:not-allowed;opacity:.55}
   input[type=range]{accent-color:var(--ember);}
   ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--border)}::-webkit-scrollbar-track{background:transparent}
   @keyframes pulseDot{0%,100%{opacity:1}50%{opacity:.45}}
@@ -191,15 +193,15 @@
 
   <!-- ============ NODE READOUT DRAWER ============ -->
   <sc-if value="{{ isNode }}" hint-placeholder-val="{{ false }}">
-    <div style="position:absolute;top:0;right:0;bottom:0;width:380px;background:var(--panel);border-left:1px solid var(--border);animation:drawerIn .22s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;z-index:10;">
+    <div style="position:absolute;top:0;right:0;bottom:0;width:min(380px,100vw);background:var(--panel);border-left:1px solid var(--border);animation:drawerIn .22s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;z-index:10;">
       <div style="padding:16px 18px;border-bottom:1px solid var(--hairline);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
           <span class="mc">NODE</span>
           <button onClick="{{ clearSel }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;">✕</button>
         </div>
         <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px;">
-          <span style="width:8px;height:8px;background:var(--flux);animation:pulseDot 1.6s ease-in-out infinite;box-shadow:0 0 8px var(--flux);"></span>
-          <span class="mc" style="color:var(--flux);">RUNNING</span>
+          <span style="width:8px;height:8px;background:{{ nStatusColor }};animation:{{ nStatusAnimation }};"></span>
+          <span class="mc" style="color:{{ nStatusColor }};">{{ nStatusLabel }}</span>
           <span class="mc" style="color:var(--faint);">· {{ netName }}-node</span>
         </div>
         <div style="font-size:26px;font-weight:800;color:var(--bone);letter-spacing:-.02em;line-height:1;">{{ nName }}</div>
@@ -249,6 +251,35 @@
           <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--hairline);padding-bottom:9px;">
             <span class="mc">P2P</span><span class="num" style="font-size:12px;color:var(--muted);">…/tcp/{{ nP2p }}/p2p/Qm…</span>
           </div>
+        </div>
+        <div style="padding:13px 14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span class="mc">NODE CONTROL</span>
+            <span class="mc" style="color:{{ nStatusColor }};">{{ nStatusLabel }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;">
+            <button class="ff-focus" onClick="{{ requestNodeStop }}" disabled="{{ nodeStopDisabled }}" aria-label="Stop {{ nName }}" style="min-height:42px;background:transparent;color:var(--alarm);border:1px solid var(--alarm);padding:8px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.08em;">STOP</button>
+            <button class="ff-focus" onClick="{{ requestNodeStart }}" disabled="{{ nodeStartDisabled }}" aria-label="Start {{ nName }}" style="min-height:42px;background:var(--panel-2);color:var(--flux);border:1px solid var(--flux-deep);padding:8px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.08em;">START</button>
+            <button class="ff-focus" onClick="{{ requestNodeRestart }}" disabled="{{ nodeRestartDisabled }}" aria-label="Restart {{ nName }}" style="min-height:42px;background:var(--panel-2);color:var(--bone);border:1px solid var(--border);padding:8px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.08em;">RESTART</button>
+          </div>
+          <sc-if value="{{ nodeActionPending }}" hint-placeholder-val="{{ false }}">
+            <div role="group" aria-label="Confirm node operation" style="margin-top:10px;padding:11px;background:var(--panel-2);border:1px solid var(--amber);">
+              <div style="font-size:12px;line-height:1.5;color:var(--text);margin-bottom:10px;">{{ nodeActionPrompt }}</div>
+              <div style="display:flex;gap:8px;">
+                <button class="ff-focus" onClick="{{ cancelNodeAction }}" style="min-height:40px;flex:1;background:transparent;color:var(--muted);border:1px solid var(--border);cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;">CANCEL</button>
+                <button class="ff-focus" onClick="{{ confirmNodeAction }}" style="min-height:40px;flex:1;background:var(--amber);color:var(--void);border:none;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:10px;">CONFIRM {{ nodeActionLabel }}</button>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ nodeActionBusy }}" hint-placeholder-val="{{ false }}">
+            <div role="status" aria-live="polite" aria-busy="true" style="margin-top:10px;min-height:42px;padding:11px;border:1px solid var(--signal);color:var(--signal);font-family:'Geist Mono',monospace;font-size:11px;line-height:1.5;">{{ nodeActionProgress }}</div>
+          </sc-if>
+          <sc-if value="{{ nodeActionError }}" hint-placeholder-val="{{ false }}">
+            <div role="alert" style="margin-top:10px;padding:11px;border:1px solid var(--alarm);color:var(--alarm);font-family:'Geist Mono',monospace;font-size:11px;line-height:1.5;">{{ nodeActionError }}</div>
+          </sc-if>
+          <sc-if value="{{ nodeActionResult }}" hint-placeholder-val="{{ false }}">
+            <div role="status" aria-live="polite" style="margin-top:10px;padding:11px;border:1px solid var(--flux-deep);color:var(--flux);font-family:'Geist Mono',monospace;font-size:11px;line-height:1.5;">{{ nodeActionResult }}</div>
+          </sc-if>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);">
           <button onClick="{{ openFund }}" style="background:var(--ember);color:#1a0b06;border:none;padding:12px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">FUND +</button>
@@ -596,6 +627,7 @@ class Component extends DCLogic {
     nodes: [], channels: [], chState: {}, balances: {}, onchain: {}, udt: {}, core: { x: 720, y: 440 },
     name: 'forge-trio', payFrom: null, payTo: null,
     nodeTab: 'overview', invoiceOpen: false, invoiceAmt: 100, invoiceAddr: '', invoiceBusy: false, nodeLogs: '', nodeLogEntries: [], logLevel: 'ALL', copyFlash: null,
+    nodeAction: null, nodeActionBusy: false, nodeActionError: '', nodeActionResult: '',
     payUdt: false, capUdt: false, invoiceUdt: false, fundUdt: false, pendingOpens: [], nets: [],
   };
 
@@ -666,8 +698,8 @@ class Component extends DCLogic {
   pathNodes(u, v) { return this._pathNodes(this.state.nodes, this.state.channels, u, v); }
 
   // ---------------- selection / scene ----------------
-  select(type, id) { this.setState({ sel: { type, id }, nodeTab: 'overview' }); }
-  clearSel = () => this.setState({ sel: null });
+  select(type, id) { this.setState({ sel: { type, id }, nodeTab: 'overview', nodeAction: null, nodeActionError: '', nodeActionResult: '' }); }
+  clearSel = () => this.setState({ sel: null, nodeAction: null, nodeActionError: '', nodeActionResult: '' });
   setNodeTab = (t) => { this.setState({ nodeTab: t }); if (t === 'logs') this._forgeLoadLogs(); };
   _forgeLoadLogs() {
     const n = this.node(this.state.sel && this.state.sel.id);
@@ -920,6 +952,75 @@ class Component extends DCLogic {
     this.setState(st => ({ events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + nodeName + ' closing' }, ...st.events].slice(0, 8) }));
   };
 
+  requestNodeAction(action) {
+    if (this.state.nodeActionBusy) return;
+    this.setState({ nodeAction: action, nodeActionError: '', nodeActionResult: '' });
+  }
+  requestNodeStop = () => this.requestNodeAction('stop');
+  requestNodeStart = () => this.requestNodeAction('start');
+  requestNodeRestart = () => this.requestNodeAction('restart');
+  cancelNodeAction = () => { if (!this.state.nodeActionBusy) this.setState({ nodeAction: null, nodeActionError: '' }); };
+  _finishNodeAction(action, selected, report) {
+    const status = String(report.status || 'unknown').toUpperCase();
+    const recovery = report.recovery === 'ready' ? ' · CHANNELS READY' : report.recovery === 'action-required' ? ' · CHANNEL ACTION REQUIRED' : '';
+    const prefix = report.changed ? action.toUpperCase() : 'NO CHANGE';
+    const nextAction = report.nextAction ? ' · NEXT: ' + report.nextAction : '';
+    const result = prefix + ' · ' + status + (report.rpcReady ? ' · RPC READY' : '') + recovery + nextAction;
+    const net = this._forgeNet() || this.state.name.replace(/^forge-/, '');
+    this.setState(st => ({
+      nodeAction: null,
+      nodeActionBusy: false,
+      nodeActionError: '',
+      nodeActionResult: result,
+      nodes: st.nodes.map(function (node) { return node.id === selected.id ? Object.assign({}, node, { dead: report.status !== 'running' }) : node; }),
+      lastCmd: 'fiber-forge node ' + action + ' ' + net + ' ' + selected.name,
+      events: [{ t: this.now(), c: report.recovery === 'action-required' ? 'var(--amber)' : 'var(--flux)', msg: 'NODE ' + selected.name + ' ' + result }, ...st.events].slice(0, 8),
+    }), () => { if (this._forgePollFn) this._forgePollFn(); });
+  }
+  confirmNodeAction = () => {
+    const action = this.state.nodeAction;
+    const selected = this.node(this.state.sel && this.state.sel.id);
+    if (!action || !selected || this.state.nodeActionBusy) return;
+    this.setState({ nodeActionBusy: true, nodeActionError: '', nodeActionResult: '' });
+    if (!window.__FORGE__) {
+      const self = this;
+      setTimeout(function () {
+        self._finishNodeAction(action, selected, {
+          status: action === 'stop' ? 'stopped' : 'running',
+          changed: true,
+          rpcReady: action !== 'stop',
+          recovery: action === 'stop' ? 'not-applicable' : 'ready',
+        });
+      }, 500);
+      return;
+    }
+    const self = this;
+    fetch('/api/node/lifecycle', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ net: this._forgeNet(), node: selected.name, action: action }),
+    })
+      .then(function (response) {
+        return response.json().then(function (body) {
+          if (!response.ok || (body && body.error)) {
+            var detail = body && body.error;
+            var message = detail && typeof detail === 'object' ? detail.message : String(detail || ('HTTP ' + response.status));
+            var next = detail && typeof detail === 'object' && detail.action ? ' · ' + detail.action : '';
+            throw new Error(message + next);
+          }
+          return body;
+        });
+      })
+      .then(function (report) { self._finishNodeAction(action, selected, report); })
+      .catch(function (error) {
+        self.setState({
+          nodeActionBusy: false,
+          nodeAction: action,
+          nodeActionError: String(error && error.message ? error.message : error).slice(0, 240),
+        });
+      });
+  };
+
   componentWillUnmount() { cancelAnimationFrame(this._raf); clearInterval(this._boot); clearInterval(this._forgePoll); window.removeEventListener('resize', this._onResize); window.removeEventListener('wheel', this._onWheel); window.removeEventListener('keydown', this._onKey); }
 
   // ---------------- fiber-forge live bridge (central daemon) ----------------
@@ -962,7 +1063,7 @@ class Component extends DCLogic {
     var F = this;
     this._forgeNet_ = net;
     this._forgeFitted = false;
-    this.setState({ events: [], nodeLogEntries: [], nodeLogs: '', pendingOpens: [], sel: null });
+    this.setState({ events: [], nodeLogEntries: [], nodeLogs: '', pendingOpens: [], sel: null, nodeAction: null, nodeActionBusy: false, nodeActionError: '', nodeActionResult: '' });
     var first = true;
     this._forgeApply = function (v) {
       if (v && v.nodes && v.nodes.length && F._forgeNet_ === net) {
@@ -1076,7 +1177,7 @@ class Component extends DCLogic {
   zoomIn = () => { const r = this._floorEl.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 1.25); };
   zoomOut = () => { const r = this._floorEl.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 0.8); };
   handleWheel(e) { if (!e.target || !e.target.closest || !e.target.closest('[data-floor]')) return; e.preventDefault(); const r = this._floorEl.getBoundingClientRect(); this.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0016)); }
-  handleKey(e) { if (window.__FORGE__ && this.state.screen === 'floor' && (e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); this._forgeCycle(); return; } if (!(e.metaKey || e.ctrlKey)) return; if (e.key === '0') { e.preventDefault(); this.fitView(); } else if (e.key === '1') { e.preventDefault(); this.reset100(); } }
+  handleKey(e) { if (e.key === 'Escape' && this.state.nodeAction && !this.state.nodeActionBusy) { e.preventDefault(); this.cancelNodeAction(); return; } if (window.__FORGE__ && this.state.screen === 'floor' && (e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); this._forgeCycle(); return; } if (!(e.metaKey || e.ctrlKey)) return; if (e.key === '0') { e.preventDefault(); this.fitView(); } else if (e.key === '1') { e.preventDefault(); this.reset100(); } }
   onPointerDown = (e) => { if (e.target.closest && (e.target.closest('[data-node]') || e.target.closest('[data-conduit]'))) return; this._pan = { x: e.clientX, y: e.clientY, vx: this._view.x, vy: this._view.y, moved: false }; try { this._floorEl.setPointerCapture(e.pointerId); } catch (_) {} this.applyView(); };
   onPointerMove = (e) => { if (!this._pan) return; const dx = e.clientX - this._pan.x, dy = e.clientY - this._pan.y; if (Math.abs(dx) + Math.abs(dy) > 3) this._pan.moved = true; this._view.x = this._pan.vx + dx; this._view.y = this._pan.vy + dy; this.applyView(); };
   onPointerUp = (e) => { const moved = this._pan && this._pan.moved; this._pan = null; try { this._floorEl.releasePointerCapture(e.pointerId); } catch (_) {} this.applyView(); if (!moved && this.state.sel) this.clearSel(); };
@@ -1398,6 +1499,14 @@ class Component extends DCLogic {
       bootSteps, bootLabel, bootPctW: Math.round(bs / total * 100) + '%',
       isNode: isFloor && !!n, isChannel: isFloor && !!ch,
       nName: n ? n.name : '', nPubkey: n ? n.pubkey : '', nPort: n ? String(n.port) : '', nP2p: n ? String(n.p2p) : '',
+      nStatusLabel: n && n.dead ? 'STOPPED' : 'RUNNING', nStatusColor: n && n.dead ? 'var(--faint)' : 'var(--flux)', nStatusAnimation: n && n.dead ? 'none' : 'pulseDot 1.6s ease-in-out infinite',
+      requestNodeStop: this.requestNodeStop, requestNodeStart: this.requestNodeStart, requestNodeRestart: this.requestNodeRestart,
+      nodeStopDisabled: !n || !!n.dead || S.nodeActionBusy, nodeStartDisabled: !n || !n.dead || S.nodeActionBusy, nodeRestartDisabled: !n || S.nodeActionBusy,
+      nodeActionPending: !!S.nodeAction && !S.nodeActionBusy, nodeActionLabel: (S.nodeAction || '').toUpperCase(),
+      nodeActionPrompt: !n || !S.nodeAction ? '' : (S.nodeAction === 'stop' ? 'Stop ' + n.name + '? Its data stays intact and other nodes keep running.' : S.nodeAction === 'start' ? 'Start ' + n.name + ' and wait for its RPC and channel state?' : 'Restart ' + n.name + ' without replacing its saved identity or channels?'),
+      confirmNodeAction: this.confirmNodeAction, cancelNodeAction: this.cancelNodeAction,
+      nodeActionBusy: S.nodeActionBusy, nodeActionProgress: S.nodeAction === 'stop' ? 'STOPPING PROCESS…' : 'WAITING FOR RPC AND CHANNEL STATE…',
+      nodeActionError: S.nodeActionError, nodeActionResult: S.nodeActionResult,
       copyPubkey: this.copyPubkey, copyRpc: this.copyRpc,
       copyPubkeyLabel: S.copyFlash === 'pubkey' ? '✓ COPIED' : 'COPY', copyPubkeyColor: S.copyFlash === 'pubkey' ? 'var(--flux)' : 'var(--signal)',
       copyRpcLabel: S.copyFlash === 'rpc' ? '✓ COPIED' : '⧉ RPC', copyRpcColor: S.copyFlash === 'rpc' ? 'var(--flux)' : 'var(--signal)',

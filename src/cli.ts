@@ -10,7 +10,12 @@ import { Command } from "commander";
 import { type NetworkLayout } from "./config.js";
 import { DockerEngine } from "./engine.js";
 import { errorDetails } from "./errors.js";
-import { type NetworkView, Orchestrator } from "./orchestrator.js";
+import {
+  type NetworkView,
+  type NodeLifecycleAction,
+  type NodeLifecycleReport,
+  Orchestrator,
+} from "./orchestrator.js";
 import { preset, presetHelp } from "./presets.js";
 import { parseScenario, runScenario } from "./scenario.js";
 import { type Topology, parseTopology } from "./topology.js";
@@ -184,6 +189,36 @@ function printStatus(view: NetworkView): void {
     console.log(
       `  ${ui.channelGlyph(channel.state)} ${ui.text(channel.from)} ${ui.muted("→")} ${ui.text(channel.to)}   ${detail}`,
     );
+  }
+  console.log("");
+}
+
+function printNodeLifecycle(report: NodeLifecycleReport): void {
+  const state =
+    report.status === "running"
+      ? ui.success(report.status)
+      : report.status === "stopped"
+        ? ui.muted(report.status)
+        : ui.error(report.status);
+  const outcome = report.changed ? "changed" : "no-op";
+  console.log(
+    `\n  ${ui.nodeGlyph(report.status)} ${ui.text(report.node)}   ${state}   ${ui.muted(outcome)}`,
+  );
+  if (report.rpcReady) {
+    console.log(
+      `  ${ui.muted("rpc")}   ${ui.success("ready")}   ${ui.muted("channels")}   ${report.recovery === "ready" ? ui.success("ready") : ui.error("action required")}`,
+    );
+  }
+  for (const channel of report.channels) {
+    const connected = channel.connected
+      ? ui.success("connected")
+      : ui.error("disconnected");
+    console.log(
+      `  ${ui.muted("peer")}  ${ui.text(channel.peer)}   ${ui.muted(channel.state)}   ${connected}`,
+    );
+  }
+  if (report.nextAction) {
+    console.log(`  ${ui.muted("next")}  ${ui.text(report.nextAction)}`);
   }
   console.log("");
 }
@@ -376,6 +411,45 @@ export function buildCli(): Command {
         `\n  ${ui.muted(`${networks.length} networks  ·  fiber-forge status <net> for detail`)}\n`,
       );
     });
+
+  const node = program
+    .command("node")
+    .description("inspect, stop, start, or restart one Fiber node");
+
+  const addNodeAction = (
+    action: NodeLifecycleAction,
+    description: string,
+  ): void => {
+    node
+      .command(action)
+      .description(description)
+      .argument("<net>", "network name")
+      .argument("<node>", "node name")
+      .option("--json", "print machine-readable JSON")
+      .action(
+        async (net: string, nodeName: string, options: { json?: boolean }) => {
+          const forge = orchestrator();
+          const report =
+            action === "inspect"
+              ? await forge.inspectNode(net, nodeName)
+              : action === "stop"
+                ? await forge.stopNode(net, nodeName)
+                : action === "start"
+                  ? await forge.startNode(net, nodeName)
+                  : await forge.restartNode(net, nodeName);
+          if (options.json) {
+            printJson(report);
+            return;
+          }
+          printNodeLifecycle(report);
+        },
+      );
+  };
+
+  addNodeAction("inspect", "inspect one node and its recovered channel state");
+  addNodeAction("stop", "stop one node while retaining its state");
+  addNodeAction("start", "start one stopped node and wait for RPC readiness");
+  addNodeAction("restart", "restart one node without replacing its state");
 
   program
     .command("pay")
