@@ -3,11 +3,17 @@
  * takes `--json` for scripting. Live progress and spinners render to stderr, results to stdout.
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { type NetworkLayout } from "./config.js";
+import {
+  DEFAULT_CCH_PROOF_TIMEOUT_MS,
+  DEFAULT_CCH_RECEIVE_SATS,
+  DEFAULT_CCH_SEND_SATS,
+  type CchTransferProofReport,
+} from "./cch-proof.js";
 import { DockerEngine } from "./engine.js";
 import { errorDetails } from "./errors.js";
 import { type FaultKind, type FaultReport } from "./faults.js";
@@ -266,6 +272,22 @@ function printCchStatus(status: CchTopologyStatus): void {
   );
   console.log(
     `  ${ui.muted("lightning")}  ${ui.text("Bitcoin + LND")}   ${status.lightning.state === "ready" ? ui.success("ready") : ui.error(status.lightning.state)}`,
+  );
+}
+
+function printCchProof(report: CchTransferProofReport): void {
+  console.log(ui.heading2(`cross-network proof · ${report.net}`));
+  for (const flow of report.flows) {
+    const direction = flow.direction.replaceAll("-", " → ");
+    console.log(
+      `  ${ui.success("✔")} ${ui.text(direction)}   ${ui.flux(`${flow.deliveredAmountSats} sats`)}   ${ui.muted(`CCH fee ${flow.cchFeeSats}, route fee ${flow.routingFeeSats}`)}`,
+    );
+    console.log(
+      `    ${ui.muted("Fiber")} ${flow.fiber.user.before} → ${flow.fiber.user.after} base units   ${ui.muted("Lightning")} ${flow.lightning.user.before} → ${flow.lightning.user.after} sats`,
+    );
+  }
+  console.log(
+    `  ${ui.success("passed")}   ${ui.muted(`${report.durationMs}ms · trusted local operator · no reserve proof`)}\n`,
   );
 }
 
@@ -1243,6 +1265,61 @@ export function buildCli(): Command {
             console.log("");
           }
         }),
+    )
+    .addCommand(
+      new Command("prove")
+        .description("settle and verify both local cross-network directions")
+        .argument("<net>", "managed CCH network")
+        .option(
+          "--send-sats <n>",
+          "satoshis delivered from Fiber to Lightning",
+          (value) => Number.parseInt(value, 10),
+          DEFAULT_CCH_SEND_SATS,
+        )
+        .option(
+          "--receive-sats <n>",
+          "satoshis delivered from Lightning to Fiber",
+          (value) => Number.parseInt(value, 10),
+          DEFAULT_CCH_RECEIVE_SATS,
+        )
+        .option(
+          "--timeout <ms>",
+          "overall terminal-settlement timeout",
+          (value) => Number.parseInt(value, 10),
+          DEFAULT_CCH_PROOF_TIMEOUT_MS,
+        )
+        .option("--output <file>", "write the secret-safe JSON report")
+        .option("--json", "print the secret-safe JSON report")
+        .action(
+          async (
+            net: string,
+            options: {
+              sendSats: number;
+              receiveSats: number;
+              timeout: number;
+              output?: string;
+              json?: boolean;
+            },
+          ) => {
+            const report = await withProcessAbort((signal) =>
+              orchestrator().proveCchTransfers(net, {
+                sendSats: options.sendSats,
+                receiveSats: options.receiveSats,
+                timeoutMs: options.timeout,
+                signal,
+              }),
+            );
+            if (options.output) {
+              await writeFile(
+                resolve(options.output),
+                JSON.stringify(report, null, 2) + "\n",
+                { flag: "wx", mode: 0o600 },
+              );
+            }
+            if (options.json) printJson(report);
+            else printCchProof(report);
+          },
+        ),
     );
 
   program

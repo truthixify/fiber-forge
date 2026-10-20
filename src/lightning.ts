@@ -93,6 +93,25 @@ export interface LightningBackendStatus {
   dataVolumesPresent: boolean;
 }
 
+/** Private workflow value. The payment request must never be copied into public evidence. */
+export interface LightningInvoice {
+  paymentRequest: string;
+  paymentHash: string;
+}
+
+export interface LightningInvoiceState {
+  paymentHash: string;
+  state: string;
+  amountPaidSats: number;
+}
+
+export interface LightningPaymentState {
+  paymentHash: string;
+  status: string;
+  valueSats: number;
+  feeSats: number;
+}
+
 /** Narrow backend contract used by the CCH orchestrator. */
 export interface LightningBackendController {
   start(
@@ -100,6 +119,22 @@ export interface LightningBackendController {
     options?: LightningBackendStartOptions,
   ): Promise<LightningBackendStatus>;
   status(plan: LightningBackendPlan): Promise<LightningBackendStatus>;
+  createUserInvoice(
+    plan: LightningBackendPlan,
+    amountSats: number,
+    signal?: AbortSignal,
+  ): Promise<LightningInvoice>;
+  userInvoice(
+    plan: LightningBackendPlan,
+    paymentHash: string,
+    signal?: AbortSignal,
+  ): Promise<LightningInvoiceState>;
+  payFromUser(
+    plan: LightningBackendPlan,
+    paymentRequest: string,
+    paymentHash: string,
+    signal?: AbortSignal,
+  ): Promise<LightningPaymentState>;
   down(plan: LightningBackendPlan): Promise<void>;
 }
 
@@ -121,6 +156,24 @@ interface LndChannel {
 
 interface LndChannels {
   channels?: LndChannel[];
+}
+
+interface LndInvoiceResponse {
+  payment_request?: string;
+  r_hash?: string;
+}
+
+interface LndInvoiceLookup {
+  r_hash?: string;
+  state?: string;
+  amt_paid_sat?: number | string;
+}
+
+interface LndPayment {
+  payment_hash?: string;
+  status?: string;
+  value_sat?: number | string;
+  fee_sat?: number | string;
 }
 
 interface InternalLndStatus extends LightningComponentStatus {
@@ -520,6 +573,103 @@ class LndCli {
       this.signal,
     );
   }
+
+  async addInvoice(amountSats: number): Promise<LightningInvoice> {
+    const response = await checkedJson<LndInvoiceResponse>(
+      this.engine,
+      this.container,
+      this.command(["addinvoice", `--amt=${amountSats}`]),
+      "Lightning invoice creation",
+      this.signal,
+    );
+    const paymentHash = normalizePaymentHash(response.r_hash);
+    if (!response.payment_request || !paymentHash) {
+      throw malformedOutput("Lightning invoice creation", this.container);
+    }
+    return { paymentRequest: response.payment_request, paymentHash };
+  }
+
+  async lookupInvoice(paymentHash: string): Promise<LightningInvoiceState> {
+    const normalized = normalizePaymentHash(paymentHash);
+    if (!normalized) {
+      throw malformedOutput("Lightning invoice lookup", this.container);
+    }
+    const response = await checkedJson<LndInvoiceLookup>(
+      this.engine,
+      this.container,
+      this.command(["lookupinvoice", `--rhash=${normalized.slice(2)}`]),
+      "Lightning invoice lookup",
+      this.signal,
+    );
+    const returnedHash = normalizePaymentHash(response.r_hash);
+    const amountPaidSats = safeInteger(response.amt_paid_sat);
+    if (
+      returnedHash !== normalized ||
+      typeof response.state !== "string" ||
+      amountPaidSats === null
+    ) {
+      throw malformedOutput("Lightning invoice lookup", this.container);
+    }
+    return {
+      paymentHash: returnedHash,
+      state: response.state,
+      amountPaidSats,
+    };
+  }
+
+  async payInvoice(
+    paymentRequest: string,
+    paymentHash: string,
+  ): Promise<LightningPaymentState> {
+    const normalized = normalizePaymentHash(paymentHash);
+    if (!normalized) {
+      throw malformedOutput("Lightning payment", this.container);
+    }
+    await checkedExec(
+      this.engine,
+      this.container,
+      this.command([
+        "payinvoice",
+        "--force",
+        "--timeout=120s",
+        "--json",
+        paymentRequest,
+      ]),
+      "Lightning payment",
+      this.signal,
+    );
+    const response = await checkedJson<{ payments?: LndPayment[] }>(
+      this.engine,
+      this.container,
+      this.command([
+        "listpayments",
+        "--include_incomplete",
+        "--max_payments=1000",
+      ]),
+      "Lightning payment inspection",
+      this.signal,
+    );
+    const payment = response.payments?.find(
+      (candidate) =>
+        normalizePaymentHash(candidate.payment_hash) === normalized,
+    );
+    const valueSats = safeInteger(payment?.value_sat);
+    const feeSats = safeInteger(payment?.fee_sat);
+    if (
+      !payment ||
+      typeof payment.status !== "string" ||
+      valueSats === null ||
+      feeSats === null
+    ) {
+      throw malformedOutput("Lightning payment inspection", this.container);
+    }
+    return {
+      paymentHash: normalized,
+      status: payment.status,
+      valueSats,
+      feeSats,
+    };
+  }
 }
 
 export class LightningBackend implements LightningBackendController {
@@ -737,6 +887,48 @@ export class LightningBackend implements LightningBackendController {
       channel,
       dataVolumesPresent,
     };
+  }
+
+  async createUserInvoice(
+    plan: LightningBackendPlan,
+    amountSats: number,
+    signal?: AbortSignal,
+  ): Promise<LightningInvoice> {
+    if (!Number.isSafeInteger(amountSats) || amountSats <= 0) {
+      throw new ForgeError(
+        "CCH_TRANSFER_FAILED",
+        "Lightning invoice amount must be a positive safe integer",
+        {
+          resource: "amountSats",
+          action: "provide an exact positive satoshi amount",
+        },
+      );
+    }
+    return new LndCli(this.engine, plan.containers.user, signal).addInvoice(
+      amountSats,
+    );
+  }
+
+  userInvoice(
+    plan: LightningBackendPlan,
+    paymentHash: string,
+    signal?: AbortSignal,
+  ): Promise<LightningInvoiceState> {
+    return new LndCli(this.engine, plan.containers.user, signal).lookupInvoice(
+      paymentHash,
+    );
+  }
+
+  payFromUser(
+    plan: LightningBackendPlan,
+    paymentRequest: string,
+    paymentHash: string,
+    signal?: AbortSignal,
+  ): Promise<LightningPaymentState> {
+    return new LndCli(this.engine, plan.containers.user, signal).payInvoice(
+      paymentRequest,
+      paymentHash,
+    );
   }
 
   async down(plan: LightningBackendPlan): Promise<void> {
@@ -1018,6 +1210,15 @@ function safeInteger(value: unknown): number | null {
         ? Number(value)
         : Number.NaN;
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function normalizePaymentHash(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const raw = value.startsWith("0x") ? value.slice(2) : value;
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) return `0x${raw.toLowerCase()}`;
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return null;
+  const bytes = Buffer.from(value, "base64");
+  return bytes.length === 32 ? `0x${bytes.toString("hex")}` : null;
 }
 
 function publicLndStatus(status: InternalLndStatus): LightningComponentStatus {

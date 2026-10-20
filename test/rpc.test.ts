@@ -82,6 +82,41 @@ describe("FnnRpc", () => {
     expect(res.temporary_channel_id).toBe("0xtmp");
   });
 
+  it("maps SHA-256 invoice fields for CCH-compatible invoices", async () => {
+    const t = new FakeTransport(() => ({
+      invoice_address: "fiber-private",
+      invoice: { data: { payment_hash: `0x${"a".repeat(64)}` } },
+    }));
+    await new FnnRpc(t).newInvoice({
+      amount: "0xc350",
+      description: "proof",
+      udtTypeScript: {
+        code_hash: `0x${"1".repeat(64)}`,
+        hash_type: "data1",
+        args: "0x02",
+      },
+      hashAlgorithm: "sha256",
+      paymentPreimage: `0x${"3".repeat(64)}`,
+    });
+    expect(t.calls[0]).toEqual({
+      method: "new_invoice",
+      params: [
+        {
+          amount: "0xc350",
+          currency: "Fibd",
+          description: "proof",
+          udt_type_script: {
+            code_hash: `0x${"1".repeat(64)}`,
+            hash_type: "data1",
+            args: "0x02",
+          },
+          hash_algorithm: "sha256",
+          payment_preimage: `0x${"3".repeat(64)}`,
+        },
+      ],
+    });
+  });
+
   it("lists channels", async () => {
     const t = new FakeTransport(() => ({
       channels: [{ channel_id: "0x1", state: "ChannelReady" }],

@@ -9,6 +9,10 @@ import {
   type ReplayBundleResult,
 } from "./bundle.js";
 import {
+  type CchProofOptions,
+  type CchTransferProofReport,
+} from "./cch-proof.js";
+import {
   type LayoutOptions,
   type NetworkLayout,
   planLayout,
@@ -47,6 +51,18 @@ export {
   MAX_BUNDLE_EXPANDED_BYTES,
   MAX_REPLAY_TIMEOUT_MS,
 } from "./bundle.js";
+export {
+  DEFAULT_CCH_PROOF_TIMEOUT_MS,
+  DEFAULT_CCH_RECEIVE_SATS,
+  DEFAULT_CCH_SEND_SATS,
+} from "./cch-proof.js";
+export type {
+  CchBalanceChange,
+  CchOrderTransition,
+  CchProofOptions,
+  CchTransferFlowReport,
+  CchTransferProofReport,
+} from "./cch-proof.js";
 export type {
   BundleArtifactManifest,
   BundleArtifactRole,
@@ -191,6 +207,10 @@ export interface FiberForge {
   ): Promise<ReplayBundleResult>;
   inspect(net: string): Promise<NetworkView>;
   cchStatus(net: string): Promise<CchTopologyStatus>;
+  proveCchTransfers(
+    net: string,
+    options?: CchProofOptions,
+  ): Promise<CchTransferProofReport>;
   inspectNode(net: string, node: string): Promise<NodeLifecycleReport>;
   stopNode(net: string, node: string): Promise<NodeLifecycleReport>;
   startNode(

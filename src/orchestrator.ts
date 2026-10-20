@@ -38,12 +38,19 @@ import {
 } from "./ckb.js";
 import {
   CchOperator,
+  CchRpc,
   type CchOperatorController,
   type CchOperatorPlan,
   type CchOperatorStatus,
+  type CchTransferClient,
   cchDataVolumeName,
   planCchOperator,
 } from "./cch.js";
+import {
+  type CchProofOptions,
+  type CchTransferProofReport,
+  runCchTransferProof,
+} from "./cch-proof.js";
 import {
   CKB_RPC_PORT,
   FNN_P2P_PORT,
@@ -573,6 +580,9 @@ export class Orchestrator {
     private readonly makeCchOperator: (
       engine: ContainerEngine,
     ) => CchOperatorController = (engine) => new CchOperator(engine),
+    private readonly makeCchRpc: (
+      rpcHostPort: number,
+    ) => CchTransferClient = CchRpc.at,
   ) {}
 
   /** Serializes channel opens per network: two fundings must not race for the same wallet cell. */
@@ -583,6 +593,10 @@ export class Orchestrator {
 
   /** Serializes persisted fault-state transitions per network. */
   private readonly faultQueue = new Map<string, Promise<void>>();
+
+  /** Cross-network proofs mutate both channel ledgers and must run one at a time per topology. */
+  private readonly cchProofQueue = new Map<string, Promise<void>>();
+  private readonly activeCchProofs = new Set<string>();
 
   private invalidPort(port: number, resource: string): ForgeError {
     return new ForgeError(
@@ -1438,6 +1452,70 @@ export class Orchestrator {
     return view.cch!;
   }
 
+  /** Prove both accepted CCH directions and reconcile terminal balances on every boundary. */
+  async proveCchTransfers(
+    net: string,
+    options: CchProofOptions = {},
+  ): Promise<CchTransferProofReport> {
+    return this.queueCchProof(net, async () => {
+      const state = await this.readState(net);
+      if (!state.cch) {
+        throw new ForgeError(
+          "CCH_TRANSFER_FAILED",
+          `network "${net}" does not have a CCH topology`,
+          {
+            resource: net,
+            action: 'create the opt-in topology with "fiber-forge up cch"',
+          },
+        );
+      }
+      const typedState = { ...state, cch: state.cch };
+      const view = await this.inspect(net);
+      if (view.cch?.state !== "ready") {
+        throw new ForgeError(
+          "CCH_TRANSFER_FAILED",
+          `CCH topology "${net}" is not ready`,
+          {
+            resource: net,
+            action: `inspect "fiber-forge cch status ${net} --json" before retrying`,
+          },
+        );
+      }
+      const user = this.requireNode(typedState, typedState.cch.userNode);
+      const hub = this.requireNode(typedState, typedState.cch.hubNode);
+      const operatorPlan = this.cchPlan(typedState);
+      const lightningPlan = this.lightningPlan(typedState);
+      const lightning = this.makeLightningBackend(this.engine);
+      this.activeCchProofs.add(net);
+      try {
+        return await runCchTransferProof(
+          {
+            net,
+            wrappedTypeScript: typedState.cch.wrappedTypeScript,
+            wrappedChannelBaseUnits: typedState.cch.wrappedChannelBaseUnits,
+            ckbBlockHeight: view.block,
+            cch: this.makeCchRpc(operatorPlan.rpcHostPort),
+            lightning,
+            lightningPlan,
+            user: {
+              name: user.name,
+              pubkey: user.pubkey,
+              rpc: this.rpcFor(user.rpcHostPort),
+            },
+            hub: {
+              name: hub.name,
+              pubkey: hub.pubkey,
+              rpc: this.rpcFor(hub.rpcHostPort),
+            },
+          },
+          options,
+        );
+      } finally {
+        this.activeCchProofs.delete(net);
+      }
+    });
+  }
+
   private async buildCchStatus(
     state: NetworkState & { cch: PersistedCchState },
     view: NetworkView,
@@ -1480,7 +1558,9 @@ export class Orchestrator {
       operator.container === "exited" || operator.container === "absent"
         ? "failed"
         : ready
-          ? "ready"
+          ? this.activeCchProofs.has(state.net)
+            ? "settling"
+            : "ready"
           : "degraded";
 
     return {
@@ -2806,6 +2886,24 @@ export class Orchestrator {
     return result.finally(() => {
       if (this.faultQueue.get(net) === settled) {
         this.faultQueue.delete(net);
+      }
+    });
+  }
+
+  private queueCchProof<T>(
+    net: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const prior = this.cchProofQueue.get(net) ?? Promise.resolve();
+    const result = prior.catch(() => undefined).then(operation);
+    const settled = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.cchProofQueue.set(net, settled);
+    return result.finally(() => {
+      if (this.cchProofQueue.get(net) === settled) {
+        this.cchProofQueue.delete(net);
       }
     });
   }

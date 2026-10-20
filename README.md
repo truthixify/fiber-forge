@@ -121,6 +121,7 @@ fiber-forge lightning down trio
 # complete Fiber / CCH / Lightning topology
 fiber-forge up cch
 fiber-forge cch status cch --json
+fiber-forge cch prove cch --output cch-transfer-proof.json
 fiber-forge down cch --purge
 ```
 
@@ -243,7 +244,8 @@ also checks the Docker daemon architecture and both image manifest lists before 
 - **Cross-chain** — the local-only [CCH compatibility and trust boundary](docs/cch-feasibility.md)
   is proven in both directions, and the [disposable Lightning backend](docs/lightning-backend.md) is
   automated. The [integrated CCH topology](docs/cch-topology.md) now provisions and reports the full
-  boundary; the packed-artifact two-direction CI proof remains the next step.
+  boundary, while the [packed-artifact transfer proof](docs/cch-transfer-proof.md) verifies terminal
+  settlement, exact balance changes, cleanup, and secret-safe evidence twice from fresh state.
 - **Reproducibility** — signed bundle provenance and broader cross-host replay evidence.
 
 Force-close is an explicit local-dev operation with full-ID confirmation and terminal settlement

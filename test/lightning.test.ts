@@ -51,6 +51,10 @@ function backendFixture(engine = new FakeEngine()) {
         "newaddress",
         "bakemacaroon",
         "openchannel",
+        "addinvoice",
+        "lookupinvoice",
+        "payinvoice",
+        "listpayments",
         "cp",
       ].includes(argument),
     );
@@ -90,6 +94,40 @@ function backendFixture(engine = new FakeEngine()) {
     }
     if (operation === "newaddress") {
       return result(JSON.stringify({ address: `bcrt1q${"b".repeat(38)}` }));
+    }
+    const proofHash = "3".repeat(64);
+    const proofHashBase64 = Buffer.from(proofHash, "hex").toString("base64");
+    if (operation === "addinvoice") {
+      return result(
+        JSON.stringify({
+          payment_request: "lnbcrt-sensitive-payment-request",
+          r_hash: proofHashBase64,
+        }),
+      );
+    }
+    if (operation === "lookupinvoice") {
+      return result(
+        JSON.stringify({
+          r_hash: proofHashBase64,
+          state: "SETTLED",
+          amt_paid_sat: "100000",
+        }),
+      );
+    }
+    if (operation === "payinvoice") return result("{}");
+    if (operation === "listpayments") {
+      return result(
+        JSON.stringify({
+          payments: [
+            {
+              payment_hash: proofHash,
+              status: "SUCCEEDED",
+              value_sat: "50000",
+              fee_sat: "0",
+            },
+          ],
+        }),
+      );
     }
     if (
       operation === "bakemacaroon" ||
@@ -252,6 +290,50 @@ describe("LightningBackend", () => {
       dataVolumesPresent: false,
     });
     expect(await engine.networkExists(plan.network)).toBe(true);
+  });
+
+  it("creates, inspects, and pays user invoices through sanitized results", async () => {
+    const { engine, plan, commands, backend } = backendFixture();
+    await prepareNetwork(engine, plan);
+    await backend.start(plan);
+    const paymentHash = `0x${"3".repeat(64)}`;
+
+    const invoice = await backend.createUserInvoice(plan, 100_000);
+    expect(invoice).toEqual({
+      paymentRequest: "lnbcrt-sensitive-payment-request",
+      paymentHash,
+    });
+    await expect(backend.userInvoice(plan, paymentHash)).resolves.toEqual({
+      paymentHash,
+      state: "SETTLED",
+      amountPaidSats: 100_000,
+    });
+    await expect(
+      backend.payFromUser(
+        plan,
+        "lnbcrt-sensitive-payment-request",
+        paymentHash,
+      ),
+    ).resolves.toEqual({
+      paymentHash,
+      status: "SUCCEEDED",
+      valueSats: 50_000,
+      feeSats: 0,
+    });
+
+    expect(
+      commands.find(({ command }) => command.includes("addinvoice"))?.command,
+    ).toContain("--amt=100000");
+    expect(
+      commands.find(({ command }) => command.includes("lookupinvoice"))
+        ?.command,
+    ).toContain(`--rhash=${"3".repeat(64)}`);
+    expect(
+      commands.find(({ command }) => command.includes("payinvoice"))?.command,
+    ).toContain("--timeout=120s");
+    expect(engine.log.join("\n")).not.toContain(
+      "lnbcrt-sensitive-payment-request",
+    );
   });
 
   it.each([1, 2, 3])(

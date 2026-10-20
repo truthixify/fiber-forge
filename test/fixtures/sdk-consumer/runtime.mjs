@@ -5,6 +5,9 @@ import * as sdk from "@truthixify/fiber-forge/sdk";
 
 const expectedRuntimeExports = [
   "BUNDLE_SCHEMA_VERSION",
+  "DEFAULT_CCH_PROOF_TIMEOUT_MS",
+  "DEFAULT_CCH_RECEIVE_SATS",
+  "DEFAULT_CCH_SEND_SATS",
   "DEFAULT_REPLAY_TIMEOUT_MS",
   "DEFAULT_PROVISION_TIMEOUT_MS",
   "FAULT_KINDS",
@@ -49,6 +52,7 @@ const packageMetadata = JSON.parse(
 );
 assert.equal(sdk.version, packageMetadata.version);
 assert.equal(sdk.DEFAULT_PROVISION_TIMEOUT_MS, 600_000);
+assert.equal(sdk.DEFAULT_CCH_PROOF_TIMEOUT_MS, 120_000);
 assert.equal(sdk.preset("trio").nodes.length, 3);
 assert.equal(
   sdk.parseTopology(`
@@ -80,6 +84,7 @@ assert.equal(typeof forge.runScenario, "function");
 assert.equal(typeof forge.exportBundle, "function");
 assert.equal(typeof forge.inspectBundle, "function");
 assert.equal(typeof forge.replayBundle, "function");
+assert.equal(typeof forge.proveCchTransfers, "function");
 assert.equal(sdk.planNetwork(sdk.preset("duo")).nodes.length, 2);
 assert.deepEqual(
   sdk.errorDetails(

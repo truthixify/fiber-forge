@@ -62,6 +62,38 @@ export interface CchReadinessClient {
   ready(): Promise<boolean>;
 }
 
+export const CCH_ORDER_STATUSES = [
+  "Pending",
+  "IncomingAccepted",
+  "OutgoingInFlight",
+  "OutgoingSuccess",
+  "Success",
+  "Failed",
+] as const;
+
+export type CchOrderStatus = (typeof CCH_ORDER_STATUSES)[number];
+
+export type CchInvoice = { Fiber: string } | { Lightning: string };
+
+/** Validated response from the pinned CCH JSON-RPC contract. Invoice strings stay internal. */
+export interface CchOrder {
+  timestamp: string;
+  expiryDeltaSeconds: string;
+  wrappedTypeScript: UdtScript;
+  incomingInvoice: CchInvoice;
+  outgoingPayRequest: string;
+  paymentHash: string;
+  amountSats: string;
+  feeSats: string;
+  status: CchOrderStatus;
+}
+
+export interface CchTransferClient extends CchReadinessClient {
+  sendBtc(btcPayRequest: string): Promise<CchOrder>;
+  receiveBtc(fiberPayRequest: string): Promise<CchOrder>;
+  getOrder(paymentHash: string): Promise<CchOrder>;
+}
+
 export function cchDataVolumeName(net: string): string {
   return `forge-${net}-cch-data`;
 }
@@ -153,8 +185,8 @@ export function cchContainerSpec(
   };
 }
 
-/** Minimal CCH client; transfer methods are added by the end-to-end proof task. */
-export class CchRpc {
+/** Typed client for the standalone CCH JSON-RPC contract in the pinned Fiber release. */
+export class CchRpc implements CchTransferClient {
   constructor(private readonly transport: RpcTransport) {}
 
   static at(hostPort: number): CchRpc {
@@ -172,6 +204,122 @@ export class CchRpc {
       return /key not found/i.test(errorDetails(error).message);
     }
   }
+
+  async sendBtc(btcPayRequest: string): Promise<CchOrder> {
+    return parseCchOrder(
+      await this.transport.call("send_btc", [
+        { btc_pay_req: btcPayRequest, currency: "Fibd" },
+      ]),
+      "send_btc",
+    );
+  }
+
+  async receiveBtc(fiberPayRequest: string): Promise<CchOrder> {
+    return parseCchOrder(
+      await this.transport.call("receive_btc", [
+        { fiber_pay_req: fiberPayRequest },
+      ]),
+      "receive_btc",
+    );
+  }
+
+  async getOrder(paymentHash: string): Promise<CchOrder> {
+    if (!isHash256(paymentHash)) {
+      throw malformedCchResponse("get_cch_order", "payment hash");
+    }
+    return parseCchOrder(
+      await this.transport.call("get_cch_order", [
+        { payment_hash: paymentHash },
+      ]),
+      "get_cch_order",
+    );
+  }
+}
+
+function parseCchOrder(value: unknown, method: string): CchOrder {
+  if (!isRecord(value)) throw malformedCchResponse(method, "order");
+  const script = value.wrapped_btc_type_script;
+  const incoming = value.incoming_invoice;
+  const status = value.status;
+  if (
+    !isHexQuantity(value.timestamp) ||
+    !isHexQuantity(value.expiry_delta_seconds) ||
+    !isUdtScript(script) ||
+    !isCchInvoice(incoming) ||
+    typeof value.outgoing_pay_req !== "string" ||
+    value.outgoing_pay_req.length === 0 ||
+    !isHash256(value.payment_hash) ||
+    !isHexQuantity(value.amount_sats) ||
+    !isHexQuantity(value.fee_sats) ||
+    typeof status !== "string" ||
+    !CCH_ORDER_STATUSES.includes(status as CchOrderStatus)
+  ) {
+    throw malformedCchResponse(method, "order fields");
+  }
+  return {
+    timestamp: value.timestamp,
+    expiryDeltaSeconds: value.expiry_delta_seconds,
+    wrappedTypeScript: { ...script },
+    incomingInvoice: incoming,
+    outgoingPayRequest: value.outgoing_pay_req,
+    paymentHash: value.payment_hash.toLowerCase(),
+    amountSats: value.amount_sats,
+    feeSats: value.fee_sats,
+    status: status as CchOrderStatus,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isHash256(value: unknown): value is string {
+  return typeof value === "string" && /^0x[0-9a-fA-F]{64}$/.test(value);
+}
+
+function isHexQuantity(value: unknown): value is string {
+  return (
+    typeof value === "string" && /^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/.test(value)
+  );
+}
+
+function isUdtScript(value: unknown): value is UdtScript {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.code_hash === "string" &&
+    /^0x[0-9a-fA-F]{64}$/.test(value.code_hash) &&
+    (value.hash_type === "data" ||
+      value.hash_type === "type" ||
+      value.hash_type === "data1" ||
+      value.hash_type === "data2") &&
+    typeof value.args === "string" &&
+    /^0x(?:[0-9a-fA-F]{2})*$/.test(value.args)
+  );
+}
+
+function isCchInvoice(value: unknown): value is CchInvoice {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  return (
+    keys.length === 1 &&
+    ((keys[0] === "Fiber" &&
+      typeof value.Fiber === "string" &&
+      value.Fiber.length > 0) ||
+      (keys[0] === "Lightning" &&
+        typeof value.Lightning === "string" &&
+        value.Lightning.length > 0))
+  );
+}
+
+function malformedCchResponse(method: string, field: string): ForgeError {
+  return new ForgeError(
+    "CCH_TRANSFER_FAILED",
+    `${method} returned malformed ${field}`,
+    {
+      resource: method,
+      action: "verify the pinned CCH image and inspect sanitized diagnostics",
+    },
+  );
 }
 
 export class CchOperator implements CchOperatorController {

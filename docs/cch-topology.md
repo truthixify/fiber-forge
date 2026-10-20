@@ -6,6 +6,7 @@ Fiber Forge can provision the accepted local Cross-Chain Hub stack with one comm
 fiber-forge up cch
 fiber-forge status cch --json
 fiber-forge cch status cch --json
+fiber-forge cch prove cch --output cch-transfer-proof.json
 fiber-forge down cch --purge
 ```
 
@@ -82,4 +83,5 @@ credentials and external-chain state, so replaying only the Fiber recipe would m
 reproduction claim. Use the sanitized live evidence path for cross-network proofs instead.
 
 See [Cross-Chain Hub feasibility](cch-feasibility.md) for the pinned versions, trust model, and manual
-two-direction proof, and [Lightning backend](lightning-backend.md) for the isolated backend contract.
+two-direction proof, [CCH transfer proof](cch-transfer-proof.md) for the automated terminal-state and
+balance evidence, and [Lightning backend](lightning-backend.md) for the isolated backend contract.

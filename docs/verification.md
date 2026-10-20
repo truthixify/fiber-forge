@@ -9,6 +9,9 @@ Fiber Forge separates fast unit/package CI from Docker-backed runtime evidence:
   the packed artifact, verifies native manifests for both pinned images before pulling, then runs
   real CKB/Fiber provisioning, multi-hop CKB payment, relay recovery, safe export/fresh replay,
   force-close settlement, rollback, UDT, and cleanup paths.
+- [`cch-e2e.yml`](https://github.com/truthixify/fiber-forge/actions/workflows/cch-e2e.yml) installs the
+  packed artifact into an empty consumer and proves terminal Fiber-to-Lightning and
+  Lightning-to-Fiber settlement twice against fresh CKB devnet and Bitcoin regtest state.
 
 ## Trigger And Release Policy
 
@@ -38,6 +41,13 @@ The finalizer runs with `if: always()`. It removes and then verifies the absence
 container, Docker network, CKB volume, and temporary state directory. Cleanup failure fails the job
 and remains visible in both summary formats.
 
+The separate `cch-e2e-<run>-<attempt>` artifact uses the same three filenames and retention period.
+Its summary records cold and warm-image-cache startup timings, exact terminal transfer reports, and
+cleanup results for both fresh networks. Diagnostics remain capped at 64 KiB. The finalizer checks
+all seven topology containers, the Docker network, six named volumes, and persisted state. CCH
+evidence is a trusted local-development proof only, not a reserve proof, custody audit, or mainnet
+safety claim.
+
 ## Failure Probe
 
 The manual workflow input `failure_probe` deliberately fails the multi-hop payment stage after its
@@ -49,8 +59,10 @@ For the normal local path, run:
 
 ```sh
 make e2e
+npm run test:cch-e2e
 ```
 
-The same three evidence files are written to `artifacts/live-e2e/`, which is ignored by Git.
+The evidence files are written to `artifacts/live-e2e/` and `artifacts/cch-e2e/`, which are ignored
+by Git.
 Supported environments and durable environment-specific records are listed in the
 [host compatibility matrix](compatibility.md).

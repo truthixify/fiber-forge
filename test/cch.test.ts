@@ -80,6 +80,18 @@ describe("CCH operator planning", () => {
 });
 
 describe("CchRpc", () => {
+  const validOrder = {
+    timestamp: "0x1",
+    expiry_delta_seconds: "0xe10",
+    wrapped_btc_type_script: wrappedTypeScript,
+    incoming_invoice: { Fiber: "fiber-invoice-private" },
+    outgoing_pay_req: "lightning-invoice-private",
+    payment_hash: `0x${"a".repeat(64)}`,
+    amount_sats: "0x186a0",
+    fee_sats: "0x0",
+    status: "Pending",
+  };
+
   it("treats the release's unknown-order response as transport readiness", async () => {
     const calls: string[] = [];
     const transport: RpcTransport = {
@@ -100,6 +112,73 @@ describe("CchRpc", () => {
       },
     };
     await expect(new CchRpc(transport).ready()).resolves.toBe(false);
+  });
+
+  it("maps all transfer calls and returns validated orders", async () => {
+    const calls: { method: string; params: unknown[] }[] = [];
+    const transport: RpcTransport = {
+      async call(method, params) {
+        calls.push({ method, params });
+        return validOrder;
+      },
+    };
+    const rpc = new CchRpc(transport);
+
+    await expect(rpc.sendBtc("lnbcrt-private")).resolves.toMatchObject({
+      paymentHash: validOrder.payment_hash,
+      amountSats: "0x186a0",
+      status: "Pending",
+      incomingInvoice: { Fiber: "fiber-invoice-private" },
+    });
+    await rpc.receiveBtc("fiber-private");
+    await rpc.getOrder(validOrder.payment_hash);
+
+    expect(calls).toEqual([
+      {
+        method: "send_btc",
+        params: [{ btc_pay_req: "lnbcrt-private", currency: "Fibd" }],
+      },
+      {
+        method: "receive_btc",
+        params: [{ fiber_pay_req: "fiber-private" }],
+      },
+      {
+        method: "get_cch_order",
+        params: [{ payment_hash: validOrder.payment_hash }],
+      },
+    ]);
+  });
+
+  it("fails closed on malformed order fields without exposing invoices", async () => {
+    const transport: RpcTransport = {
+      async call() {
+        return { ...validOrder, amount_sats: "100000" };
+      },
+    };
+
+    let failure: unknown;
+    try {
+      await new CchRpc(transport).sendBtc("lnbcrt-private");
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({ code: "CCH_TRANSFER_FAILED" });
+    expect(String((failure as Error).message)).not.toMatch(/invoice-private/);
+  });
+
+  it("normalizes payment hashes before correlating order state", async () => {
+    const transport: RpcTransport = {
+      async call() {
+        return {
+          ...validOrder,
+          payment_hash: `0x${"A".repeat(64)}`,
+        };
+      },
+    };
+
+    await expect(
+      new CchRpc(transport).sendBtc("lnbcrt-private"),
+    ).resolves.toMatchObject({ paymentHash: `0x${"a".repeat(64)}` });
   });
 });
 

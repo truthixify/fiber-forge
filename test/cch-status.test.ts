@@ -150,6 +150,21 @@ async function fixture() {
   const lightning: LightningBackendController = {
     start: async () => lightningStatus,
     status: async () => lightningStatus,
+    createUserInvoice: async () => ({
+      paymentRequest: "lnbcrt-test",
+      paymentHash: `0x${"3".repeat(64)}`,
+    }),
+    userInvoice: async (_plan, paymentHash) => ({
+      paymentHash,
+      state: "SETTLED",
+      amountPaidSats: 1,
+    }),
+    payFromUser: async (_plan, _request, paymentHash) => ({
+      paymentHash,
+      status: "SUCCEEDED",
+      valueSats: 1,
+      feeSats: 0,
+    }),
     down: async () => {},
   };
   const makeRpc = (port: number) =>

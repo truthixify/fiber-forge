@@ -196,9 +196,12 @@ describe("resolveTopology", () => {
     });
   });
 
-  it("registers the CCH boundary status command and structured failures", async () => {
+  it("registers CCH status and proof commands with structured failures", async () => {
     const cch = buildCli().commands.find((command) => command.name() === "cch");
-    expect(cch?.commands.map((command) => command.name())).toEqual(["status"]);
+    expect(cch?.commands.map((command) => command.name())).toEqual([
+      "status",
+      "prove",
+    ]);
 
     const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
     await main([
@@ -240,6 +243,24 @@ describe("resolveTopology", () => {
       error: {
         code: "FORCE_CLOSE_CONFIRMATION_REQUIRED",
         resource: "cli-force-close-missing/alice/0xchannel",
+      },
+    });
+    expect(process.exitCode).toBe(1);
+
+    process.exitCode = undefined;
+    await main([
+      "node",
+      "fiber-forge",
+      "cch",
+      "prove",
+      "missing-cch-proof",
+      "--json",
+    ]);
+    expect(JSON.parse(String(stderr.mock.calls[1][0]))).toMatchObject({
+      ok: false,
+      error: {
+        code: "NETWORK_NOT_FOUND",
+        resource: "missing-cch-proof",
       },
     });
     expect(process.exitCode).toBe(1);

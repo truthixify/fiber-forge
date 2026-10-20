@@ -11,19 +11,28 @@ on:
       - "package.json"
       - "package-lock.json"
       - "scripts/live-evidence.mjs"
+      - "scripts/cch-evidence.mjs"
+      - "scripts/cch-packed-runner.mjs"
+      - "bin/**"
       - "assets/**"
       - "src/cch.ts"
+      - "src/cch-proof.ts"
       - "src/ckb.ts"
+      - "src/cli.ts"
       - "src/config.ts"
       - "src/engine.ts"
+      - "src/errors.ts"
       - "src/lightning.ts"
       - "src/orchestrator.ts"
       - "src/package-metadata.ts"
       - "src/ports.ts"
       - "src/presets.ts"
       - "src/rpc.ts"
+      - "src/sdk.ts"
       - "src/topology.ts"
       - "test/cch.test.ts"
+      - "test/cch-proof.test.ts"
+      - "test/cch-evidence.test.mjs"
       - "test/cch-status.test.ts"
       - "test/lightning-e2e.test.ts"
       - "test/cch-topology-e2e.test.ts"
@@ -36,9 +45,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  cch-topology:
+  cch-proof:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
+    env:
+      FORGE_CCH_E2E_ARTIFACT_DIR: artifacts/cch-e2e
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -50,13 +61,18 @@ jobs:
         timeout-minutes: 8
         run: node scripts/live-evidence.mjs pull-cch-images
       - run: npm run build
-      - name: Verify the real Bitcoin/LND lifecycle
-        timeout-minutes: 6
-        env:
-          FORGE_LIGHTNING_E2E: "1"
-        run: npx vitest run test/lightning-e2e.test.ts --reporter=verbose
-      - name: Verify the integrated CCH topology and cleanup
-        timeout-minutes: 12
-        env:
-          FORGE_CCH_TOPOLOGY_E2E: "1"
-        run: npx vitest run test/cch-topology-e2e.test.ts --reporter=verbose
+      - name: Run the packed two-direction proof twice
+        timeout-minutes: 30
+        run: node scripts/cch-evidence.mjs
+      - name: Upload bounded CCH evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cch-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/cch-e2e/summary.json
+            artifacts/cch-e2e/summary.md
+            artifacts/cch-e2e/diagnostics.log
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 9

@@ -174,15 +174,25 @@ export class FnnRpc {
     description?: string;
     currency?: string;
     udtTypeScript?: UdtScript;
-  }): Promise<{ invoice_address: string }> {
-    const { udtTypeScript, ...rest } = params;
+    hashAlgorithm?: "sha256";
+    paymentPreimage?: string;
+  }): Promise<{
+    invoice_address: string;
+    invoice?: { data?: { payment_hash?: string } };
+  }> {
+    const { udtTypeScript, hashAlgorithm, paymentPreimage, ...rest } = params;
     return this.transport.call("new_invoice", [
       {
         currency: "Fibd",
         ...rest,
         ...(udtTypeScript ? { udt_type_script: udtTypeScript } : {}),
+        ...(hashAlgorithm ? { hash_algorithm: hashAlgorithm } : {}),
+        ...(paymentPreimage ? { payment_preimage: paymentPreimage } : {}),
       },
-    ]) as Promise<{ invoice_address: string }>;
+    ]) as Promise<{
+      invoice_address: string;
+      invoice?: { data?: { payment_hash?: string } };
+    }>;
   }
 
   sendPayment(

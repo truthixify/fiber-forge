@@ -1,4 +1,5 @@
 import {
+  DEFAULT_CCH_PROOF_TIMEOUT_MS,
   DEFAULT_PROVISION_TIMEOUT_MS,
   FAULT_KINDS,
   ForgeError,
@@ -18,7 +19,9 @@ import {
   type NetworkLayout,
   type NetworkView,
   type ChannelSettlementReport,
+  type CchProofOptions,
   type CchTopologyStatus,
+  type CchTransferProofReport,
   type BundleInspection,
   type ExportBundleOptions,
   type ExportBundleResult,
@@ -80,6 +83,7 @@ type ExpectedForgeErrorCode =
   | "BUNDLE_OUTPUT_EXISTS"
   | "CHANNEL_NOT_FOUND"
   | "CHANNEL_STATE_MISMATCH"
+  | "CCH_TRANSFER_FAILED"
   | "CONTAINER_NOT_FOUND"
   | "CONTAINER_START_FAILED"
   | "DOCKER_OPERATION_FAILED"
@@ -146,6 +150,7 @@ type AppForge = Pick<
   | "replayBundle"
   | "inspect"
   | "cchStatus"
+  | "proveCchTransfers"
   | "inspectNode"
   | "stopNode"
   | "startNode"
@@ -165,6 +170,14 @@ async function exerciseContract(client: AppForge): Promise<void> {
   const layout: NetworkLayout = await client.up(topology, upOptions);
   const view: NetworkView = await client.inspect(layout.net);
   const cch: CchTopologyStatus = await client.cchStatus(layout.net);
+  const cchProofOptions: CchProofOptions = {
+    timeoutMs: DEFAULT_CCH_PROOF_TIMEOUT_MS,
+    signal: controller.signal,
+  };
+  const cchProof: Promise<CchTransferProofReport> = client.proveCchTransfers(
+    layout.net,
+    cchProofOptions,
+  );
   const lifecycleOptions: NodeLifecycleOptions = {
     timeoutMs: 60_000,
     reconcileTimeoutMs: 10_000,
@@ -189,6 +202,7 @@ async function exerciseContract(client: AppForge): Promise<void> {
     );
   void applied;
   void cch;
+  void cchProof;
   void mined;
   void forceOptions;
   void settlement;
