@@ -12,8 +12,8 @@ on:
       - "package.json"
       - "package-lock.json"
       - "src/**"
+      - "examples/integration-app/**"
       - "test/fixtures/action-cleanup-probe/**"
-      - "test/fixtures/action-consumer/**"
   pull_request:
     paths:
       - ".github/workflows/action-e2e.yml"
@@ -22,8 +22,8 @@ on:
       - "package.json"
       - "package-lock.json"
       - "src/**"
+      - "examples/integration-app/**"
       - "test/fixtures/action-cleanup-probe/**"
-      - "test/fixtures/action-consumer/**"
 
 permissions:
   contents: read
@@ -94,7 +94,7 @@ jobs:
         env:
           FIBER_FORGE_CONNECTION: ${{ steps.forge.outputs.connection-json }}
           FIBER_FORGE_FAIL_AFTER_PAYMENT: ${{ matrix.mode == 'deliberate-failure' && '1' || '0' }}
-        run: node test/fixtures/action-consumer/payment.mjs
+        run: node examples/integration-app/src/connection.mjs
       - name: Confirm the deliberate consumer failure occurred
         if: matrix.mode == 'deliberate-failure' && steps.consumer.outcome != 'failure'
         run: |

@@ -45,6 +45,8 @@
     "test:e2e": "node scripts/live-evidence.mjs all",
     "test:sdk": "node scripts/verify-sdk-contract.mjs && tsc --noEmit -p test/fixtures/sdk-consumer/tsconfig.json && node test/fixtures/sdk-consumer/runtime.mjs",
     "test:package": "node scripts/verify-packed-artifact.mjs",
+    "example:local": "node scripts/run-integration-example.mjs",
+    "example:failure": "node scripts/run-integration-example.mjs --fail-after-payment",
     "lint": "tsc --noEmit",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --check .",

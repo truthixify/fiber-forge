@@ -16,7 +16,7 @@ steps:
     with:
       package-version: 0.4.0-rc.1
       topology: trio
-  - run: npm test
+  - run: node examples/integration-app/src/connection.mjs
     env:
       FIBER_FORGE_CONNECTION: ${{ steps.forge.outputs.connection-json }}
 ```

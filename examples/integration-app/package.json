@@ -1,0 +1,17 @@
+{
+  "name": "fiber-forge-integration-example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node src/local.mjs",
+    "test:connection": "node src/connection.mjs",
+    "test:failure": "node src/local.mjs --fail-after-payment"
+  },
+  "dependencies": {
+    "@truthixify/fiber-forge": "0.4.0-rc.1"
+  }
+}
