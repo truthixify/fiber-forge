@@ -148,6 +148,12 @@ connects the peers, opens each channel, and drives blocks until every channel re
 work as well. The layout is saved under `~/.fiber-forge/<net>/`, and the daemon renders it live,
 pushing updates over a WebSocket and falling back to polling.
 
+For the pinned Fiber image, restarting the same stopped relay container preserves its identity and
+channels. Peer reconnection can be automatic or require reconnecting the original opener, so the
+live recovery test gates on every node's RPC state, applies that bounded fallback when needed, and
+then proves a subsequent payment. It does not claim transparent recovery or use `down --keep` as a
+restart path. See [Node recovery](docs/recovery.md).
+
 The code that talks to the nodes and the chain is split into small modules — `topology`, `keys`,
 `rpc`, `engine`, `config`, `ckb`, `orchestrator`, `scenario`, `presets`, `cli`, and `daemon` — each
 tested against a fake, so `make ci` never needs Docker.
@@ -161,7 +167,7 @@ make ci       # formatting, types, tests, build, and packed-artifact smoke — t
 make sdk-test # build, typecheck, and execute a consumer through the package export
 make package-test # install the tarball with production dependencies and smoke the CLI + SDK
 
-FORGE_E2E=1 npx vitest run test/e2e.test.ts   # live trio multi-hop, failure, and UDT proofs
+FORGE_E2E=1 npx vitest run test/e2e.test.ts   # live multi-hop, relay recovery, and UDT proofs
 ```
 
 Run `make ci` before every push. Pushing a `v*` tag publishes to npm through

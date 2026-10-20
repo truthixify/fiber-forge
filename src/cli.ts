@@ -268,7 +268,7 @@ export function buildCli(): Command {
     .argument("[net]", "network name (omit when using --all)")
     .option("--all", "tear down every network at once")
     .option("--purge", "also delete the state dir — nothing left on disk")
-    .option("--keep", "preserve the ckb data volume for a stateful restart")
+    .option("--keep", "preserve the ckb data volume during teardown")
     .action(
       async (
         net: string | undefined,

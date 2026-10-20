@@ -9,7 +9,9 @@ import {
   type Channel,
   FnnRpc,
   HttpTransport,
+  dialAddress,
   isChannelReady,
+  peerIdOf,
 } from "../src/rpc";
 import { type Topology } from "../src/topology";
 
@@ -17,6 +19,7 @@ import { type Topology } from "../src/topology";
 const RUN = process.env.FORGE_E2E === "1";
 const assetsDir = join(import.meta.dirname, "..", "assets");
 const MULTIHOP_NET = "e2e-multihop";
+const RECOVERY_NET = "e2e-recovery";
 
 function edge(from: string, to: string): string {
   return [from, to].sort().join("--");
@@ -64,13 +67,12 @@ async function addLiveDiagnostics(
   error: unknown,
   engine: DockerEngine,
   progress: string[],
+  net = MULTIHOP_NET,
 ): Promise<Error> {
   const message = error instanceof Error ? error.message : String(error);
   const lines = [message, "recent progress:", ...progress.slice(-12)];
   try {
-    const containers = (
-      await engine.listByLabel(FORGE_LABEL, MULTIHOP_NET)
-    ).sort();
+    const containers = (await engine.listByLabel(FORGE_LABEL, net)).sort();
     for (const container of containers) {
       const status = await engine.status(container);
       lines.push(`${container}: ${status}`);
@@ -89,27 +91,28 @@ async function verifyCleanup(
   orchestrator: Orchestrator,
   engine: DockerEngine,
   stateDir: string,
+  net = MULTIHOP_NET,
 ): Promise<void> {
   const failures: string[] = [];
   try {
-    await orchestrator.down(MULTIHOP_NET, { purge: true });
+    await orchestrator.down(net, { purge: true });
   } catch (error) {
     failures.push(`teardown failed: ${String(error)}`);
   }
 
   try {
-    const containers = await engine.listByLabel(FORGE_LABEL, MULTIHOP_NET);
+    const containers = await engine.listByLabel(FORGE_LABEL, net);
     if (containers.length > 0) {
       failures.push(`containers remain: ${containers.join(", ")}`);
     }
-    if ((await engine.forgeNets()).includes(MULTIHOP_NET)) {
-      failures.push(`network remains: forge-${MULTIHOP_NET}`);
+    if ((await engine.forgeNets()).includes(net)) {
+      failures.push(`network remains: forge-${net}`);
     }
-    if (await engine.volumeExists(`forge-${MULTIHOP_NET}-ckb-data`)) {
-      failures.push(`volume remains: forge-${MULTIHOP_NET}-ckb-data`);
+    if (await engine.volumeExists(`forge-${net}-ckb-data`)) {
+      failures.push(`volume remains: forge-${net}-ckb-data`);
     }
-    if (await pathExists(join(stateDir, MULTIHOP_NET))) {
-      failures.push(`state remains: ${join(stateDir, MULTIHOP_NET)}`);
+    if (await pathExists(join(stateDir, net))) {
+      failures.push(`state remains: ${join(stateDir, net)}`);
     }
   } catch (error) {
     failures.push(`cleanup verification failed: ${String(error)}`);
@@ -118,6 +121,74 @@ async function verifyCleanup(
   await rm(stateDir, { recursive: true, force: true });
   if (failures.length > 0) {
     throw new Error(failures.join("\n"));
+  }
+}
+
+async function waitForNetworkRecovery(
+  rpcs: FnnRpc[],
+  nodes: string[],
+  expectedPeers: string[][],
+  timeoutMs = 60_000,
+): Promise<string[]> {
+  const deadline = Date.now() + timeoutMs;
+  let observed = "no RPC response";
+  while (Date.now() < deadline) {
+    try {
+      const [infos, channels, peers, graphCounts] = await Promise.all([
+        Promise.all(rpcs.map((rpc) => rpc.nodeInfo())),
+        Promise.all(rpcs.map((rpc) => rpc.listChannels())),
+        Promise.all(rpcs.map((rpc) => rpc.listPeers())),
+        Promise.all(rpcs.map((rpc) => rpc.graphChannelCount())),
+      ]);
+      const ready = channels.map(readyPeers);
+      const connected = peers.map((list) =>
+        list.map((peer) => peer.pubkey).sort(),
+      );
+      const complete = expectedPeers.every((expected, index) => {
+        const sorted = [...expected].sort();
+        return (
+          ready[index].join(",") === sorted.join(",") &&
+          sorted.every((peer) => connected[index].includes(peer)) &&
+          graphCounts[index] >= 2
+        );
+      });
+      observed = nodes
+        .map(
+          (node, index) =>
+            `${node}: ready=${ready[index].length}/${expectedPeers[index].length}, ` +
+            `connected=${connected[index].length}/${expectedPeers[index].length}, ` +
+            `graph=${graphCounts[index]}/2`,
+        )
+        .join("; ");
+      if (complete) {
+        return infos.map((info) => info.pubkey);
+      }
+    } catch {
+      // The restarted process has not restored its RPC and channels yet.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(
+    `network did not recover ready channels and peers in ${timeoutMs}ms (${observed})`,
+  );
+}
+
+async function ensurePeerConnected(
+  rpc: FnnRpc,
+  pubkey: string,
+  address: string,
+): Promise<void> {
+  const isConnected = async () =>
+    (await rpc.listPeers()).some((peer) => peer.pubkey === pubkey);
+  if (await isConnected()) {
+    return;
+  }
+  try {
+    await rpc.connectPeer(address);
+  } catch (error) {
+    if (!(await isConnected())) {
+      throw error;
+    }
   }
 }
 
@@ -279,35 +350,132 @@ describe.skipIf(!RUN)("live: trio multi-hop CKB payment", () => {
   }, 360_000);
 });
 
-describe.skipIf(!RUN)("live: a killed node surfaces as an error", () => {
-  const duo: Topology = {
-    name: "e2e-err",
-    nodes: [{ name: "alice" }, { name: "bob" }],
-    channels: [{ from: "alice", to: "bob", capacityCkb: 1000 }],
-    funding: { perNodeCkb: 100000 },
-  };
-
-  it("reports the node unhealthy and fails a payment to it", async () => {
-    const engine = new DockerEngine();
-    const orchestrator = new Orchestrator(engine, assetsDir);
-    try {
-      const layout = await orchestrator.up(duo, {
-        layout: { ckbHostPort: 8215, rpcHostPortBase: 8320 },
-        onProgress: (message) => console.log("  " + message),
-      });
-      await engine.remove(layout.nodes[1].container);
-
-      const view = await orchestrator.inspect("e2e-err");
-      const bob = view.nodes.find((n) => n.name === "bob");
-      expect(bob?.status).not.toBe("running");
-
-      await expect(
-        orchestrator.pay("e2e-err", "alice", "bob", 100),
-      ).rejects.toThrow();
-    } finally {
-      await orchestrator.down("e2e-err", { purge: true });
+describe.skipIf(!RUN)("live: relay node recovery", () => {
+  it("fails while stopped, restores the restarted relay, then pays", async () => {
+    const selected = preset("trio");
+    if (!selected) {
+      throw new Error("trio preset is unavailable");
     }
-  }, 300_000);
+    const engine = new DockerEngine();
+    const stateDir = await mkdtemp(join(tmpdir(), "fiber-forge-recovery-"));
+    const orchestrator = new Orchestrator(engine, assetsDir, stateDir);
+    const trio = { ...selected, name: RECOVERY_NET };
+    const [sender, relay, receiver] = trio.nodes.map((node) => node.name);
+    const progress: string[] = [];
+    let failure: Error | undefined;
+    let cleanupFailure: Error | undefined;
+
+    try {
+      const layout = await orchestrator.up(trio, {
+        onProgress: (message) => {
+          progress.push(message);
+          console.log("  " + message);
+        },
+      });
+      const rpcs = layout.nodes.map(
+        (node) =>
+          new FnnRpc(new HttpTransport(`http://127.0.0.1:${node.rpcHostPort}`)),
+      );
+      const infos = await Promise.all(rpcs.map((rpc) => rpc.nodeInfo()));
+      const channelIdsBefore = (
+        await Promise.all(rpcs.map((rpc) => rpc.listChannels()))
+      ).map((channels) => channels.map((channel) => channel.channel_id).sort());
+      const interruptedInvoice = await orchestrator.createInvoice(
+        RECOVERY_NET,
+        receiver,
+        100,
+        "relay unavailable proof",
+      );
+
+      await engine.stop(layout.nodes[1].container);
+
+      const stopped = await orchestrator.inspect(RECOVERY_NET);
+      expect(stopped.nodes.find((node) => node.name === relay)?.status).toBe(
+        "exited",
+      );
+      await expect(
+        orchestrator.payInvoice(RECOVERY_NET, sender, interruptedInvoice),
+      ).rejects.toThrow(/Failed to build route|Insufficient balance/i);
+
+      await engine.start(layout.nodes[1].container);
+      const expectedPeers = [
+        [infos[1].pubkey],
+        [infos[0].pubkey, infos[2].pubkey],
+        [infos[1].pubkey],
+      ];
+      let recoveryMode = "automatic";
+      let recoveredPubkeys: string[];
+      try {
+        recoveredPubkeys = await waitForNetworkRecovery(
+          rpcs,
+          [sender, relay, receiver],
+          expectedPeers,
+          10_000,
+        );
+      } catch (automaticError) {
+        recoveryMode = "manual-peer-reconnect";
+        progress.push(
+          `automatic recovery incomplete: ${(automaticError as Error).message}`,
+        );
+        const relayPeerId = peerIdOf(infos[1]);
+        if (!relayPeerId) {
+          throw new Error(`restarted relay ${relay} has no peer id`);
+        }
+        await ensurePeerConnected(
+          rpcs[0],
+          infos[1].pubkey,
+          dialAddress(layout.nodes[1].ip, relayPeerId),
+        );
+        recoveredPubkeys = await waitForNetworkRecovery(
+          rpcs,
+          [sender, relay, receiver],
+          expectedPeers,
+        );
+      }
+      progress.push(`recovery classification: ${recoveryMode}`);
+      expect(recoveredPubkeys).toEqual(infos.map((info) => info.pubkey));
+      const channelIdsAfter = (
+        await Promise.all(rpcs.map((rpc) => rpc.listChannels()))
+      ).map((channels) => channels.map((channel) => channel.channel_id).sort());
+      expect(channelIdsAfter).toEqual(channelIdsBefore);
+      expect(await engine.status(layout.nodes[1].container)).toBe("running");
+
+      const recoveredInvoice = await orchestrator.createInvoice(
+        RECOVERY_NET,
+        receiver,
+        100,
+        `${recoveryMode} relay recovery proof`,
+      );
+      const recovered = await orchestrator.payInvoice(
+        RECOVERY_NET,
+        sender,
+        recoveredInvoice,
+      );
+      expect(recovered.status).toBe("Success");
+    } catch (error) {
+      failure = await addLiveDiagnostics(error, engine, progress, RECOVERY_NET);
+    } finally {
+      try {
+        await verifyCleanup(orchestrator, engine, stateDir, RECOVERY_NET);
+      } catch (error) {
+        cleanupFailure =
+          error instanceof Error ? error : new Error(String(error));
+      }
+    }
+
+    if (failure && cleanupFailure) {
+      throw new AggregateError(
+        [failure, cleanupFailure],
+        "live recovery test and cleanup both failed",
+      );
+    }
+    if (failure) {
+      throw failure;
+    }
+    if (cleanupFailure) {
+      throw cleanupFailure;
+    }
+  }, 360_000);
 });
 
 describe.skipIf(!RUN)("live: UDT asset channel + payment", () => {

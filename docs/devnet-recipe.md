@@ -79,8 +79,9 @@ node (topology).
 
 - Docker network `forge-<net>`; CKB `forge-<net>-ckb` (host 8114); node `i` container
   `forge-<net>-node-<i>`, RPC host port `8228 + i`, p2p internal 8228.
-- State under `~/.fiber-forge/<net>/` (topology, allocated ports, per-node data dirs) so
-  `down --keep` + `up` resumes.
+- State under `~/.fiber-forge/<net>/` includes the layout and per-node bind mounts. Starting the
+  same stopped container reuses that Fiber state; `down --keep` retains the CKB volume but a later
+  `up` provisions fresh Fiber nodes.
 
 ## MVP note
 

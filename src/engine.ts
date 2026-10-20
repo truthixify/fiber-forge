@@ -46,6 +46,8 @@ export interface ContainerEngine {
   /** Create and start a container from the spec (removing any prior container of that name). */
   run(spec: ContainerSpec): Promise<void>;
   stop(name: string): Promise<void>;
+  /** Start an existing stopped container without replacing its mounted state. */
+  start(name: string): Promise<void>;
   remove(name: string): Promise<void>;
   status(name: string): Promise<ContainerStatus>;
   logs(name: string, tailLines: number): Promise<string>;
@@ -107,6 +109,15 @@ export class FakeEngine implements ContainerEngine {
       entry.status = "exited";
     }
     this.log.push(`stop ${name}`);
+  }
+
+  async start(name: string): Promise<void> {
+    const entry = this.containers.get(name);
+    if (!entry) {
+      throw new Error(`container ${name} not found`);
+    }
+    entry.status = "running";
+    this.log.push(`start ${name}`);
   }
 
   async remove(name: string): Promise<void> {
@@ -248,7 +259,15 @@ export class DockerEngine implements ContainerEngine {
     try {
       await this.docker.getContainer(name).stop({ t: 3 });
     } catch (error) {
-      if (!isNotFound(error) && !isNotRunning(error)) throw error;
+      if (!isNotFound(error) && !isNotModified(error)) throw error;
+    }
+  }
+
+  async start(name: string): Promise<void> {
+    try {
+      await this.docker.getContainer(name).start();
+    } catch (error) {
+      if (!isNotModified(error)) throw error;
     }
   }
 
@@ -363,6 +382,6 @@ function isNotFound(error: unknown): boolean {
   return (error as { statusCode?: number })?.statusCode === 404;
 }
 
-function isNotRunning(error: unknown): boolean {
+function isNotModified(error: unknown): boolean {
   return (error as { statusCode?: number })?.statusCode === 304;
 }

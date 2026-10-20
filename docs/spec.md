@@ -58,7 +58,8 @@ GUI (React/vite, served on localhost) ──► fiber-forge daemon HTTP+WS API (
 - Funding: the dev-chain genesis issued cells (well-known dev keys) are the treasury; the
   funding module builds simple transfers (via `@ckb-ccc/core`) to each node's wallet address,
   read from the node after boot.
-- Node data dirs are host mounts, so `fiber-forge down --keep` preserves state and `fiber-forge up` resumes.
+- Node data dirs are host mounts, so stopping and starting the same container preserves Fiber state.
+  `down` removes containers; `--keep` retains the CKB volume but is not a supported Fiber resume path.
 
 ## 5. Fiber integration points
 
@@ -125,8 +126,9 @@ funding:
 - AC-1 On a clean machine with Docker: `npx @truthixify/fiber-forge up trio` → GUI open →
   multi-hop payment succeeds, in under 90 seconds total.
 - AC-2 The E2E script passes in CI (Linux runner) headlessly.
-- AC-3 Kill any single fnn container: GUI shows the node unhealthy within 2s; `fiber-forge up`
-  after `down --keep` restores the network with channel state intact.
+- AC-3 Stop a routing fnn container: inspection shows it unhealthy, restarting the same container
+  restores its identity and channels, the documented peer gate and reconnect fallback restore
+  routing, and a new payment succeeds over the original channels.
 - AC-4 Topology validation rejects the documented error classes with named messages.
 - AC-5 `make ci` green: lint, unit (parser, port allocator, orchestrator with mocked Docker),
   E2E behind a flag.

@@ -62,7 +62,7 @@ export interface UpOptions {
 export interface DownOptions {
   /** Remove the saved layout directory as well as runtime resources. */
   purge?: boolean;
-  /** Preserve the CKB data volume for a later stateful restart. */
+  /** Preserve the CKB data volume when removing the network containers. */
   keep?: boolean;
 }
 
@@ -505,8 +505,8 @@ export class Orchestrator {
 
   /**
    * Tear a network down. By default removes its containers, network, and ckb data volume, keeping
-   * the state dir. `keep` preserves the data volume too (for a stateful restart); `purge` also
-   * deletes the state dir, leaving nothing on disk.
+   * the state dir. `keep` preserves the CKB data volume too; `purge` also deletes the state dir,
+   * leaving nothing on disk. Teardown removes Fiber containers, so it is not a node restart path.
    */
   async down(net: string, options: DownOptions = {}): Promise<void> {
     for (const name of await this.engine.listByLabel(FORGE_LABEL, net)) {

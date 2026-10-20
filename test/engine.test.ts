@@ -23,8 +23,17 @@ describe("FakeEngine", () => {
     expect(await e.status("n1")).toBe("running");
     await e.stop("n1");
     expect(await e.status("n1")).toBe("exited");
+    await e.start("n1");
+    expect(await e.status("n1")).toBe("running");
     await e.remove("n1");
     expect(await e.status("n1")).toBe("absent");
+  });
+
+  it("rejects starting a container that no longer exists", async () => {
+    const e = new FakeEngine();
+    await expect(e.start("missing")).rejects.toThrow(
+      "container missing not found",
+    );
   });
 
   it("lists containers by label", async () => {
