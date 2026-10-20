@@ -37,8 +37,8 @@ const invoice = await rpc(receiver.rpc, "new_invoice", [
 ]);
 assert.match(
   invoice.invoice_address,
-  /^fibt/i,
-  "receiver did not create an invoice",
+  /^fibd/i,
+  "receiver did not create a Fibd devnet invoice",
 );
 
 const submitted = await rpc(sender.rpc, "send_payment", [
