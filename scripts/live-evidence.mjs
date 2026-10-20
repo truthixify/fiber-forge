@@ -333,11 +333,112 @@ async function runLiveEvidence() {
   }
 }
 
+export function normalizeArchitecture(value) {
+  const architecture = String(value ?? "").toLowerCase();
+  if (["aarch64", "arm64"].includes(architecture)) return "arm64";
+  if (["amd64", "x64", "x86_64"].includes(architecture)) return "amd64";
+  return architecture;
+}
+
+export function manifestPlatforms(manifest) {
+  return [
+    ...new Set(
+      (manifest?.manifests ?? [])
+        .map((entry) => {
+          const os = String(entry?.platform?.os ?? "").toLowerCase();
+          const architecture = normalizeArchitecture(
+            entry?.platform?.architecture,
+          );
+          const variant = String(entry?.platform?.variant ?? "").toLowerCase();
+          if (
+            !os ||
+            os === "unknown" ||
+            !architecture ||
+            architecture === "unknown"
+          ) {
+            return null;
+          }
+          return `${os}/${architecture}${variant ? `/${variant}` : ""}`;
+        })
+        .filter(Boolean),
+    ),
+  ].sort();
+}
+
+export function assertImagePlatform(reference, platforms, os, architecture) {
+  const target = `${String(os).toLowerCase()}/${normalizeArchitecture(architecture)}`;
+  if (
+    platforms.some(
+      (candidate) => candidate === target || candidate.startsWith(`${target}/`),
+    )
+  ) {
+    return;
+  }
+  throw new Error(
+    `image ${reference} has no ${target} manifest (available: ${platforms.join(", ") || "none"})`,
+  );
+}
+
 async function pullRuntimeImages() {
   const packageJson = JSON.parse(
     await readFile(join(repoDir, "package.json"), "utf8"),
   );
-  for (const reference of Object.values(packageJson.fiberForge.images)) {
+  const references = Object.values(packageJson.fiberForge.images);
+  const dockerInfoResult = await runCommand("docker", [
+    "info",
+    "--format",
+    "{{json .}}",
+  ]);
+  if (dockerInfoResult.code !== 0) {
+    throw new Error(
+      `could not inspect Docker daemon: ${dockerInfoResult.stderr || dockerInfoResult.stdout}`,
+    );
+  }
+
+  let dockerInfo;
+  try {
+    dockerInfo = JSON.parse(dockerInfoResult.stdout);
+  } catch (error) {
+    throw new Error(`could not parse Docker daemon details: ${String(error)}`);
+  }
+  const daemonOs = String(dockerInfo.OSType ?? "").toLowerCase();
+  const daemonArchitecture = normalizeArchitecture(dockerInfo.Architecture);
+  if (!daemonOs || !daemonArchitecture) {
+    throw new Error(
+      "Docker daemon did not report its operating system and architecture",
+    );
+  }
+  console.log(
+    `[live-evidence] host ${platform()}/${normalizeArchitecture(arch())}; Docker ${dockerInfo.ServerVersion ?? "unknown"} ${daemonOs}/${daemonArchitecture}`,
+  );
+
+  for (const reference of references) {
+    const manifestResult = await runCommand("docker", [
+      "manifest",
+      "inspect",
+      reference,
+    ]);
+    if (manifestResult.code !== 0) {
+      throw new Error(
+        `could not inspect image manifest for ${reference}: ${manifestResult.stderr || manifestResult.stdout}`,
+      );
+    }
+    let manifest;
+    try {
+      manifest = JSON.parse(manifestResult.stdout);
+    } catch (error) {
+      throw new Error(
+        `could not parse image manifest for ${reference}: ${String(error)}`,
+      );
+    }
+    const platforms = manifestPlatforms(manifest);
+    console.log(
+      `[live-evidence] ${reference} platforms: ${platforms.join(", ") || "none"}`,
+    );
+    assertImagePlatform(reference, platforms, daemonOs, daemonArchitecture);
+  }
+
+  for (const reference of references) {
     console.log(`[live-evidence] pulling ${reference}`);
     const result = await runCommand("docker", ["pull", reference]);
     if (result.code !== 0) {
@@ -820,6 +921,7 @@ async function main() {
   if (mode === "all") {
     let runExitCode = 0;
     try {
+      await pullRuntimeImages();
       await runLiveEvidence();
       runExitCode = process.exitCode ?? 0;
     } catch (error) {

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { buildEvidence, sanitizeText } from "../scripts/live-evidence.mjs";
+import {
+  assertImagePlatform,
+  buildEvidence,
+  manifestPlatforms,
+  normalizeArchitecture,
+  sanitizeText,
+} from "../scripts/live-evidence.mjs";
 
 const originalJobStatus = process.env.FORGE_E2E_JOB_STATUS;
 
@@ -47,6 +53,44 @@ describe("live evidence sanitization", () => {
     expect(sanitized.text).toContain("[truncated]");
     expect(sanitized.text).toMatch(/^ordinary log line/);
     expect(sanitized.text).toMatch(/ordinary log line\n$/);
+  });
+});
+
+describe("runtime image platform preflight", () => {
+  it("normalizes host and Docker architecture aliases", () => {
+    expect(normalizeArchitecture("aarch64")).toBe("arm64");
+    expect(normalizeArchitecture("x64")).toBe("amd64");
+    expect(normalizeArchitecture("x86_64")).toBe("amd64");
+  });
+
+  it("reports deployable manifest platforms and ignores attestations", () => {
+    const platforms = manifestPlatforms({
+      manifests: [
+        { platform: { os: "linux", architecture: "amd64" } },
+        {
+          platform: { os: "linux", architecture: "arm64", variant: "v8" },
+        },
+        { platform: { os: "unknown", architecture: "unknown" } },
+      ],
+    });
+
+    expect(platforms).toEqual(["linux/amd64", "linux/arm64/v8"]);
+    expect(() =>
+      assertImagePlatform("example/image:tag", platforms, "linux", "aarch64"),
+    ).not.toThrow();
+  });
+
+  it("rejects an image without a native daemon platform", () => {
+    expect(() =>
+      assertImagePlatform(
+        "example/image:tag",
+        ["linux/amd64", "linux/arm64/v8"],
+        "linux",
+        "s390x",
+      ),
+    ).toThrow(
+      "image example/image:tag has no linux/s390x manifest (available: linux/amd64, linux/arm64/v8)",
+    );
   });
 });
 
