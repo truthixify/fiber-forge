@@ -47,7 +47,7 @@
   .mc{font-family:'Geist Mono','JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
   .num{font-family:'Geist Mono','JetBrains Mono',monospace;font-variant-numeric:tabular-nums;}
   button{font-family:inherit;}
-  button.ff-focus:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+  .ff-focus:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
   button:disabled{cursor:not-allowed;opacity:.55}
   input[type=range]{accent-color:var(--ember);}
   ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--border)}::-webkit-scrollbar-track{background:transparent}
@@ -75,6 +75,9 @@
   .routing-field{width:100%;min-height:42px;background:var(--inset);color:var(--bone);border:1px solid var(--border);padding:9px 10px;font-family:'Geist Mono',monospace;font-size:12px;outline:none;}
   .routing-field:focus-visible{outline:2px solid var(--signal);outline-offset:1px;}
   .routing-skeleton{height:14px;background:linear-gradient(90deg,var(--panel-2),var(--border),var(--panel-2));background-size:220% 100%;animation:routingLoad 1.2s linear infinite;}
+  .floor-channel-filter{position:absolute;top:66px;right:20px;display:flex;gap:1px;background:var(--border);border:1px solid var(--border);z-index:8;}
+  .pair-selection{position:absolute;left:50%;bottom:100px;transform:translateX(-50%);width:min(500px,calc(100vw - 460px));min-width:360px;display:flex;align-items:center;gap:10px;padding:8px;background:var(--panel);border:1px solid var(--signal);z-index:9;box-shadow:0 8px 28px rgba(0,0,0,.28);}
+  .node-card{appearance:none;padding:0;background:none;border:0;color:inherit;text-align:left;font:inherit;}
   @media (max-width:900px){
     .floor-rig{transform:scale(.72);transform-origin:top left}
     .floor-vitals{top:72px!important;left:20px!important;transform:none!important}
@@ -83,6 +86,7 @@
     .floor-map{bottom:146px!important}
     .floor-zoom{bottom:146px!important;left:auto!important;right:20px}
     .floor-timeline{left:20px;right:20px!important;width:auto!important}
+    .pair-selection{bottom:266px}
     .routing-shell{inset:8px;}
     .routing-body{grid-template-columns:1fr;overflow:auto;}
     .routing-graph-pane{border-right:none;border-bottom:1px solid var(--border);min-height:520px;}
@@ -91,7 +95,7 @@
   @media (max-width:600px){
     .floor-rig{top:16px!important;left:16px!important;transform:scale(.64)}
     .floor-actions{top:16px!important;right:16px!important;transform:scale(.68)}
-    .floor-vitals{top:68px!important;left:16px!important;transform:scale(.82)!important;transform-origin:top left}
+    .floor-vitals{top:68px!important;left:16px!important;transform:scale(.72)!important;transform-origin:top left}
     .cch-boundary{top:126px;left:16px;right:16px}
     .cch-boundary-flow{grid-template-columns:1fr!important}
     .cch-boundary-arrow{display:none!important}
@@ -99,6 +103,8 @@
     .routing-shell{inset:0;}
     .routing-canvas{aspect-ratio:4/3;min-height:250px;}
     .routing-channel-list{grid-template-columns:1fr;max-height:250px;}
+    .floor-channel-filter{top:58px;right:16px;transform:scale(.78);transform-origin:top right;}
+    .pair-selection{left:16px;right:16px;bottom:16px;transform:none;width:auto;min-width:0;}
   }
 </style>
 </helmet>
@@ -193,6 +199,23 @@
       <button id="routing-trigger" class="ff-focus" onClick="{{ openRouting }}" style="background:var(--panel);color:var(--text);border:none;padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;"><span style="color:var(--signal);">⌘</span> ROUTES</button>
       <button onClick="{{ openPay }}" style="background:var(--ember);color:#1a0b06;border:none;padding:10px 18px;cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;">⚡ PAY</button>
     </div>
+
+    <div class="floor-channel-filter" role="group" aria-label="Filter topology channels by asset">
+      <sc-for list="{{ channelFilters }}" as="filter" hint-placeholder-count="3">
+        <button class="ff-focus" onClick="{{ filter.set }}" aria-pressed="{{ filter.active }}" style="min-height:40px;min-width:48px;padding:7px 10px;border:none;background:{{ filter.bg }};color:{{ filter.fg }};cursor:pointer;font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:.08em;">{{ filter.label }}</button>
+      </sc-for>
+    </div>
+
+    <sc-if value="{{ pairSelectionVisible }}" hint-placeholder-val="{{ false }}">
+      <div class="pair-selection" role="status" aria-live="polite">
+        <div style="min-width:0;flex:1;">
+          <span class="mc" style="display:block;color:var(--signal);margin-bottom:4px;">CHANNEL PAIR · {{ pairSelectionCount }}/2</span>
+          <span class="num" style="display:block;font-size:12px;color:var(--bone);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ pairSelectionLabel }}</span>
+        </div>
+        <button class="ff-focus" onClick="{{ openPairChannel }}" disabled="{{ pairSelectionDisabled }}" style="min-height:40px;background:var(--signal);color:var(--void);border:none;padding:9px 13px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;font-weight:700;">OPEN CHANNEL</button>
+        <button class="ff-focus" onClick="{{ clearPairSelection }}" aria-label="Clear selected channel pair" style="min-width:40px;min-height:40px;background:transparent;color:var(--muted);border:1px solid var(--border);cursor:pointer;font-size:15px;">✕</button>
+      </div>
+    </sc-if>
 
     <sc-if value="{{ cchVisible }}" hint-placeholder-val="{{ false }}">
       <div class="cch-boundary" role="status" aria-label="Cross-network boundary status">
@@ -374,7 +397,7 @@
       <div style="padding:16px 18px;border-bottom:1px solid var(--hairline);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
           <span class="mc">NODE</span>
-          <button onClick="{{ clearSel }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;">✕</button>
+          <button type="button" class="ff-focus" onClick="{{ clearSel }}" aria-label="Close node details" style="width:40px;height:40px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;">✕</button>
         </div>
         <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px;">
           <span style="width:8px;height:8px;background:{{ nStatusColor }};animation:{{ nStatusAnimation }};"></span>
@@ -389,10 +412,10 @@
         </div>
       </div>
       <div style="display:flex;gap:1px;background:var(--hairline);border-bottom:1px solid var(--hairline);">
-        <div onClick="{{ tabOvGo }}" style="flex:1;background:var(--panel);padding:9px 0;text-align:center;cursor:pointer;border-bottom:{{ tabOvBd }};"><span class="mc" style="color:{{ tabOvFg }};">OVERVIEW</span></div>
-        <div onClick="{{ tabPeGo }}" style="flex:1;background:var(--panel);padding:9px 0;text-align:center;cursor:pointer;border-bottom:{{ tabPeBd }};"><span class="mc" style="color:{{ tabPeFg }};">PEERS</span></div>
-        <div onClick="{{ tabChGo }}" style="flex:1;background:var(--panel);padding:9px 0;text-align:center;cursor:pointer;border-bottom:{{ tabChBd }};"><span class="mc" style="color:{{ tabChFg }};">CHANNELS</span></div>
-        <div onClick="{{ tabLoGo }}" style="flex:1;background:var(--panel);padding:9px 0;text-align:center;cursor:pointer;border-bottom:{{ tabLoBd }};"><span class="mc" style="color:{{ tabLoFg }};">LOGS</span></div>
+        <button class="ff-focus" onClick="{{ tabOvGo }}" style="flex:1;background:var(--panel);border:none;padding:9px 0;text-align:center;cursor:pointer;border-bottom:{{ tabOvBd }};"><span class="mc" style="color:{{ tabOvFg }};">OVERVIEW</span></button>
+        <button class="ff-focus" onClick="{{ tabPeGo }}" style="flex:1;background:var(--panel);border:none;padding:9px 0;text-align:center;cursor:pointer;border-bottom:{{ tabPeBd }};"><span class="mc" style="color:{{ tabPeFg }};">PEERS</span></button>
+        <button class="ff-focus" onClick="{{ tabChGo }}" style="flex:1;background:var(--panel);border:none;padding:9px 0;text-align:center;cursor:pointer;border-bottom:{{ tabChBd }};"><span class="mc" style="color:{{ tabChFg }};">CHANNELS</span></button>
+        <button class="ff-focus" onClick="{{ tabLoGo }}" style="flex:1;background:var(--panel);border:none;padding:9px 0;text-align:center;cursor:pointer;border-bottom:{{ tabLoBd }};"><span class="mc" style="color:{{ tabLoFg }};">LOGS</span></button>
       </div>
       <div style="flex:1;overflow-y:auto;padding:18px;">
         <sc-if value="{{ tabOverview }}" hint-placeholder-val="{{ true }}">
@@ -403,23 +426,22 @@
           <span style="position:absolute;bottom:-1px;right:-1px;width:14px;height:14px;border-bottom:2px solid var(--ember);border-right:2px solid var(--ember);"></span>
           <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
             <span class="num" style="font-size:28px;font-weight:700;color:var(--bone);">{{ nOnchain }}</span>
-            <span class="mc" style="color:var(--gold);">CKB · ON-CHAIN</span>
+            <span style="display:flex;align-items:center;gap:8px;"><span class="mc" style="color:var(--gold);">ON-CHAIN WALLET · CKB</span><button class="ff-focus" onClick="{{ openFundCkb }}" style="min-height:40px;background:transparent;color:var(--muted);border:1px solid var(--border);padding:5px 8px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:9px;">+ ADD CKB</button></span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:baseline;">
-            <span class="num" style="font-size:16px;color:var(--ember);">{{ nInChannel }}</span>
-            <span class="mc">IN CHANNELS · {{ nChannels }}</span>
+            <span class="num" style="font-size:16px;color:var(--gold);">{{ nInChannelCkb }}</span>
+            <span class="mc">CKB IN CHANNELS · {{ nCkbChannels }}</span>
           </div>
           <sc-if value="{{ nHasUdt }}" hint-placeholder-val="{{ false }}">
             <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;">
               <span class="num" style="font-size:16px;color:var(--flux);">{{ nUdt }}</span>
-              <span class="mc" style="color:var(--flux);">UDT · ASSET</span>
+              <span class="mc" style="color:var(--flux);">UDT · WALLET</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;">
+              <span class="num" style="font-size:16px;color:var(--flux);">{{ nInChannelUdt }}</span>
+              <span class="mc" style="color:var(--flux);">UDT IN CHANNELS · {{ nUdtChannels }}</span>
             </div>
           </sc-if>
-          <div style="display:flex;gap:3px;align-items:flex-end;height:26px;margin-top:14px;">
-            <sc-for list="{{ spark }}" as="s" hint-placeholder-count="12">
-              <div style="flex:1;background:var(--flux-deep);height:{{ s.h }};opacity:.85;"></div>
-            </sc-for>
-          </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
           <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--hairline);padding-bottom:9px;">
@@ -459,19 +481,18 @@
           </sc-if>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);">
-          <button onClick="{{ openFund }}" style="background:var(--ember);color:#1a0b06;border:none;padding:12px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">FUND +</button>
           <button onClick="{{ openCap }}" style="background:var(--panel-2);color:var(--bone);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">OPEN CHANNEL →</button>
           <button onClick="{{ openInvoice }}" style="background:var(--panel-2);color:var(--text);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">INVOICE</button>
-          <button onClick="{{ openPay }}" style="background:var(--panel-2);color:var(--text);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">PAY FROM</button>
+          <button onClick="{{ openPay }}" style="grid-column:1/-1;background:var(--panel-2);color:var(--text);border:none;padding:12px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.08em;">SEND FROM {{ nName }}</button>
         </div>
         </sc-if>
         <sc-if value="{{ tabPeers }}" hint-placeholder-val="{{ false }}">
           <sc-for list="{{ nodePeersList }}" as="p" hint-placeholder-count="2">
-            <div style="display:flex;align-items:center;gap:10px;padding:13px 14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:8px;">
-              <span style="width:8px;height:8px;border-radius:50%;background:{{ p.hue }};"></span>
+            <button class="ff-focus" onClick="{{ p.select }}" aria-label="Open node {{ p.name }}" style="width:100%;display:flex;align-items:center;gap:10px;padding:13px 14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:8px;cursor:pointer;text-align:left;">
+              <span style="width:8px;height:8px;border-radius:50%;background:var(--flux);"></span>
               <span class="num" style="font-size:14px;color:var(--bone);flex:1;">{{ p.name }}</span>
               <span class="mc" style="color:var(--muted);">{{ p.port }}</span>
-            </div>
+            </button>
           </sc-for>
           <sc-if value="{{ nodePeerEmpty }}" hint-placeholder-val="{{ false }}">
             <div class="mc" style="color:var(--faint);text-align:center;padding:28px;">NO PEERS CONNECTED</div>
@@ -480,17 +501,19 @@
         <sc-if value="{{ tabChannels }}" hint-placeholder-val="{{ false }}">
           <sc-for list="{{ nodeChans }}" as="c" hint-placeholder-count="2">
             <div style="padding:13px 14px;background:var(--inset);border:1px solid var(--hairline);margin-bottom:8px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">
-                <span class="num" style="font-size:14px;color:var(--bone);">⇄ {{ c.peer }}
-                  <sc-if value="{{ c.badgeShow }}" hint-placeholder-val="{{ false }}"><span class="mc" style="color:var(--flux);border:1px solid var(--flux);border-radius:3px;padding:1px 5px;margin-left:6px;font-size:9px;">UDT</span></sc-if>
-                </span>
-                <span class="mc" style="color:var(--flux);">{{ c.state }}</span>
-              </div>
-              <div style="height:5px;background:var(--panel-2);margin-bottom:7px;"><div style="height:100%;width:{{ c.localW }};background:linear-gradient(90deg,var(--ember-deep),var(--ember));"></div></div>
-              <div style="display:flex;justify-content:space-between;">
-                <span class="mc" style="color:var(--ember);">{{ c.local }} LOCAL · {{ c.unit }}</span>
-                <span class="mc" style="color:var(--muted);">{{ c.remote }} REMOTE</span>
-              </div>
+              <button class="ff-focus" onClick="{{ c.select }}" aria-label="Open channel with {{ c.peer }}" style="width:100%;padding:0;background:transparent;border:none;cursor:pointer;text-align:left;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">
+                  <span class="num" style="font-size:14px;color:var(--bone);">⇄ {{ c.peer }}
+                    <sc-if value="{{ c.badgeShow }}" hint-placeholder-val="{{ false }}"><span class="mc" style="color:var(--flux);border:1px solid var(--flux);border-radius:3px;padding:1px 5px;margin-left:6px;font-size:9px;">UDT</span></sc-if>
+                  </span>
+                  <span class="mc" style="color:var(--flux);">{{ c.state }}</span>
+                </div>
+                <div style="height:5px;background:var(--panel-2);margin-bottom:7px;"><div style="height:100%;width:{{ c.localW }};background:{{ c.assetColor }};"></div></div>
+                <div style="display:flex;justify-content:space-between;">
+                  <span class="mc" style="color:{{ c.assetColor }};">{{ c.local }} {{ c.unit }} · {{ nName }}</span>
+                  <span class="mc" style="color:var(--muted);">{{ c.remote }} {{ c.unit }} · {{ c.peer }}</span>
+                </div>
+              </button>
               <sc-if value="{{ c.canClose }}" hint-placeholder-val="{{ false }}">
                 <button onClick="{{ c.close }}" style="width:100%;margin-top:10px;background:transparent;color:var(--alarm);border:1px solid var(--alarm);padding:8px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.08em;">CLOSE COOPERATIVELY</button>
               </sc-if>
@@ -514,11 +537,11 @@
 
   <!-- ============ CHANNEL READOUT DRAWER ============ -->
   <sc-if value="{{ isChannel }}" hint-placeholder-val="{{ false }}">
-    <div style="position:absolute;top:0;right:0;bottom:0;width:380px;background:var(--panel);border-left:1px solid var(--border);animation:drawerIn .22s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;z-index:10;">
+    <div style="position:absolute;top:0;right:0;bottom:0;width:min(380px,100vw);background:var(--panel);border-left:1px solid var(--border);animation:drawerIn .22s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;z-index:10;">
       <div style="padding:16px 18px;border-bottom:1px solid var(--hairline);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
           <span class="mc">CHANNEL</span>
-          <button onClick="{{ clearSel }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;">✕</button>
+          <button type="button" class="ff-focus" onClick="{{ clearSel }}" aria-label="Close channel details" style="width:40px;height:40px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;">✕</button>
         </div>
         <div style="font-size:22px;font-weight:700;color:var(--bone);letter-spacing:-.01em;">{{ chFrom }} <span style="color:var(--faint);">⇄</span> {{ chTo }}<sc-if value="{{ chIsUdt }}" hint-placeholder-val="{{ false }}"><span class="mc" style="color:var(--flux);border:1px solid var(--flux);border-radius:3px;padding:2px 6px;margin-left:8px;font-size:10px;vertical-align:middle;">◈ UDT</span></sc-if></div>
         <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
@@ -532,10 +555,9 @@
           <span class="mc">CAPACITY</span><span class="num" style="font-size:18px;color:var(--bone);">{{ chCap }} {{ chUnit }}</span>
         </div>
         <div style="margin:10px 0 6px;">{{ liquidityBar }}</div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:22px;">
-          <span class="num" style="font-size:13px;color:var(--ember);">{{ chLocal }} {{ chUnit }}</span>
-          <span class="mc" style="color:var(--faint);">◆ SPLIT</span>
-          <span class="num" style="font-size:13px;color:var(--flux);">{{ chRemote }} {{ chUnit }}</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px;">
+          <div><span class="mc" style="display:block;margin-bottom:4px;color:var(--faint);">{{ chFrom }}</span><span class="num" style="font-size:13px;color:{{ chAssetColor }};">{{ chLocal }} {{ chUnit }}</span></div>
+          <div style="text-align:right;"><span class="mc" style="display:block;margin-bottom:4px;color:var(--faint);">{{ chTo }}</span><span class="num" style="font-size:13px;color:{{ chAssetColor }};">{{ chRemote }} {{ chUnit }}</span></div>
         </div>
         <div style="margin-bottom:18px;">
           <span class="mc" style="display:block;margin-bottom:10px;">STATE</span>
@@ -609,20 +631,20 @@
   <!-- ============ PAY SHEET ============ -->
   <sc-if value="{{ payOpen }}" hint-placeholder-val="{{ false }}">
     <div style="position:absolute;inset:0;background:rgba(6,8,11,.55);z-index:11;" onClick="{{ closePay }}"></div>
-    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:420px;background:var(--panel);border:1px solid var(--border);z-index:12;animation:sheetIn .22s cubic-bezier(.2,.8,.2,1);">
+    <div role="dialog" aria-modal="true" aria-labelledby="pay-title" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:min(440px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;background:var(--panel);border:1px solid var(--border);z-index:12;animation:sheetIn .22s cubic-bezier(.2,.8,.2,1);">
       <div style="padding:16px 20px;border-bottom:1px solid var(--hairline);display:flex;justify-content:space-between;align-items:center;">
-        <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--ember);">⚡</span><span class="mc" style="color:var(--bone);font-size:12px;">SEND PAYMENT</span></div>
-        <button onClick="{{ closePay }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
+        <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--ember);">⚡</span><span id="pay-title" class="mc" style="color:var(--bone);font-size:12px;">SEND FROM {{ payFromName }}</span></div>
+        <button class="ff-focus" onClick="{{ closePay }}" aria-label="Close payment dialog" style="min-width:40px;min-height:40px;background:none;border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
       </div>
       <div style="padding:20px;">
         <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:18px;">
-          <div onClick="{{ cyclePayFrom }}" title="click to change sender" style="flex:1;background:var(--inset);padding:12px 14px;cursor:pointer;"><span class="mc" style="display:block;margin-bottom:5px;">FROM ▸</span><span style="font-size:15px;font-weight:600;color:{{ payFromHue }};">{{ payFromName }}</span></div>
+          <button class="ff-focus" onClick="{{ cyclePayFrom }}" title="Change sender" style="flex:1;background:var(--inset);border:none;padding:12px 14px;cursor:pointer;text-align:left;"><span class="mc" style="display:block;margin-bottom:5px;">SEND FROM ▸</span><span style="font-size:15px;font-weight:600;color:{{ payFromHue }};">{{ payFromName }}</span></button>
           <div style="flex:none;background:var(--inset);padding:12px 10px;display:flex;align-items:center;color:var(--faint);">→</div>
-          <div onClick="{{ cyclePayTo }}" title="click to change recipient" style="flex:1;background:var(--inset);padding:12px 14px;cursor:pointer;"><span class="mc" style="display:block;margin-bottom:5px;">TO ▸</span><span style="font-size:15px;font-weight:600;color:{{ payToHue }};">{{ payToName }}</span></div>
+          <button class="ff-focus" onClick="{{ cyclePayTo }}" title="Change recipient" style="flex:1;background:var(--inset);border:none;padding:12px 14px;cursor:pointer;text-align:left;"><span class="mc" style="display:block;margin-bottom:5px;">SEND TO ▸</span><span style="font-size:15px;font-weight:600;color:{{ payToHue }};">{{ payToName }}</span></button>
         </div>
-        <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:14px;">
-          <div onClick="{{ payAssetCkb }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ payCkbBg }};color:{{ payCkbFg }};">CKB</div>
-          <div onClick="{{ payAssetUdt }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ payUdtBg }};color:{{ payUdtFg }};">◈ UDT</div>
+        <div role="group" aria-label="Payment asset" style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:14px;">
+          <button class="ff-focus mc" onClick="{{ payAssetCkb }}" aria-pressed="{{ payCkbActive }}" style="min-height:40px;flex:1;text-align:center;border:none;padding:9px 0;cursor:pointer;background:{{ payCkbBg }};color:{{ payCkbFg }};">CKB</button>
+          <button class="ff-focus mc" onClick="{{ payAssetUdt }}" aria-pressed="{{ payUdtActive }}" style="min-height:40px;flex:1;text-align:center;border:none;padding:9px 0;cursor:pointer;background:{{ payUdtBg }};color:{{ payUdtFg }};">◈ UDT</button>
         </div>
         <span class="mc" style="display:block;margin-bottom:8px;">AMOUNT · {{ payUnit }}</span>
         <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:16px;">
@@ -633,8 +655,20 @@
         <div style="background:var(--inset);border:1px solid var(--hairline);padding:12px 14px;margin-bottom:18px;">
           <span class="mc" style="display:block;margin-bottom:8px;">TOPOLOGY PREVIEW · INFERRED · {{ payHopsLabel }} HOPS</span>
           {{ payRoute }}
+          <sc-if value="{{ payHasRoute }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:1fr auto;gap:6px 14px;margin-top:12px;padding-top:10px;border-top:1px solid var(--hairline);">
+              <span class="mc">VISIBLE OUTBOUND</span><span class="num" style="font-size:12px;color:{{ payLiquidityColor }};">{{ payLiquidity }} {{ payUnit }}</span>
+              <span class="mc">SHORTFALL</span><span class="num" style="font-size:12px;color:{{ payShortfallColor }};">{{ payShortfall }} {{ payUnit }}</span>
+            </div>
+          </sc-if>
+          <sc-if value="{{ payNeedsChannel }}" hint-placeholder-val="{{ false }}">
+            <div role="alert" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--hairline);display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <span class="mc" style="color:var(--alarm);">{{ payRecoveryMessage }}</span>
+              <button class="ff-focus" onClick="{{ openPayChannel }}" style="min-height:40px;flex:none;background:transparent;color:var(--signal);border:1px solid var(--signal);padding:8px 10px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:9px;">{{ payRecoveryLabel }}</button>
+            </div>
+          </sc-if>
         </div>
-        <button onClick="{{ confirmPay }}" style="width:100%;background:{{ sendBg }};color:{{ sendFg }};border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;">{{ sendLabel }}</button>
+        <button class="ff-focus" onClick="{{ confirmPay }}" disabled="{{ sendDisabled }}" style="width:100%;background:{{ sendBg }};color:{{ sendFg }};border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;">{{ sendLabel }}</button>
       </div>
     </div>
   </sc-if>
@@ -670,7 +704,7 @@
   <!-- ============ FUND SHEET ============ -->
   <sc-if value="{{ fundOpen }}" hint-placeholder-val="{{ false }}">
     <div style="position:absolute;inset:0;background:rgba(6,8,11,.55);z-index:11;" onClick="{{ closeFund }}"></div>
-    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:400px;background:var(--panel);border:1px solid var(--border);z-index:12;animation:sheetIn .22s cubic-bezier(.2,.8,.2,1);">
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;background:var(--panel);border:1px solid var(--border);z-index:12;animation:sheetIn .22s cubic-bezier(.2,.8,.2,1);">
       <div style="padding:16px 20px;border-bottom:1px solid var(--hairline);display:flex;justify-content:space-between;align-items:center;">
         <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--gold);">◈</span><span class="mc" style="color:var(--bone);font-size:12px;">FUND NODE · {{ fundTargetName }}</span></div>
         <button onClick="{{ closeFund }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
@@ -697,20 +731,20 @@
   <!-- ============ CAPACITY POPOVER ============ -->
   <sc-if value="{{ capOpen }}" hint-placeholder-val="{{ false }}">
     <div style="position:absolute;inset:0;background:rgba(6,8,11,.55);z-index:11;" onClick="{{ closeCap }}"></div>
-    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:400px;background:var(--panel);border:1px solid var(--border);z-index:12;animation:sheetIn .22s cubic-bezier(.2,.8,.2,1);">
+    <div role="dialog" aria-modal="true" aria-labelledby="cap-title" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;background:var(--panel);border:1px solid var(--border);z-index:12;animation:sheetIn .22s cubic-bezier(.2,.8,.2,1);">
       <div style="padding:16px 20px;border-bottom:1px solid var(--hairline);display:flex;justify-content:space-between;align-items:center;">
-        <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--flux);">⇄</span><span class="mc" style="color:var(--bone);font-size:12px;">OPEN CHANNEL · {{ capPair }}</span></div>
-        <button onClick="{{ closeCap }}" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
+        <div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--flux);">⇄</span><span id="cap-title" class="mc" style="color:var(--bone);font-size:12px;">OPEN CHANNEL · {{ capPair }}</span></div>
+        <button type="button" class="ff-focus" onClick="{{ closeCap }}" aria-label="Close open channel dialog" style="width:40px;height:40px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
       </div>
       <div style="padding:20px;">
         <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:14px;">
-          <div onClick="{{ cycleCapFrom }}" title="click to change source" style="flex:1;background:var(--inset);padding:12px 14px;cursor:pointer;"><span class="mc" style="display:block;margin-bottom:5px;">FROM ▸</span><span style="font-size:15px;font-weight:600;color:{{ capFromHue }};">{{ capFromName }}</span></div>
+          <button class="ff-focus" onClick="{{ cycleCapFrom }}" title="Change funding node" style="flex:1;background:var(--inset);border:none;padding:12px 14px;cursor:pointer;text-align:left;"><span class="mc" style="display:block;margin-bottom:5px;">FUNDING NODE ▸</span><span style="font-size:15px;font-weight:600;color:{{ capFromHue }};">{{ capFromName }}</span><span class="mc" style="display:block;margin-top:5px;color:var(--faint);">{{ capFromBalance }} CKB ON-CHAIN</span></button>
           <div style="flex:none;background:var(--inset);padding:12px 10px;display:flex;align-items:center;color:var(--faint);">⇄</div>
-          <div onClick="{{ cycleCapTo }}" title="click to change target" style="flex:1;background:var(--inset);padding:12px 14px;cursor:pointer;"><span class="mc" style="display:block;margin-bottom:5px;">TO ▸</span><span style="font-size:15px;font-weight:600;color:{{ capToHue }};">{{ capToName }}</span></div>
+          <button class="ff-focus" onClick="{{ cycleCapTo }}" title="Change peer node" style="flex:1;background:var(--inset);border:none;padding:12px 14px;cursor:pointer;text-align:left;"><span class="mc" style="display:block;margin-bottom:5px;">PEER NODE ▸</span><span style="font-size:15px;font-weight:600;color:{{ capToHue }};">{{ capToName }}</span></button>
         </div>
-        <div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:14px;">
-          <div onClick="{{ capAssetCkb }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ capCkbBg }};color:{{ capCkbFg }};">CKB</div>
-          <div onClick="{{ capAssetUdt }}" class="mc" style="flex:1;text-align:center;padding:9px 0;cursor:pointer;background:{{ capUdtBg }};color:{{ capUdtFg }};">◈ UDT</div>
+        <div role="group" aria-label="Channel asset" style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);margin-bottom:14px;">
+          <button class="ff-focus mc" onClick="{{ capAssetCkb }}" aria-pressed="{{ capCkbActive }}" style="min-height:40px;flex:1;text-align:center;border:none;padding:9px 0;cursor:pointer;background:{{ capCkbBg }};color:{{ capCkbFg }};">CKB</button>
+          <button class="ff-focus mc" onClick="{{ capAssetUdt }}" aria-pressed="{{ capUdtActive }}" style="min-height:40px;flex:1;text-align:center;border:none;padding:9px 0;cursor:pointer;background:{{ capUdtBg }};color:{{ capUdtFg }};">◈ UDT</button>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
           <span class="mc">CAPACITY · {{ capUnit }}</span><span class="num" style="font-size:22px;font-weight:700;color:var(--bone);">{{ capDisp }} <span style="font-size:12px;color:var(--muted);">{{ capUnit }}</span></span>
@@ -841,7 +875,7 @@ class Component extends DCLogic {
   _paths = {};
 
   state = {
-    screen: 'floor', mode: 'select', sel: null,
+    screen: 'floor', mode: 'select', sel: null, pairSel: [], channelFilter: 'all',
     payMin: 0, block: 0, lastCmd: 'fiber-forge up',
     events: [],
     paying: false, relayId: null, showResult: false, payAmt: 250,
@@ -925,13 +959,69 @@ class Component extends DCLogic {
   _bfs(nodes, channels, u) { const m = this._adj(nodes, channels), prev = {}; prev[u] = null; const q = [u]; while (q.length) { const x = q.shift(); for (const e of m[x]) if (!(e.to in prev)) { prev[e.to] = { node: x, ch: e.ch }; q.push(e.to); } } return prev; }
   _pathNodes(nodes, channels, u, v) { const prev = this._bfs(nodes, channels, u); if (!(v in prev)) return [u]; const arr = [v]; let c = v; while (prev[c]) { arr.unshift(prev[c].node); c = prev[c].node; } return arr; }
   _routeHops(nodes, channels, u, v) { const prev = this._bfs(nodes, channels, u); if (!(v in prev)) return []; const hops = []; let c = v; while (prev[c]) { const p = prev[c], ch = channels.find(x => x.id === p.ch); hops.unshift({ chId: p.ch, reversed: ch.from !== p.node }); c = p.node; } return hops; }
+  _routeAnalysis(nodes, channels, u, v, balances) {
+    if (!u || !v || u === v) return { nodes: [], hops: [], capacity: 0 };
+    const best = {}, prev = {}, remaining = new Set(nodes.map(n => n.id));
+    nodes.forEach(n => { best[n.id] = -1; });
+    best[u] = Infinity;
+    while (remaining.size) {
+      let current = null;
+      remaining.forEach(id => { if (current == null || best[id] > best[current]) current = id; });
+      if (current == null || best[current] < 0) break;
+      remaining.delete(current);
+      if (current === v) break;
+      channels.forEach(ch => {
+        const next = ch.from === current ? ch.to : (ch.to === current ? ch.from : null);
+        if (!next || !remaining.has(next)) return;
+        const local = balances[ch.id] != null ? balances[ch.id] : ch.cap / 2;
+        const available = Math.max(0, ch.from === current ? local : ch.cap - local);
+        const candidate = Math.min(best[current], available);
+        if (candidate > best[next]) {
+          best[next] = candidate;
+          prev[next] = { node: current, chId: ch.id, reversed: ch.from !== current };
+        }
+      });
+    }
+    if (!prev[v]) return { nodes: [], hops: [], capacity: 0 };
+    const path = [v], hops = [];
+    let cursor = v;
+    while (prev[cursor]) {
+      const step = prev[cursor];
+      path.unshift(step.node);
+      hops.unshift({ chId: step.chId, reversed: step.reversed });
+      cursor = step.node;
+    }
+    return { nodes: path, hops, capacity: Math.max(0, best[v]) };
+  }
   _diameter(nodes, channels) { let best = [nodes[0].id, nodes[nodes.length - 1].id], bd = -1; nodes.forEach(u => { const prev = this._bfs(nodes, channels, u.id); nodes.forEach(v => { if (v.id === u.id || !(v.id in prev)) return; let d = 0, c = v.id; while (prev[c]) { d++; c = prev[c].node; } if (d > bd) { bd = d; best = [u.id, v.id]; } }); }); return best; }
   routeHops(u, v) { return this._routeHops(this.state.nodes, this.state.channels, u, v); }
   pathNodes(u, v) { return this._pathNodes(this.state.nodes, this.state.channels, u, v); }
+  paymentChannels() { return this.state.channels.filter(c => !c.pending && (this.state.chState[c.id] || 'ready') === 'ready' && !!c.udt === !!this.state.payUdt); }
+  paymentAnalysis() { return this._routeAnalysis(this.state.nodes, this.paymentChannels(), this.state.payFrom, this.state.payTo, this.state.balances); }
 
   // ---------------- selection / scene ----------------
-  select(type, id) { this.setState({ sel: { type, id }, nodeTab: 'overview', nodeAction: null, nodeActionError: '', nodeActionResult: '' }); }
-  clearSel = () => this.setState({ sel: null, nodeAction: null, nodeActionError: '', nodeActionResult: '' });
+  select(type, id) { this.setState({ sel: { type, id }, pairSel: [], mode: 'select', nodeTab: 'overview', nodeAction: null, nodeActionError: '', nodeActionResult: '' }); }
+  clearSel = () => this.setState({ sel: null, pairSel: [], mode: 'select', nodeAction: null, nodeActionError: '', nodeActionResult: '' });
+  selectNode = (event, id) => {
+    event.stopPropagation();
+    if (this.state.screen !== 'floor') return;
+    if (event.metaKey || event.ctrlKey || this.state.mode === 'wire') {
+      this.setState(state => {
+        const selected = state.pairSel || [];
+        if (selected.includes(id)) return { pairSel: selected.filter(nodeId => nodeId !== id), sel: null, mode: 'wire' };
+        if (selected.length >= 2) return {};
+        return { pairSel: [...selected, id], sel: null, mode: 'wire' };
+      });
+      return;
+    }
+    this.select('node', id);
+  };
+  clearPairSelection = () => this.setState({ pairSel: [], mode: 'select' });
+  setChannelFilter = (filter) => this.setState(state => {
+    const selected = state.sel && state.sel.type === 'channel' ? state.channels.find(ch => ch.id === state.sel.id) : null;
+    const hidesSelected = selected && filter !== 'all' && filter !== (selected.udt ? 'udt' : 'ckb');
+    return { channelFilter: filter, sel: hidesSelected ? null : state.sel };
+  });
   setNodeTab = (t) => { this.setState({ nodeTab: t }); if (t === 'logs') this._forgeLoadLogs(); };
   _forgeLoadLogs() {
     const n = this.node(this.state.sel && this.state.sel.id);
@@ -1029,7 +1119,7 @@ class Component extends DCLogic {
 
   // ---------------- pay ----------------
   openPay = () => this.setState(s => {
-    const patch = { payOpen: true, sel: null };
+    const patch = { payOpen: true, sel: null, pairSel: [], mode: 'select' };
     if (s.sel && s.sel.type === 'channel') {
       const ch = s.channels.find(c => c.id === s.sel.id);
       if (ch) { patch.payUdt = !!ch.udt; patch.payFrom = ch.from; patch.payTo = ch.to; }
@@ -1043,10 +1133,11 @@ class Component extends DCLogic {
   decPay = () => this.setState(s => ({ payAmt: Math.max(50, s.payAmt - 50) }));
   cyclePayFrom = () => { this.setState(s => { const ids = s.nodes.map(n => n.id); const i = ids.indexOf(s.payFrom); for (let k = 1; k <= ids.length; k++) { const id = ids[(i + k) % ids.length]; if (id !== s.payTo) return { payFrom: id }; } return {}; }); };
   cyclePayTo = () => { this.setState(s => { const ids = s.nodes.map(n => n.id); const i = ids.indexOf(s.payTo); for (let k = 1; k <= ids.length; k++) { const id = ids[(i + k) % ids.length]; if (id !== s.payFrom) return { payTo: id }; } return {}; }); };
+  openCapForPayment = () => this.setState(state => ({ payOpen: false, capOpen: true, capFrom: state.payFrom, capTo: state.payTo, capUdt: state.payUdt, capacity: Math.min(5000, Math.max(200, state.payAmt + 100)) }));
   confirmPay = () => {
     const f = this.node(this.state.payFrom), t = this.node(this.state.payTo);
-    const routeChans = this.state.channels.filter(c => !!c.udt === !!this.state.payUdt);
-    if (this._pathNodes(this.state.nodes, routeChans, this.state.payFrom, this.state.payTo).length <= 1) return;
+    const analysis = this.paymentAnalysis();
+    if (!analysis.hops.length || analysis.capacity < this.state.payAmt) return;
     const fn = f ? f.name : '', tn = t ? t.name : '', amt = this.state.payAmt, unit = this.state.payUdt ? 'UDT' : 'CKB';
     this.setState({ payOpen: false, lastCmd: 'fiber-forge pay ' + (window.__FORGE__ ? this._forgeNet() : this.state.name.replace('forge-', '')) + ' ' + fn + ' ' + tn + ' ' + amt + (this.state.payUdt ? ' --udt' : '') });
     if (window.__FORGE__) {
@@ -1065,14 +1156,13 @@ class Component extends DCLogic {
 
   startPayment = () => {
     if (this.state.paying) return;
-    const { payFrom, payTo } = this.state;
-    const hops = this.routeHops(payFrom, payTo);
+    const analysis = this.paymentAnalysis(), hops = analysis.hops;
     if (!hops.length) return;
     const paths = hops.map(hp => this._paths[hp.chId]);
     if (paths.some(p => !p)) return;
     const lens = paths.map(p => p.getTotalLength());
     const total = lens.reduce((a, b) => a + b, 0);
-    const pnodes = this.pathNodes(payFrom, payTo);
+    const pnodes = analysis.nodes;
     const amt = this.state.payAmt;
     this.setState({ paying: true, sel: null, relayId: null, showResult: false });
     this._t0 = performance.now();
@@ -1101,7 +1191,7 @@ class Component extends DCLogic {
       const b = { ...st.balances };
       hops.forEach(hp => { const ch = st.channels.find(c => c.id === hp.chId); const cur = b[hp.chId] != null ? b[hp.chId] : ch.cap / 2; b[hp.chId] = hp.reversed ? Math.min(ch.cap - 60, cur + amt) : Math.max(60, cur - amt); });
       const f = this.node(st.payFrom), t = this.node(st.payTo);
-      return { paying: false, relayId: null, showResult: true, balances: b, payMin: st.payMin + 1, events: [{ t: this.now(), c: 'var(--ember)', msg: 'PAYMENT ' + (f ? f.name : '') + '→' + (t ? t.name : '') + ' SUCCESS ' + amt + ' CKB' }, ...st.events].slice(0, 2) };
+      return { paying: false, relayId: null, showResult: true, balances: b, payMin: st.payMin + 1, events: [{ t: this.now(), c: 'var(--ember)', msg: 'PAYMENT ' + (f ? f.name : '') + '→' + (t ? t.name : '') + ' SUCCESS ' + amt + (st.payUdt ? ' UDT' : ' CKB') }, ...st.events].slice(0, 2) };
     });
     clearTimeout(this._resT); this._resT = setTimeout(() => this.setState({ showResult: false }), 2200);
   }
@@ -1129,8 +1219,8 @@ class Component extends DCLogic {
       capacityBaseUnits: String(Math.round(c.cap * 100000000)), chainHash: 'demo',
       asset: { kind: c.udt ? 'udt' : 'ckb', typeScript: null }, createdAtMs: String(now - 1000),
       directions: [
-        { from: pubkey(c.from), to: pubkey(c.to), announcement: 'present', enabled: true, outboundLiquidityBaseUnits: String(Math.round((this.state.balances[c.id] || c.cap / 2) * 100000000)), feeRateMillionths: '0', tlcExpiryDeltaMs: '86400000', tlcMinimumBaseUnits: '1', updatedAtMs: String(now), ageMs: '0', freshness: 'fresh' },
-        { from: pubkey(c.to), to: pubkey(c.from), announcement: 'present', enabled: true, outboundLiquidityBaseUnits: String(Math.round((c.cap - (this.state.balances[c.id] || c.cap / 2)) * 100000000)), feeRateMillionths: '0', tlcExpiryDeltaMs: '86400000', tlcMinimumBaseUnits: '1', updatedAtMs: String(now), ageMs: '0', freshness: 'fresh' },
+        { from: pubkey(c.from), to: pubkey(c.to), announcement: 'present', enabled: true, outboundLiquidityBaseUnits: String(Math.round((this.state.balances[c.id] != null ? this.state.balances[c.id] : c.cap / 2) * 100000000)), feeRateMillionths: '0', tlcExpiryDeltaMs: '86400000', tlcMinimumBaseUnits: '1', updatedAtMs: String(now), ageMs: '0', freshness: 'fresh' },
+        { from: pubkey(c.to), to: pubkey(c.from), announcement: 'present', enabled: true, outboundLiquidityBaseUnits: String(Math.round((c.cap - (this.state.balances[c.id] != null ? this.state.balances[c.id] : c.cap / 2)) * 100000000)), feeRateMillionths: '0', tlcExpiryDeltaMs: '86400000', tlcMinimumBaseUnits: '1', updatedAtMs: String(now), ageMs: '0', freshness: 'fresh' },
       ],
     }));
     return { schemaVersion: 1, kind: 'fiber-routing-graph', net: this.state.name.replace(/^forge-/, ''), source: 'demo-topology', observer: { name: nodes[0] ? nodes[0].name : '', pubkey: nodes[0] ? nodes[0].pubkey : '' }, observedAt: new Date(now).toISOString(), limits: { requested: 80, maximum: 250, nodesReturned: nodes.length, channelsReturned: channels.length, nodesTruncated: false, channelsTruncated: false }, nodes, channels, summary: { components: nodes.length ? 1 : 0, isolatedNodes: nodes.filter(n => n.degree === 0).length, unreachableNodes: nodes.filter(n => n.disconnected).length, incompleteDirections: 0, staleDirections: 0, disabledDirections: 0 }, warnings: [] };
@@ -1201,6 +1291,7 @@ class Component extends DCLogic {
 
   // ---------------- fund ----------------
   openFund = () => this.setState(s => ({ fundOpen: true, fundTarget: (s.sel && s.sel.type === 'node') ? s.sel.id : s.nodes[0].id }));
+  openFundCkb = () => this.setState(s => ({ fundOpen: true, fundUdt: false, fundTarget: (s.sel && s.sel.type === 'node') ? s.sel.id : s.nodes[0].id }));
   closeFund = () => this.setState({ fundOpen: false });
   setFundAmt = (v) => this.setState({ fundAmt: v });
   confirmFund = () => {
@@ -1223,17 +1314,27 @@ class Component extends DCLogic {
     cands.sort((a, b) => Math.hypot(b.x - f.x, b.y - f.y) - Math.hypot(a.x - f.x, a.y - f.y));
     return cands[0].id;
   }
-  openCap = () => { const fromId = (this.state.sel && this.state.sel.type === 'node') ? this.state.sel.id : this.state.nodes[0].id; const to = this.capTarget(fromId) || (this.state.nodes.find(n => n.id !== fromId) || {}).id; this.setState({ capOpen: true, capacity: 1000, capFrom: fromId, capTo: to }); };
+  openCap = () => {
+    const pair = this.state.pairSel || [];
+    const fromId = pair.length === 2 ? pair[0] : (this.state.sel && this.state.sel.type === 'node') ? this.state.sel.id : this.state.nodes[0].id;
+    const to = pair.length === 2 ? pair[1] : this.capTarget(fromId) || (this.state.nodes.find(n => n.id !== fromId) || {}).id;
+    this.setState({ capOpen: true, capUdt: false, capacity: 1000, capFrom: fromId, capTo: to });
+  };
+  openPairChannel = () => {
+    const pair = this.state.pairSel || [];
+    if (pair.length !== 2) return;
+    this.setState({ capOpen: true, capUdt: false, capacity: 1000, capFrom: pair[0], capTo: pair[1] });
+  };
   closeCap = () => this.setState({ capOpen: false });
   setCapRange = (e) => this.setState({ capacity: parseInt(e.target.value, 10) });
   cycleCapFrom = () => { this.setState(s => { const ids = s.nodes.map(n => n.id); const i = ids.indexOf(s.capFrom); const nf = ids[(i + 1) % ids.length]; const ct = (s.capTo === nf) ? (ids.filter(id => id !== nf)[0] || nf) : s.capTo; return { capFrom: nf, capTo: ct }; }); };
   cycleCapTo = () => { this.setState(s => { const ids = s.nodes.map(n => n.id); const i = ids.indexOf(s.capTo); for (let k = 1; k <= ids.length; k++) { const id = ids[(i + k) % ids.length]; if (id !== s.capFrom) return { capTo: id }; } return {}; }); };
   confirmCap = () => {
     if (!this.state.capTo) { this.setState({ capOpen: false }); return; }
-    const cap = this.state.capacity;
+    const cap = this.state.capacity, udt = this.state.capUdt;
     const fn = this.node(this.state.capFrom), tn = this.node(this.state.capTo);
     if (window.__FORGE__) {
-      const from = this.state.capFrom, to = this.state.capTo, udt = this.state.capUdt, po = { from: from, to: to, cap: cap, udt: udt }, self = this, label = fn.name + '⇄' + tn.name;
+      const from = this.state.capFrom, to = this.state.capTo, po = { from: from, to: to, cap: cap, udt: udt }, self = this, label = fn.name + '⇄' + tn.name;
       // Await the real result so a failed open surfaces its reason instead of hanging on "opening".
       fetch('/api/channel/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ net: this._forgeNet(), from: fn.name, to: tn.name, capacity: cap, udt: udt }) })
         .then(function (r) { return r.json(); })
@@ -1249,13 +1350,13 @@ class Component extends DCLogic {
       setTimeout(function () { self.setState(function (st) { return (st.pendingOpens || []).indexOf(po) < 0 ? {} : { pendingOpens: st.pendingOpens.filter(function (x) { return x !== po; }), events: [{ t: self.now(), c: 'var(--alarm)', msg: 'CHANNEL ' + label + ' OPEN TIMED OUT — check node funds' }, ...st.events].slice(0, 8) }; }); }, 130000);
       this.setState(st => {
         const pid = 'pending-live';
-        return { capOpen: false, sel: null, pendingOpens: [...(st.pendingOpens || []), po], channels: [...st.channels.filter(c => c.id !== pid), { id: pid, from: from, to: to, cap: cap, channelId: null, udt: udt, pending: true }], chState: { ...st.chState, [pid]: 'pending' }, balances: { ...st.balances, [pid]: Math.round(cap / 2) }, lastCmd: 'fiber-forge channel open ' + this._forgeNet() + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' OPENING' }, ...st.events].slice(0, 8) };
+        return { capOpen: false, sel: null, pairSel: [], mode: 'select', pendingOpens: [...(st.pendingOpens || []), po], channels: [...st.channels.filter(c => c.id !== pid), { id: pid, from: from, to: to, cap: cap, channelId: null, udt: udt, pending: true }], chState: { ...st.chState, [pid]: 'pending' }, balances: { ...st.balances, [pid]: Math.round(cap / 2) }, lastCmd: 'fiber-forge channel open ' + this._forgeNet() + ' ' + fn.name + ' ' + tn.name + ' ' + cap + (udt ? ' --udt' : ''), events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' OPENING' }, ...st.events].slice(0, 8) };
       });
       return;
     }
     const id = 'x' + (this._cc = (this._cc || 0) + 1);
-    const ch = { id, from: this.state.capFrom, to: this.state.capTo, cap, hash: this.mkHash(90 + this._cc) };
-    this.setState(st => ({ capOpen: false, sel: null, channels: [...st.channels, ch], chState: { ...st.chState, [id]: 'pending' }, balances: { ...st.balances, [id]: Math.round(cap / 2) }, lastCmd: 'fiber-forge channel open ' + st.name.replace('forge-', '') + ' ' + fn.name + ' ' + tn.name + ' ' + cap, events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' NEGOTIATING' }, ...st.events].slice(0, 2) }));
+    const ch = { id, from: this.state.capFrom, to: this.state.capTo, cap, hash: this.mkHash(90 + this._cc), udt };
+    this.setState(st => ({ capOpen: false, sel: null, pairSel: [], mode: 'select', channels: [...st.channels, ch], chState: { ...st.chState, [id]: 'pending' }, balances: { ...st.balances, [id]: Math.round(cap / 2) }, lastCmd: 'fiber-forge channel open ' + st.name.replace('forge-', '') + ' ' + fn.name + ' ' + tn.name + ' ' + cap + (udt ? ' --udt' : ''), events: [{ t: this.now(), c: 'var(--amber)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' NEGOTIATING' }, ...st.events].slice(0, 2) }));
     clearTimeout(this._ig);
     this._ig = setTimeout(() => { this.setState(st => ({ chState: { ...st.chState, [id]: 'ready' }, igniteId: id, events: [{ t: this.now(), c: 'var(--flux)', msg: 'CHANNEL ' + fn.name + '⇄' + tn.name + ' → READY' }, ...st.events].slice(0, 2) })); setTimeout(() => this.setState({ igniteId: null }), 700); }, 1700);
   };
@@ -1458,7 +1559,7 @@ class Component extends DCLogic {
     var F = this;
     this._forgeNet_ = net;
     this._forgeFitted = false;
-    this.setState({ events: [], nodeLogEntries: [], nodeLogs: '', pendingOpens: [], sel: null, nodeAction: null, nodeActionBusy: false, nodeActionError: '', nodeActionResult: '', forceCloseOpen: false, forceCloseTarget: null, forceCloseConfirm: '', forceCloseBusy: false, forceCloseError: '', forceCloseReport: null, routingOpen: false, routingGraph: null, routingRoute: null, routingActionError: '' });
+    this.setState({ events: [], nodeLogEntries: [], nodeLogs: '', pendingOpens: [], sel: null, pairSel: [], mode: 'select', nodeAction: null, nodeActionBusy: false, nodeActionError: '', nodeActionResult: '', forceCloseOpen: false, forceCloseTarget: null, forceCloseConfirm: '', forceCloseBusy: false, forceCloseError: '', forceCloseReport: null, routingOpen: false, routingGraph: null, routingRoute: null, routingActionError: '' });
     var first = true;
     this._forgeApply = function (v) {
       if (v && v.nodes && v.nodes.length && F._forgeNet_ === net) {
@@ -1572,10 +1673,10 @@ class Component extends DCLogic {
   zoomIn = () => { const r = this._floorEl.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 1.25); };
   zoomOut = () => { const r = this._floorEl.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 0.8); };
   handleWheel(e) { if (!e.target || !e.target.closest || !e.target.closest('[data-floor]')) return; e.preventDefault(); const r = this._floorEl.getBoundingClientRect(); this.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0016)); }
-  handleKey(e) { if (e.key === 'Escape' && this.state.routingOpen && !this.state.routingActionBusy) { e.preventDefault(); this.closeRouting(); return; } if (e.key === 'Escape' && this.state.forceCloseOpen && !this.state.forceCloseBusy) { e.preventDefault(); this.cancelForceClose(); return; } if (e.key === 'Escape' && this.state.nodeAction && !this.state.nodeActionBusy) { e.preventDefault(); this.cancelNodeAction(); return; } if (window.__FORGE__ && this.state.screen === 'floor' && (e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); this._forgeCycle(); return; } if (!(e.metaKey || e.ctrlKey)) return; if (e.key === '0') { e.preventDefault(); this.fitView(); } else if (e.key === '1') { e.preventDefault(); this.reset100(); } }
+  handleKey(e) { if (e.key === 'Escape' && this.state.routingOpen && !this.state.routingActionBusy) { e.preventDefault(); this.closeRouting(); return; } if (e.key === 'Escape' && this.state.forceCloseOpen && !this.state.forceCloseBusy) { e.preventDefault(); this.cancelForceClose(); return; } if (e.key === 'Escape' && this.state.nodeAction && !this.state.nodeActionBusy) { e.preventDefault(); this.cancelNodeAction(); return; } if (e.key === 'Escape' && this.state.payOpen) { e.preventDefault(); this.closePay(); return; } if (e.key === 'Escape' && this.state.capOpen) { e.preventDefault(); this.closeCap(); return; } if (e.key === 'Escape' && this.state.fundOpen) { e.preventDefault(); this.closeFund(); return; } if (e.key === 'Escape' && this.state.invoiceOpen) { e.preventDefault(); this.closeInvoice(); return; } if (e.key === 'Escape' && (this.state.pairSel || []).length) { e.preventDefault(); this.clearPairSelection(); return; } if (window.__FORGE__ && this.state.screen === 'floor' && (e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); this._forgeCycle(); return; } if (!(e.metaKey || e.ctrlKey)) return; if (e.key === '0') { e.preventDefault(); this.fitView(); } else if (e.key === '1') { e.preventDefault(); this.reset100(); } }
   onPointerDown = (e) => { if (e.target.closest && (e.target.closest('[data-node]') || e.target.closest('[data-conduit]'))) return; this._pan = { x: e.clientX, y: e.clientY, vx: this._view.x, vy: this._view.y, moved: false }; try { this._floorEl.setPointerCapture(e.pointerId); } catch (_) {} this.applyView(); };
   onPointerMove = (e) => { if (!this._pan) return; const dx = e.clientX - this._pan.x, dy = e.clientY - this._pan.y; if (Math.abs(dx) + Math.abs(dy) > 3) this._pan.moved = true; this._view.x = this._pan.vx + dx; this._view.y = this._pan.vy + dy; this.applyView(); };
-  onPointerUp = (e) => { const moved = this._pan && this._pan.moved; this._pan = null; try { this._floorEl.releasePointerCapture(e.pointerId); } catch (_) {} this.applyView(); if (!moved && this.state.sel) this.clearSel(); };
+  onPointerUp = (e) => { const interactive = e.target.closest && (e.target.closest('[data-node]') || e.target.closest('[data-conduit]')); const moved = this._pan && this._pan.moved; this._pan = null; try { this._floorEl.releasePointerCapture(e.pointerId); } catch (_) {} this.applyView(); if (!interactive && !moved && (this.state.sel || (this.state.pairSel || []).length)) this.clearSel(); };
   onPointerLeave = (e) => { this._pan = null; this.applyView(); };
   wrapFloor(kids) {
     const h = React.createElement, v = this._view || { x: 0, y: 0, k: 1 };
@@ -1587,7 +1688,7 @@ class Component extends DCLogic {
   sideOf(node, other) { const dx = other.x - node.x, dy = other.y - node.y; return Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'bottom' : 'top'); }
   edgeOffset(node, other, chId) {
     const side = this.sideOf(node, other);
-    const sibs = this.state.channels.filter(c => { const oid = c.from === node.id ? c.to : (c.to === node.id ? c.from : null); return oid && this.node(oid) && this.sideOf(node, this.node(oid)) === side; });
+    const sibs = this.state.channels.filter(c => (c.from === node.id && c.to === other.id) || (c.to === node.id && c.from === other.id));
     if (sibs.length <= 1) return 0;
     const idx = sibs.findIndex(c => c.id === chId), s = this.sz();
     const span = ((side === 'left' || side === 'right') ? this.CH : this.CW) * s;
@@ -1602,13 +1703,20 @@ class Component extends DCLogic {
     return { x: n.x + off, y: n.y + hh, d: [0, 1] };
   }
   route(A, B, offA, offB) {
-    const dx = B.x - A.x, dy = B.y - A.y, S = Math.max(20, 30 * this.sz()), H = Math.abs(dx) >= Math.abs(dy);
+    const dx = B.x - A.x, dy = B.y - A.y, baseStub = Math.max(20, 30 * this.sz()), H = Math.abs(dx) >= Math.abs(dy);
     const pA = H ? this.port(A, dx > 0 ? 'right' : 'left', offA) : this.port(A, dy > 0 ? 'bottom' : 'top', offA);
     const pB = H ? this.port(B, dx > 0 ? 'left' : 'right', offB) : this.port(B, dy > 0 ? 'top' : 'bottom', offB);
+    const edgeSpan = H ? Math.abs(pB.x - pA.x) : Math.abs(pB.y - pA.y), parallel = Math.abs(offA) > 0.5 || Math.abs(offB) > 0.5;
+    const S = parallel ? Math.min(baseStub, Math.max(8, edgeSpan * 0.15)) : baseStub;
     const s1 = { x: pA.x + pA.d[0] * S, y: pA.y + pA.d[1] * S };
     const s2 = { x: pB.x + pB.d[0] * S, y: pB.y + pB.d[1] * S };
+    const lane = (offA + offB) / 2;
     const pts = [{ x: pA.x, y: pA.y }, s1];
-    if (H) { const mx = (s1.x + s2.x) / 2; pts.push({ x: mx, y: s1.y }, { x: mx, y: s2.y }); }
+    if (parallel && Math.abs(lane) > 0.5) {
+      const trackPad = Math.max(18, Math.abs(lane) * 0.75 + 8);
+      if (H) { const trackY = lane < 0 ? Math.min(pA.y, pB.y) - trackPad : Math.max(pA.y, pB.y) + trackPad; pts.push({ x: s1.x, y: trackY }, { x: s2.x, y: trackY }); }
+      else { const trackX = lane < 0 ? Math.min(pA.x, pB.x) - trackPad : Math.max(pA.x, pB.x) + trackPad; pts.push({ x: trackX, y: s1.y }, { x: trackX, y: s2.y }); }
+    } else if (H) { const mx = (s1.x + s2.x) / 2; pts.push({ x: mx, y: s1.y }, { x: mx, y: s2.y }); }
     else { const my = (s1.y + s2.y) / 2; pts.push({ x: s1.x, y: my }, { x: s2.x, y: my }); }
     pts.push(s2, { x: pB.x, y: pB.y });
     const out = [pts[0]];
@@ -1658,11 +1766,11 @@ class Component extends DCLogic {
   liquidityBar() {
     const ch = this.state.sel && this.state.channels.find(c => c.id === this.state.sel.id);
     if (!ch) return null;
-    const f = (this.state.balances[ch.id] || 0) / ch.cap, h = React.createElement;
+    const f = Math.max(0, Math.min(1, (this.state.balances[ch.id] != null ? this.state.balances[ch.id] : ch.cap / 2) / ch.cap)), h = React.createElement;
+    const assetColor = ch.udt ? 'var(--flux)' : 'var(--gold)';
     return h('div', { style: { position: 'relative', height: 20, background: 'var(--inset)', border: '1px solid var(--hairline)', display: 'flex' } },
-      h('div', { style: { width: (f * 100) + '%', background: 'linear-gradient(90deg,var(--ember-deep),var(--ember))', transition: 'width .6s cubic-bezier(.2,.8,.2,1)' } }),
-      h('div', { style: { flex: 1, background: 'linear-gradient(90deg,var(--flux),var(--flux-deep))' } }),
-      h('div', { style: { position: 'absolute', top: '50%', left: 'calc(' + (f * 100) + '% - 6px)', width: 12, height: 12, background: 'var(--bone)', transform: 'translateY(-50%) rotate(45deg)', boxShadow: '0 0 10px var(--ember-glow)', transition: 'left .6s cubic-bezier(.2,.8,.2,1)' } }));
+      h('div', { style: { width: (f * 100) + '%', background: assetColor, transition: 'width .6s cubic-bezier(.2,.8,.2,1)' } }),
+      h('div', { style: { flex: 1, background: 'var(--panel-2)' } }));
   }
 
   glyph(id) {
@@ -1682,36 +1790,39 @@ class Component extends DCLogic {
   nodeCell(n) {
     const h = React.createElement, s = this.sz(), st = this.nodeState(n.id), sel = this.state.sel;
     const isSel = sel && sel.type === 'node' && sel.id === n.id;
+    const pairSel = this.state.pairSel || [], isPair = pairSel.includes(n.id);
+    const selectedChannel = sel && sel.type === 'channel' ? this.state.channels.find(ch => ch.id === sel.id) : null;
+    const isEndpoint = selectedChannel && (selectedChannel.from === n.id || selectedChannel.to === n.id);
+    const unrelatedToChannel = selectedChannel && !isEndpoint;
     const relay = this.state.paying && this.state.relayId === n.id;
-    const onchain = this.state.onchain[n.id], udtBal = this.state.udt[n.id] || 0, deg = this.degree(n.id);
-    const cfg = st === 'running' ? { dot: n.hue, band: n.hue, char: '●', txt: 'RUNNING', gray: false, pulse: true }
+    const onchain = this.state.onchain[n.id], udtBal = this.state.udt[n.id] || 0;
+    const nodeChannels = this.state.channels.filter(ch => ch.from === n.id || ch.to === n.id);
+    const ckbDeg = nodeChannels.filter(ch => !ch.udt).length, udtDeg = nodeChannels.filter(ch => ch.udt).length;
+    const cfg = st === 'running' ? { dot: 'var(--flux)', band: 'var(--flux)', char: '●', txt: 'RUNNING', gray: false, pulse: true }
       : st === 'boot' ? { dot: 'var(--amber)', band: 'var(--amber)', char: '◍', txt: 'BOOTING', gray: false, pulse: true }
       : { dot: 'var(--faint)', band: 'var(--faint)', char: '○', txt: 'COLD', gray: true, pulse: false };
-    const border = isSel ? 'var(--ember)' : relay ? 'var(--ember-hot)' : st === 'boot' ? 'var(--amber)' : 'var(--border)';
-    const gaugeFrac = Math.min(1, onchain / 14000);
-    return h('div', { key: n.id, 'data-node': '1', onClick: (e) => { e.stopPropagation(); if (this.state.screen === 'floor') this.select('node', n.id); }, style: { position: 'absolute', left: n.x - this.CW / 2, top: n.y - this.CH / 2, width: this.CW, height: this.CH, transform: 'scale(' + s + ')', transformOrigin: 'center', cursor: 'pointer', zIndex: isSel ? 6 : 4, filter: cfg.gray ? 'grayscale(1) brightness(.7)' : 'none', opacity: cfg.gray ? 0.72 : 1, transition: 'opacity .3s,filter .3s' } },
-      isSel && h('div', { key: 'plate', style: { position: 'absolute', left: 8, top: 8, right: -8, bottom: -8, background: 'var(--ember)', zIndex: 0 } }),
+    const border = isSel ? 'var(--ember)' : isPair ? 'var(--signal)' : relay ? 'var(--ember-hot)' : st === 'boot' ? 'var(--amber)' : isEndpoint ? 'var(--bone)' : 'var(--border)';
+    return h('button', { key: n.id, type: 'button', className: 'node-card ff-focus', 'aria-label': (isPair ? 'Remove ' : 'Select ') + n.name + (isPair ? ' from channel pair' : ' node'), 'aria-pressed': isPair || isSel, 'data-node': '1', onClick: (e) => this.selectNode(e, n.id), style: { position: 'absolute', left: n.x - this.CW / 2, top: n.y - this.CH / 2, width: this.CW, height: this.CH, transform: 'scale(' + s + ')', transformOrigin: 'center', cursor: 'pointer', zIndex: isSel || isPair || isEndpoint ? 6 : 4, filter: cfg.gray || unrelatedToChannel ? 'grayscale(1) brightness(.7)' : 'none', opacity: unrelatedToChannel ? 0.32 : cfg.gray ? 0.72 : 1, transition: 'opacity .3s,filter .3s' } },
+      (isSel || isPair) && h('div', { key: 'plate', style: { position: 'absolute', left: 8, top: 8, right: -8, bottom: -8, background: isPair ? 'var(--signal)' : 'var(--ember)', zIndex: 0 } }),
       h('div', { style: { position: 'relative', zIndex: 1, width: '100%', height: '100%', background: 'var(--panel-2)', border: '1px solid ' + border, boxShadow: relay ? '0 0 24px var(--ember)' : isSel ? '0 0 0 1px var(--ember)' : 'none', display: 'flex', flexDirection: 'column', transition: 'box-shadow .2s,border-color .2s', animation: st === 'boot' ? 'bootFlick 1s ease-in-out infinite' : 'none' } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid var(--hairline)' } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
             h('span', { style: { fontSize: 9, color: cfg.dot, animation: cfg.pulse ? 'pulseDot 1.6s ease-in-out infinite' : 'none' } }, cfg.char),
             h('span', { className: 'mc', style: { color: cfg.band } }, cfg.txt)),
-          h('span', { className: 'num', style: { fontSize: 11, color: 'var(--ember)' } }, ':' + n.port)),
+          h('span', { className: 'num', style: { fontSize: 11, color: 'var(--muted)' } }, ':' + n.port)),
         h('div', { style: { padding: '7px 10px', flex: 1 } },
           h('div', { style: { fontSize: 15, fontWeight: 700, color: 'var(--bone)', letterSpacing: '-.01em', lineHeight: 1 } }, n.name),
           h('div', { className: 'num', style: { fontSize: 10, color: 'var(--muted)', marginTop: 3 } }, n.pubkey),
           h('div', { style: { marginTop: 9 } },
             h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 } },
               h('span', { className: 'num', style: { fontSize: 12, color: 'var(--gold)' } }, this.fmt(onchain)),
-              h('span', { className: 'mc', style: { fontSize: 9 } }, 'CKB')),
-            h('div', { style: { height: 5, background: 'var(--inset)', border: '1px solid var(--hairline)' } },
-              h('div', { style: { height: '100%', width: (gaugeFrac * 100) + '%', background: 'linear-gradient(90deg,var(--gold),var(--ember))', transition: 'width .6s cubic-bezier(.2,.8,.2,1)' } })),
+              h('span', { className: 'mc', style: { fontSize: 9 } }, 'ON-CHAIN CKB')),
             udtBal > 0 && h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 5 } },
               h('span', { className: 'num', style: { fontSize: 12, color: 'var(--flux)' } }, this.fmt(udtBal)),
-              h('span', { className: 'mc', style: { fontSize: 9, color: 'var(--flux)' } }, 'UDT')))),
+              h('span', { className: 'mc', style: { fontSize: 9, color: 'var(--flux)' } }, 'WALLET UDT')))),
         h('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '4px 10px', borderTop: '1px solid var(--hairline)' } },
-          h('span', { className: 'mc' }, 'CH ×' + deg),
-          h('span', { className: 'mc' }, 'CAP ' + this.fmt(deg * 1000)))));
+          h('span', { className: 'mc' }, 'CKB CH ' + ckbDeg),
+          h('span', { className: 'mc', style: { color: udtDeg ? 'var(--flux)' : 'var(--faint)' } }, 'UDT CH ' + udtDeg))));
   }
 
   // ---------------- conduit ----------------
@@ -1721,36 +1832,38 @@ class Component extends DCLogic {
     const a = this.node(ch.from), b = this.node(ch.to);
     if (!a || !b) return null;
     const oa = this.edgeOffset(a, b, ch.id), ob = this.edgeOffset(b, a, ch.id);
-    const pts = this.route(a, b, oa, ob), d = this.roundedPath(pts, 16), len = this.polyLen(pts);
+    const pts = this.route(a, b, oa, ob), d = this.roundedPath(pts, 16);
     const width = 4 + Math.log2(ch.cap / 250 + 1) * 1.5;
     const paying = this.state.paying, sel = this.state.sel;
-    const onRoute = paying ? this.routeHops(this.state.payFrom, this.state.payTo).some(hp => hp.chId === ch.id) : false;
+    const onRoute = paying ? this.paymentAnalysis().hops.some(hp => hp.chId === ch.id) : false;
+    const filterVisible = this.state.channelFilter === 'all' || this.state.channelFilter === (ch.udt ? 'udt' : 'ckb');
+    const selected = sel && sel.type === 'channel' && sel.id === ch.id;
     let dim = 1;
     if (paying) dim = onRoute ? 1 : 0.22;
     else if (sel && sel.type === 'channel' && sel.id !== ch.id) dim = 0.4;
+    if (!paying && !filterVisible) dim = 0;
     const onClick = () => { if (this.state.screen === 'floor') this.select('channel', ch.id); };
     const setRef = (el) => { this._paths[ch.id] = el; };
+    const pointerEvents = filterVisible || paying ? 'auto' : 'none';
 
     if (state === 'pending') {
       const mid = this.polyPointAt(pts, 0.5);
-      return h('g', { key: ch.id, 'data-conduit': '1', onClick, style: { cursor: 'pointer' } },
+      return h('g', { key: ch.id, 'data-conduit': '1', onClick, opacity: dim, style: { cursor: 'pointer', pointerEvents } },
         h('path', { d, stroke: 'transparent', strokeWidth: width + 16, fill: 'none' }),
         h('path', { d, stroke: 'var(--amber)', strokeWidth: width, fill: 'none', strokeDasharray: '10 9', strokeLinecap: 'round', opacity: 0.9, style: { animation: 'march 1s linear infinite' }, ref: setRef }),
         h('rect', { x: mid.x - 24, y: mid.y - 9, width: 48, height: 16, fill: 'var(--base)', stroke: 'var(--amber)', strokeWidth: 0.75, opacity: 0.92 }),
         h('text', { x: mid.x, y: mid.y + 2, fill: 'var(--amber)', fontSize: 8, fontFamily: 'Geist Mono,monospace', letterSpacing: '1.4', textAnchor: 'middle' }, 'OPENING'));
     }
 
-    const f = (this.state.balances[ch.id] != null ? this.state.balances[ch.id] : ch.cap / 2) / ch.cap;
-    const emberLen = len * f, bead = this.polyPointAt(pts, f), pid = 'p-' + ch.id, igniting = this.state.igniteId === ch.id;
-    return h('g', { key: ch.id, 'data-conduit': '1', onClick, style: { cursor: 'pointer' }, opacity: dim },
-      h('path', { d, stroke: 'var(--flux)', strokeWidth: width + 10, fill: 'none', opacity: 0.09, strokeLinecap: 'round', style: { filter: 'blur(6px)' } }),
-      h('path', { d, stroke: 'var(--ember)', strokeWidth: width + 10, fill: 'none', opacity: 0.12, strokeLinecap: 'round', strokeDasharray: emberLen + ' ' + (len + 20), style: { filter: 'blur(6px)' } }),
-      h('path', { id: pid, d, stroke: 'var(--flux)', strokeWidth: width, fill: 'none', strokeLinecap: 'round', ref: setRef }),
-      h('path', { d, stroke: 'var(--ember)', strokeWidth: width, fill: 'none', strokeLinecap: 'round', strokeDasharray: emberLen + ' ' + (len + 20) }),
-      h('path', { d, stroke: 'var(--ember-glow)', strokeWidth: 1.4, fill: 'none', opacity: 0.5, strokeDasharray: '2 22', style: { animation: 'shimmer 2.6s linear infinite' }, pointerEvents: 'none' }),
+    const assetColor = ch.udt ? 'var(--flux)' : 'var(--gold)', pid = 'p-' + ch.id, igniting = this.state.igniteId === ch.id;
+    return h('g', { key: ch.id, 'data-conduit': '1', onClick, style: { cursor: 'pointer', pointerEvents }, opacity: dim },
+      h('path', { d, stroke: 'transparent', strokeWidth: width + 18, fill: 'none', strokeLinecap: 'round' }),
+      h('path', { d, stroke: assetColor, strokeWidth: width + 10, fill: 'none', opacity: 0.13, strokeLinecap: 'round', style: { filter: 'blur(6px)' }, pointerEvents: 'none' }),
+      selected && h('path', { d, stroke: 'var(--bone)', strokeWidth: width + 5, fill: 'none', opacity: 0.82, strokeLinecap: 'round', pointerEvents: 'none' }),
+      h('path', { id: pid, d, stroke: assetColor, strokeWidth: width, fill: 'none', strokeLinecap: 'round', ref: setRef, pointerEvents: 'none' }),
+      h('path', { d, stroke: 'var(--bone)', strokeWidth: 1.2, fill: 'none', opacity: 0.34, strokeDasharray: '2 22', style: { animation: 'shimmer 2.6s linear infinite' }, pointerEvents: 'none' }),
       igniting && h('path', { key: 'ign', d, stroke: '#FFE9D8', strokeWidth: width + 3, fill: 'none', strokeLinecap: 'round', style: { animation: 'igniteFade .7s ease-out forwards' }, pointerEvents: 'none' }),
-      h('circle', { r: 2.6, fill: 'var(--ember-glow)', opacity: 0.5, pointerEvents: 'none' }, h('animateMotion', { dur: '4s', repeatCount: 'indefinite', keyPoints: '0;1', keyTimes: '0;1', calcMode: 'linear' }, h('mpath', { href: '#' + pid }))),
-      h('rect', { x: bead.x - 6, y: bead.y - 6, width: 12, height: 12, fill: 'var(--bone)', transform: 'rotate(45 ' + bead.x + ' ' + bead.y + ')', style: { filter: 'drop-shadow(0 0 6px var(--ember-glow))' }, pointerEvents: 'none' }));
+      h('circle', { r: 2.6, fill: assetColor, opacity: 0.65, pointerEvents: 'none' }, h('animateMotion', { dur: '4s', repeatCount: 'indefinite', keyPoints: '0;1', keyTimes: '0;1', calcMode: 'linear' }, h('mpath', { href: '#' + pid }))));
   }
 
   emptyGraph() {
@@ -1802,7 +1915,7 @@ class Component extends DCLogic {
   miniMap() {
     const h = React.createElement;
     return h('div', { style: { position: 'absolute', inset: '6px 10px' } },
-      this.state.nodes.map((n, i) => h('div', { key: n.id, title: n.name, onClick: () => { if (this.state.screen === 'floor') this.select('node', n.id); }, style: { position: 'absolute', left: ((n.x - 200) / 1100 * 100) + '%', top: ((n.y - 120) / 660 * 100) + '%', width: 10, height: 10, marginLeft: -2, marginTop: -2, background: n.hue, cursor: 'pointer', borderRadius: '2px' } })),
+      this.state.nodes.map(n => h('button', { key: n.id, type: 'button', className: 'ff-focus', title: n.name, 'aria-label': 'Open node ' + n.name, onClick: () => { if (this.state.screen === 'floor') this.select('node', n.id); }, style: { position: 'absolute', left: ((n.x - 200) / 1100 * 100) + '%', top: ((n.y - 120) / 660 * 100) + '%', width: 40, height: 40, marginLeft: -17, marginTop: -17, padding: 0, border: 0, background: 'transparent', cursor: 'pointer' } }, h('span', { style: { display: 'block', width: 10, height: 10, margin: '15px', background: n.dead ? 'var(--faint)' : 'var(--flux)', borderRadius: '2px' } }))),
       h('div', { style: { position: 'absolute', left: ((this.state.core.x - 200) / 1100 * 100) + '%', top: ((this.state.core.y - 120) / 660 * 100) + '%', width: 5, height: 5, background: 'var(--gold)', borderRadius: '50%' } }),
       h('div', { style: { position: 'absolute', left: '8%', top: '10%', width: '70%', height: '66%', border: '1px solid var(--ember)', opacity: 0.5, pointerEvents: 'none' } }));
   }
@@ -1860,7 +1973,8 @@ class Component extends DCLogic {
     const ch = sel && sel.type === 'channel' ? S.channels.find(c => c.id === sel.id) : null;
     const totalOnchain = Object.values(S.onchain).reduce((a, b) => a + b, 0);
     const readyChans = S.channels.filter(c => (S.chState[c.id] || 'ready') === 'ready');
-    const totalCap = readyChans.reduce((a, c) => a + c.cap, 0);
+    const totalCkbCap = readyChans.filter(c => !c.udt).reduce((a, c) => a + c.cap, 0);
+    const totalUdtCap = readyChans.filter(c => c.udt).reduce((a, c) => a + c.cap, 0);
     const isFloor = S.screen === 'floor';
     const h = React.createElement;
 
@@ -1874,16 +1988,22 @@ class Component extends DCLogic {
     const forceComplete = !!(forceReport && forceReport.settled);
     const forceOutcome = !forceReport ? '' : forceComplete ? 'SETTLEMENT COMPLETE' : forceReport.timedOut ? 'REQUEST TIMED OUT · SETTLEMENT CONTINUES' : ('CLOSE REQUESTED · ' + String(forceReport.phase || 'pending').toUpperCase());
     const forceOutcomeColor = forceComplete ? 'var(--flux)' : forceReport && forceReport.timedOut ? 'var(--amber)' : 'var(--signal)';
-    let nInch = 0;
-    if (n) S.channels.forEach(c => { if (c.from === n.id) nInch += (S.balances[c.id] || 0); else if (c.to === n.id) nInch += (c.cap - (S.balances[c.id] || 0)); });
+    let nInCkb = 0, nInUdt = 0, nCkbChannels = 0, nUdtChannels = 0;
+    if (n) S.channels.forEach(c => {
+      if (c.from !== n.id && c.to !== n.id) return;
+      const balance = S.balances[c.id] != null ? S.balances[c.id] : c.cap / 2;
+      const local = c.from === n.id ? balance : c.cap - balance;
+      if (c.udt) { nInUdt += local; nUdtChannels++; }
+      else { nInCkb += local; nCkbChannels++; }
+    });
     const nodeChans = n ? S.channels.filter(c => c.from === n.id || c.to === n.id).map(c => {
       const peer = this.node(c.from === n.id ? c.to : c.from);
       const bal = S.balances[c.id] != null ? S.balances[c.id] : c.cap / 2;
       const local = c.from === n.id ? bal : c.cap - bal;
       const canClose = !!c.channelId && !c.pending;
-      return { peer: peer ? peer.name : '?', hue: peer ? peer.hue : 'var(--muted)', local: this.fmt(Math.round(local)), remote: this.fmt(Math.round(c.cap - local)), state: (S.chState[c.id] || 'ready').toUpperCase(), localW: Math.round(local / c.cap * 100) + '%', unit: c.udt ? 'UDT' : 'CKB', badge: c.udt ? 'UDT' : '', badgeShow: !!c.udt, canClose: canClose, close: () => this._closeChan(c.channelId, n.name) };
+      return { peer: peer ? peer.name : '?', local: this.fmt(Math.round(local)), remote: this.fmt(Math.round(c.cap - local)), state: (S.chState[c.id] || 'ready').toUpperCase(), localW: Math.round(local / c.cap * 100) + '%', unit: c.udt ? 'UDT' : 'CKB', assetColor: c.udt ? 'var(--flux)' : 'var(--gold)', badge: c.udt ? 'UDT' : '', badgeShow: !!c.udt, canClose: canClose, select: () => this.select('channel', c.id), close: () => this._closeChan(c.channelId, n.name) };
     }) : [];
-    const nodePeersList = n ? Array.from(new Set(nodeChans.map(c => c.peer))).map(name => { const pn = S.nodes.find(x => x.name === name); return { name, hue: pn ? pn.hue : 'var(--muted)', port: pn ? (':' + pn.port) : '' }; }) : [];
+    const nodePeersList = n ? Array.from(new Set(nodeChans.map(c => c.peer))).map(name => { const pn = S.nodes.find(x => x.name === name); return { name, port: pn ? (':' + pn.port) : '', select: () => { if (pn) this.select('node', pn.id); } }; }) : [];
     const tabStyle = (t) => ({ go: () => this.setNodeTab(t), bd: S.nodeTab === t ? '2px solid var(--ember)' : '2px solid transparent', fg: S.nodeTab === t ? 'var(--bone)' : 'var(--muted)' });
     const tOv = tabStyle('overview'), tPe = tabStyle('peers'), tCh = tabStyle('channels'), tLo = tabStyle('logs');
     const LVL_RANK = { TRACE: 0, DEBUG: 1, INFO: 2, WARN: 3, ERROR: 4 };
@@ -1918,6 +2038,9 @@ class Component extends DCLogic {
     const presetName = { duo: 'Duo', trio: 'Trio', hub: 'Hub', cch: 'CCH', line: 'Line', ring: 'Ring', star: 'Star' }[S.preset];
     const eN = this.effN(), reviewCmd = showN ? (S.preset + ':' + eN) : S.preset;
     const reviewCh = S.preset === 'duo' || S.preset === 'cch' ? 1 : S.preset === 'trio' ? 2 : S.preset === 'line' ? eN - 1 : S.preset === 'ring' ? eN : eN - 1;
+    const channelFilters = [['all', 'ALL'], ['ckb', 'CKB'], ['udt', 'UDT']].map(([id, label]) => ({ label, set: () => this.setChannelFilter(id), active: S.channelFilter === id, bg: S.channelFilter === id ? (id === 'udt' ? 'var(--flux)' : id === 'ckb' ? 'var(--gold)' : 'var(--bone)') : 'var(--panel)', fg: S.channelFilter === id ? 'var(--void)' : 'var(--muted)' }));
+    const pairNodes = (S.pairSel || []).map(id => this.node(id)).filter(Boolean);
+    const pairSelectionLabel = pairNodes.length ? pairNodes.map(node => node.name).join(' ⇄ ') + (pairNodes.length === 1 ? ' ⇄ —' : '') : '';
 
     const cch = S.cch;
     const cchFiberReady = !!(cch && cch.fiber && cch.fiber.wrappedChannel && cch.fiber.wrappedChannel.state === 'ChannelReady');
@@ -1962,15 +2085,17 @@ class Component extends DCLogic {
     const routingFinalColor = routingFinalSuccess ? 'var(--flux)' : routingReport && routingReport.kind === 'fiber-routed-payment' ? 'var(--alarm)' : 'var(--muted)';
 
     const pf = this.node(S.payFrom), pt = this.node(S.payTo);
-    // A payment can only route over channels of its own asset, so filter before pathfinding.
-    const payChans = S.channels.filter(c => !!c.udt === !!S.payUdt);
-    const dispPath = (pf && pt) ? this._pathNodes(S.nodes, payChans, S.payFrom, S.payTo) : [];
-    const payHasRoute = dispPath.length > 1;
+    const payAnalysis = this.paymentAnalysis(), dispPath = payAnalysis.nodes;
+    const payHasRoute = payAnalysis.hops.length > 0;
+    const payLiquidityValue = payHasRoute ? Math.max(0, Math.floor(payAnalysis.capacity * 100) / 100) : 0;
+    const payShortfallValue = Math.max(0, Math.ceil((S.payAmt - payLiquidityValue) * 100) / 100);
+    const payHasShortfall = payHasRoute && payShortfallValue > 0;
+    const payNeedsChannel = !payHasRoute || payHasShortfall;
     const routeItems = [];
     if (payHasRoute) {
       dispPath.forEach((id, i) => { const nd2 = this.node(id); routeItems.push(h('span', { key: id, style: { color: nd2 ? nd2.hue : 'var(--text)', fontWeight: 600 } }, nd2 ? nd2.name : '')); if (i < dispPath.length - 1) routeItems.push(h('span', { key: 'a' + i, style: { color: 'var(--faint)' } }, '→')); });
     } else {
-      routeItems.push(h('span', { key: 'noroute', style: { color: 'var(--alarm)', fontFamily: 'Geist Mono,monospace', fontSize: 12 } }, 'no ' + (S.payUdt ? 'UDT' : 'CKB') + ' route — open a ' + (S.payUdt ? 'UDT ' : '') + 'channel first'));
+      routeItems.push(h('span', { key: 'noroute', style: { color: 'var(--alarm)', fontFamily: 'Geist Mono,monospace', fontSize: 12 } }, 'NO ' + (S.payUdt ? 'UDT' : 'CKB') + ' ROUTE'));
     }
     const payRoute = h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontFamily: 'Geist Mono,monospace', fontSize: 12 } }, routeItems);
     const sw = (active) => ({ bg: active ? 'var(--panel-2)' : 'var(--panel)', fg: active ? 'var(--bone)' : 'var(--faint)' });
@@ -1983,14 +2108,16 @@ class Component extends DCLogic {
       isEmpty: S.screen === 'empty', isWizard: S.screen === 'wizard', isForging: S.screen === 'forging', isFloor,
       scenes: [],
       modes: modeDefs.map(([key, label, id]) => ({ key, label, set: () => this.setMode(id), bg: S.mode === id ? 'var(--ember)' : 'var(--panel)', fg: S.mode === id ? '#1a0b06' : 'var(--muted)' })),
-      vitals: [{ k: 'CAPACITY', val: this.fmt(totalCap), c: 'var(--flux)' }, { k: 'ON-CHAIN', val: this.fmt(totalOnchain), c: 'var(--gold)' }, { k: 'BLOCK', val: '#' + (S.block || 0), c: 'var(--text)' }],
+      channelFilters,
+      pairSelectionVisible: pairNodes.length > 0, pairSelectionCount: String(pairNodes.length), pairSelectionLabel, pairSelectionDisabled: pairNodes.length !== 2, openPairChannel: this.openPairChannel, clearPairSelection: this.clearPairSelection,
+      vitals: [{ k: 'CKB CAPACITY', val: this.fmt(totalCkbCap) + ' CKB', c: 'var(--gold)' }, ...(totalUdtCap > 0 ? [{ k: 'UDT CAPACITY', val: this.fmt(totalUdtCap) + ' UDT', c: 'var(--flux)' }] : []), { k: 'ON-CHAIN', val: this.fmt(totalOnchain) + ' CKB', c: 'var(--gold)' }, { k: 'BLOCK', val: '#' + (S.block || 0), c: 'var(--text)' }],
       vNodes: String(N), vChannels: String(readyChans.length),
       events: S.events, lastCmd: S.lastCmd,
       cchVisible: !!cch, cchStateLabel: cch ? String(cch.state || 'unknown').toUpperCase() : '', cchStateColor,
       cchFiberLabel: cch && cch.fiber ? cch.fiber.userNode + ' → ' + cch.fiber.hubNode : 'UNAVAILABLE', cchFiberState: cchFiberReady ? 'CHANNEL READY' : 'ACTION REQUIRED', cchFiberColor: cchFiberReady ? 'var(--flux)' : 'var(--alarm)',
       cchOperatorLabel: cch && cch.operator ? cch.operator.containerName : 'UNAVAILABLE', cchOperatorState: cchOperatorReady ? 'RPC READY' : 'ACTION REQUIRED', cchOperatorColor: cchOperatorReady ? 'var(--gold)' : 'var(--alarm)',
       cchLightningState: cchLightningReady ? 'LIQUIDITY READY' : 'ACTION REQUIRED', cchLightningColor: cchLightningReady ? 'var(--signal)' : 'var(--alarm)',
-      enterWizard: this.enterWizard, openPay: this.openPay, openRouting: this.openRouting, openFund: this.openFund, openCap: this.openCap, clearSel: this.clearSel, goFloor: this.goFloor, confirmCloseChannel: this.confirmCloseChannel, requestForceClose: this.requestForceClose, forgeCycle: () => this._forgeCycle(), cyclePayFrom: this.cyclePayFrom, cyclePayTo: this.cyclePayTo,
+      enterWizard: this.enterWizard, openPay: this.openPay, openRouting: this.openRouting, openFund: this.openFund, openFundCkb: this.openFundCkb, openCap: this.openCap, clearSel: this.clearSel, goFloor: this.goFloor, confirmCloseChannel: this.confirmCloseChannel, requestForceClose: this.requestForceClose, forgeCycle: () => this._forgeCycle(), cyclePayFrom: this.cyclePayFrom, cyclePayTo: this.cyclePayTo,
       routingOpen: S.routingOpen, routingLoading: S.routingLoading, routingHasError: !!S.routingError && !S.routingLoading, routingError: S.routingError,
       routingReady: !!routingGraph && !S.routingLoading && !S.routingError, routingCanvas: this.routingCanvas(),
       routingSourceLabel: routingGraph ? String(routingGraph.source || 'Fiber RPC').toUpperCase() + ' · OBSERVER ' + String(routingGraph.observer && routingGraph.observer.name || '?').toUpperCase() : 'GRAPH_NODES + GRAPH_CHANNELS',
@@ -2019,10 +2146,10 @@ class Component extends DCLogic {
       copyPubkeyLabel: S.copyFlash === 'pubkey' ? '✓ COPIED' : 'COPY', copyPubkeyColor: S.copyFlash === 'pubkey' ? 'var(--flux)' : 'var(--signal)',
       copyRpcLabel: S.copyFlash === 'rpc' ? '✓ COPIED' : '⧉ RPC', copyRpcColor: S.copyFlash === 'rpc' ? 'var(--flux)' : 'var(--signal)',
       copyInvoiceLabel: S.copyFlash === 'invoice' ? '✓ COPIED TO CLIPBOARD' : 'INVOICE · TAP TO COPY', copyInvoiceColor: S.copyFlash === 'invoice' ? 'var(--flux)' : 'var(--muted)',
-      nOnchain: n ? this.fmt(S.onchain[n.id]) : '', nInChannel: n ? this.fmt(nInch) : '', nChannels: n ? String(this.degree(n.id)) : '',
-      nUdt: n ? this.fmt(S.udt[n.id] || 0) : '', nHasUdt: n ? (S.udt[n.id] || 0) > 0 : false,
-      payUnit: S.payUdt ? 'UDT' : 'CKB', payAssetCkb: this.payAssetCkb, payAssetUdt: this.payAssetUdt, payCkbBg: sw(!S.payUdt).bg, payCkbFg: sw(!S.payUdt).fg, payUdtBg: sw(S.payUdt).bg, payUdtFg: sw(S.payUdt).fg,
-      capUnit: S.capUdt ? 'UDT' : 'CKB', capAssetCkb: this.capAssetCkb, capAssetUdt: this.capAssetUdt, capCkbBg: sw(!S.capUdt).bg, capCkbFg: sw(!S.capUdt).fg, capUdtBg: sw(S.capUdt).bg, capUdtFg: sw(S.capUdt).fg,
+      nOnchain: n ? this.fmt(S.onchain[n.id]) : '', nInChannelCkb: n ? this.fmt(Math.round(nInCkb)) : '', nCkbChannels: String(nCkbChannels), nInChannelUdt: n ? this.fmt(Math.round(nInUdt)) : '', nUdtChannels: String(nUdtChannels),
+      nUdt: n ? this.fmt(S.udt[n.id] || 0) : '', nHasUdt: n ? (S.udt[n.id] || 0) > 0 || nUdtChannels > 0 : false,
+      payUnit: S.payUdt ? 'UDT' : 'CKB', payAssetCkb: this.payAssetCkb, payAssetUdt: this.payAssetUdt, payCkbActive: !S.payUdt, payUdtActive: S.payUdt, payCkbBg: sw(!S.payUdt).bg, payCkbFg: sw(!S.payUdt).fg, payUdtBg: sw(S.payUdt).bg, payUdtFg: sw(S.payUdt).fg,
+      capUnit: S.capUdt ? 'UDT' : 'CKB', capAssetCkb: this.capAssetCkb, capAssetUdt: this.capAssetUdt, capCkbActive: !S.capUdt, capUdtActive: S.capUdt, capCkbBg: sw(!S.capUdt).bg, capCkbFg: sw(!S.capUdt).fg, capUdtBg: sw(S.capUdt).bg, capUdtFg: sw(S.capUdt).fg,
       invoiceUnit: S.invoiceUdt ? 'UDT' : 'CKB', invAssetCkb: this.invAssetCkb, invAssetUdt: this.invAssetUdt, invCkbBg: sw(!S.invoiceUdt).bg, invCkbFg: sw(!S.invoiceUdt).fg, invUdtBg: sw(S.invoiceUdt).bg, invUdtFg: sw(S.invoiceUdt).fg,
       fundUnit: S.fundUdt ? 'UDT' : 'CKB', fundAssetCkb: this.fundAssetCkb, fundAssetUdt: this.fundAssetUdt, fundCkbBg: sw(!S.fundUdt).bg, fundCkbFg: sw(!S.fundUdt).fg, fundUdtBg: sw(S.fundUdt).bg, fundUdtFg: sw(S.fundUdt).fg,
       tabOverview: S.nodeTab === 'overview', tabPeers: S.nodeTab === 'peers', tabChannels: S.nodeTab === 'channels', tabLogs: S.nodeTab === 'logs',
@@ -2030,8 +2157,7 @@ class Component extends DCLogic {
       nodeChans, nodePeersList, nodeLogsText, logLevels, nodeChanEmpty: nodeChans.length === 0, nodePeerEmpty: nodePeersList.length === 0,
       openInvoice: this.openInvoice, invoiceOpen: S.invoiceOpen, closeInvoice: this.closeInvoice, genInvoice: this.genInvoice, copyInvoice: this.copyInvoice, incInvoice: this.incInvoice, decInvoice: this.decInvoice,
       invoiceAmtDisp: this.fmt(S.invoiceAmt), invoiceAddr: S.invoiceAddr, invoiceHasAddr: !!S.invoiceAddr, invoiceBusy: S.invoiceBusy, invoiceNodeName: n ? n.name : '',
-      spark: n ? (nodeChans.length ? nodeChans.map(c => ({ h: Math.max(4, parseInt(c.localW, 10) || 0) + '%' })) : [{ h: '4%' }]) : [],
-      chFrom: ch ? this.node(ch.from).name : '', chTo: ch ? this.node(ch.to).name : '', chCap: ch ? this.fmt(ch.cap) : '', chLocal: ch ? this.fmt(chLocal) : '', chRemote: ch ? this.fmt(ch.cap - chLocal) : '', chHash: ch ? ch.hash : '', chUnit: ch && ch.udt ? 'UDT' : 'CKB', chIsUdt: !!(ch && ch.udt),
+      chFrom: ch ? this.node(ch.from).name : '', chTo: ch ? this.node(ch.to).name : '', chCap: ch ? this.fmt(ch.cap) : '', chLocal: ch ? this.fmt(chLocal) : '', chRemote: ch ? this.fmt(ch.cap - chLocal) : '', chHash: ch ? ch.hash : '', chUnit: ch && ch.udt ? 'UDT' : 'CKB', chIsUdt: !!(ch && ch.udt), chAssetColor: ch && ch.udt ? 'var(--flux)' : 'var(--gold)',
       forceCloseUnavailable: !ch || !ch.channelId || !!ch.pending,
       forceCloseOpen: S.forceCloseOpen, forceCloseNode: forceTarget.node || '', forceCloseChannelId: forceTarget.channelId || '', forceCloseConfirm: S.forceCloseConfirm,
       setForceCloseConfirm: this.setForceCloseConfirm, cancelForceClose: this.cancelForceClose, confirmForceClose: this.confirmForceClose, refreshForceClose: this.refreshForceClose,
@@ -2045,12 +2171,13 @@ class Component extends DCLogic {
       forceCloseConfirmation: forceTx ? (String(forceTx.status || 'unknown').toUpperCase() + (forceTx.blockNumber == null ? '' : ' · BLOCK ' + forceTx.blockNumber)) : 'NOT CONFIRMED',
       forceCloseFinalState: forceFinal ? (forceFinal.state + ((forceFinal.flags || []).length ? ' · ' + forceFinal.flags.join(' | ') : '')) : 'pending',
       forceCloseNext: forceReport ? (forceReport.nextAction || 'none') : '',
-      payOpen: S.payOpen, closePay: this.closePay, incPay: this.incPay, decPay: this.decPay, confirmPay: this.confirmPay, payAmtDisp: this.fmt(S.payAmt),
+      payOpen: S.payOpen, closePay: this.closePay, incPay: this.incPay, decPay: this.decPay, confirmPay: this.confirmPay, openPayChannel: this.openCapForPayment, payAmtDisp: this.fmt(S.payAmt),
       payFromName: pf ? pf.name : '', payToName: pt ? pt.name : '', payFromHue: pf ? pf.hue : 'var(--ember)', payToHue: pt ? pt.hue : 'var(--violet)', payHopsLabel: String(payHasRoute ? dispPath.length - 1 : 0), payRoute,
-      sendBg: payHasRoute ? 'var(--ember)' : 'var(--panel-2)', sendFg: payHasRoute ? '#1a0b06' : 'var(--faint)', sendLabel: payHasRoute ? 'SEND SPARK ⚡' : 'NO ROUTE',
+      payHasRoute, payNeedsChannel, payLiquidity: this.fmt(payLiquidityValue), payShortfall: this.fmt(payShortfallValue), payLiquidityColor: payHasShortfall ? 'var(--alarm)' : 'var(--flux)', payShortfallColor: payHasShortfall ? 'var(--alarm)' : 'var(--flux)', payRecoveryMessage: payHasShortfall ? ('NEEDS ' + this.fmt(payShortfallValue) + ' MORE ' + (S.payUdt ? 'UDT' : 'CKB')) : ('NO ' + (S.payUdt ? 'UDT' : 'CKB') + ' ROUTE'), payRecoveryLabel: 'OPEN ' + (S.payUdt ? 'UDT' : 'CKB') + ' CHANNEL',
+      sendDisabled: payNeedsChannel, sendBg: payNeedsChannel ? 'var(--panel-2)' : 'var(--ember)', sendFg: payNeedsChannel ? 'var(--faint)' : '#1a0b06', sendLabel: !payHasRoute ? 'NO ROUTE' : payHasShortfall ? ('SHORT ' + this.fmt(payShortfallValue) + ' ' + (S.payUdt ? 'UDT' : 'CKB')) : 'SEND PAYMENT ⚡',
       fundOpen: S.fundOpen, closeFund: this.closeFund, confirmFund: this.confirmFund, fundTargetName: this.node(S.fundTarget) ? this.node(S.fundTarget).name : '', fundAmtDisp: this.fmt(S.fundAmt), fundPresets: [fundPreset(1000), fundPreset(10000), fundPreset(100000)],
       capOpen: S.capOpen, closeCap: this.closeCap, confirmCap: this.confirmCap, setCapRange: this.setCapRange, capacity: S.capacity, capDisp: this.fmt(S.capacity), capPair: (capF ? capF.name : '') + ' ⇄ ' + (capT ? capT.name : '—'),
-      cycleCapFrom: this.cycleCapFrom, cycleCapTo: this.cycleCapTo, capFromName: capF ? capF.name : '—', capToName: capT ? capT.name : '—', capFromHue: capF ? capF.hue : 'var(--ember)', capToHue: capT ? capT.hue : 'var(--violet)',
+      cycleCapFrom: this.cycleCapFrom, cycleCapTo: this.cycleCapTo, capFromName: capF ? capF.name : '—', capToName: capT ? capT.name : '—', capFromBalance: capF ? this.fmt(S.onchain[capF.id]) : '0', capFromHue: capF ? capF.hue : 'var(--ember)', capToHue: capT ? capT.hue : 'var(--violet)',
       closeWizard: this.closeWizard, wizNext: this.wizNext, wizBack: this.wizBack, forgeIt: this.forgeIt,
       wizSteps: [wizStep(1, '1 · TOPOLOGY'), wizStep(2, '2 · FUNDING'), wizStep(3, '3 · REVIEW')],
       wizStep1: S.wizardStep === 1, wizStep2: S.wizardStep === 2, wizStep3: S.wizardStep === 3, wizNotLast: S.wizardStep < 3, wizLast: S.wizardStep === 3,
