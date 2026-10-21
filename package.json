@@ -103,6 +103,7 @@
     "docs/cch-topology.md",
     "docs/cch-transfer-proof.md",
     "docs/xudt-rce-compatibility.md",
+    "docs/routing-inspection.md",
     "docs/lightning-backend.md",
     "docs/github-action.md",
     "docs/integration.md",

@@ -368,6 +368,27 @@ describe.skipIf(!RUN)("live: trio multi-hop CKB payment", () => {
           rpcs.map((rpc) => rpc.graphChannelCount()),
         );
         expect(graphCounts).toEqual([2, 2, 2]);
+
+        const graph = await orchestrator.inspectRoutingGraph(MULTIHOP_NET, {
+          observer: sender,
+          limit: 10,
+        });
+        expect(graph.source).toBe("fiber.graph_nodes+fiber.graph_channels");
+        expect(graph.observer).toEqual({
+          name: sender,
+          pubkey: infos[0].pubkey,
+        });
+        expect(graph.nodes).toHaveLength(3);
+        expect(graph.channels).toHaveLength(2);
+        expect(
+          graph.channels.every((channel) =>
+            channel.directions.some(
+              (direction) =>
+                direction.announcement === "present" &&
+                direction.enabled === true,
+            ),
+          ),
+        ).toBe(true);
       });
 
       const senderBefore = await channelBalance(orchestrator, sender, relay);
@@ -400,6 +421,63 @@ describe.skipIf(!RUN)("live: trio multi-hop CKB payment", () => {
           receiver,
           senderBefore,
           receiverBefore,
+        );
+      });
+
+      const routedSenderBefore = await channelBalance(
+        orchestrator,
+        sender,
+        relay,
+      );
+      const routedReceiverBefore = await channelBalance(
+        orchestrator,
+        receiver,
+        relay,
+      );
+      const inspected = await atStage("routing", () =>
+        orchestrator.inspectRoute(MULTIHOP_NET, sender, receiver, 41, {
+          via: [relay],
+        }),
+      );
+      expect(inspected.attemptedRoute.source).toBe("fiber.build_router");
+      expect(inspected.attemptedRoute.pathSource).toBe("explicit");
+      expect(
+        inspected.attemptedRoute.requestedPath.map((node) => node.name),
+      ).toEqual([sender, relay, receiver]);
+      expect(inspected.attemptedRoute.hops).toHaveLength(2);
+      expect(inspected.finalSuccessfulRoute).toBeNull();
+
+      await atStage("payment", async () => {
+        const routed = await orchestrator.payWithRoute(
+          MULTIHOP_NET,
+          sender,
+          receiver,
+          41,
+          { via: [relay] },
+          "live explicit route proof",
+        );
+        expect(routed.status).toBe("Success");
+        expect(routed.paymentHash).toMatch(/^0x[0-9a-f]+$/i);
+        expect(routed.attemptedRoute.source).toBe("fiber.build_router");
+        expect(
+          routed.attemptedRoute.hops.map((hop) => ({
+            target: hop.targetPubkey,
+            channel: hop.channelOutpoint,
+          })),
+        ).toEqual(
+          inspected.attemptedRoute.hops.map((hop) => ({
+            target: hop.targetPubkey,
+            channel: hop.channelOutpoint,
+          })),
+        );
+        expect(routed.finalSuccessfulRoute).toEqual(routed.attemptedRoute);
+        await waitForBalanceMovement(
+          orchestrator,
+          sender,
+          relay,
+          receiver,
+          routedSenderBefore,
+          routedReceiverBefore,
         );
       });
     } catch (error) {

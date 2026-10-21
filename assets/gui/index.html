@@ -56,6 +56,7 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes coreping{0%{transform:scale(.7);opacity:.5}100%{transform:scale(2.7);opacity:0}}
   @keyframes shimmer{to{stroke-dashoffset:-60}}
+  @keyframes routingLoad{to{background-position:-220% 0}}
   @keyframes march{to{stroke-dashoffset:-34}}
   @keyframes drawerIn{from{transform:translateX(30px);opacity:0}to{transform:translateX(0);opacity:1}}
   @keyframes sheetIn{from{transform:translate(-50%,-46%);opacity:0}to{transform:translate(-50%,-50%);opacity:1}}
@@ -65,6 +66,15 @@
   @keyframes bootFlick{0%,100%{box-shadow:0 0 10px rgba(240,169,60,.35)}50%{box-shadow:0 0 20px rgba(240,169,60,.6)}}
   @media (prefers-reduced-motion: reduce){*{animation-duration:.001ms !important;animation-iteration-count:1 !important}}
   .cch-boundary{position:absolute;top:92px;left:50%;transform:translateX(-50%);width:min(720px,calc(100vw - 440px));min-width:560px;z-index:8;background:var(--panel);border:1px solid var(--border);}
+  .routing-shell{position:absolute;inset:12px;z-index:30;background:var(--base);border:1px solid var(--border);display:flex;flex-direction:column;min-width:0;animation:flare .18s ease-out;}
+  .routing-body{min-height:0;flex:1;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(340px,.65fr);}
+  .routing-graph-pane{min-width:0;min-height:0;border-right:1px solid var(--border);display:flex;flex-direction:column;}
+  .routing-detail-pane{min-width:0;min-height:0;overflow:auto;background:var(--panel);}
+  .routing-canvas{width:100%;aspect-ratio:16/7;min-height:220px;max-height:390px;background:var(--inset);border-bottom:1px solid var(--hairline);overflow:hidden;}
+  .routing-channel-list{min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--hairline);}
+  .routing-field{width:100%;min-height:42px;background:var(--inset);color:var(--bone);border:1px solid var(--border);padding:9px 10px;font-family:'Geist Mono',monospace;font-size:12px;outline:none;}
+  .routing-field:focus-visible{outline:2px solid var(--signal);outline-offset:1px;}
+  .routing-skeleton{height:14px;background:linear-gradient(90deg,var(--panel-2),var(--border),var(--panel-2));background-size:220% 100%;animation:routingLoad 1.2s linear infinite;}
   @media (max-width:900px){
     .floor-rig{transform:scale(.72);transform-origin:top left}
     .floor-vitals{top:72px!important;left:20px!important;transform:none!important}
@@ -73,6 +83,10 @@
     .floor-map{bottom:146px!important}
     .floor-zoom{bottom:146px!important;left:auto!important;right:20px}
     .floor-timeline{left:20px;right:20px!important;width:auto!important}
+    .routing-shell{inset:8px;}
+    .routing-body{grid-template-columns:1fr;overflow:auto;}
+    .routing-graph-pane{border-right:none;border-bottom:1px solid var(--border);min-height:520px;}
+    .routing-detail-pane{overflow:visible;}
   }
   @media (max-width:600px){
     .floor-rig{top:16px!important;left:16px!important;transform:scale(.64)}
@@ -82,6 +96,9 @@
     .cch-boundary-flow{grid-template-columns:1fr!important}
     .cch-boundary-arrow{display:none!important}
     .floor-map,.floor-zoom,.floor-timeline{display:none!important}
+    .routing-shell{inset:0;}
+    .routing-canvas{aspect-ratio:4/3;min-height:250px;}
+    .routing-channel-list{grid-template-columns:1fr;max-height:250px;}
   }
 </style>
 </helmet>
@@ -173,6 +190,7 @@
 
     <div class="floor-actions" style="position:absolute;top:20px;right:20px;display:flex;gap:1px;background:var(--border);border:1px solid var(--border);">
       <button onClick="{{ enterWizard }}" style="background:var(--panel);color:var(--text);border:none;padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;"><span style="color:var(--gold);">⚒</span> SPAWN</button>
+      <button id="routing-trigger" class="ff-focus" onClick="{{ openRouting }}" style="background:var(--panel);color:var(--text);border:none;padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:8px;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;"><span style="color:var(--signal);">⌘</span> ROUTES</button>
       <button onClick="{{ openPay }}" style="background:var(--ember);color:#1a0b06;border:none;padding:10px 18px;cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;">⚡ PAY</button>
     </div>
 
@@ -236,6 +254,118 @@
       </div>
     </div>
   </div>
+  </sc-if>
+
+  <!-- ============ LIVE ROUTING INSPECTOR ============ -->
+  <sc-if value="{{ routingOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="routing-shell" role="dialog" aria-modal="true" aria-labelledby="routing-title">
+      <div style="min-height:58px;padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:14px;">
+        <div style="min-width:0;display:flex;align-items:center;gap:12px;">
+          <span style="color:var(--signal);font-size:18px;">⌘</span>
+          <div style="min-width:0;"><div id="routing-title" style="font-size:16px;font-weight:700;color:var(--bone);">Routing inspector</div><div class="mc" style="margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ routingSourceLabel }}</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="ff-focus" onClick="{{ reloadRouting }}" disabled="{{ routingLoading }}" title="Refresh live gossip" aria-label="Refresh live routing graph" style="min-width:40px;min-height:40px;background:var(--panel);border:1px solid var(--border);color:var(--signal);cursor:pointer;font-size:16px;">↻</button>
+          <button id="routing-close" class="ff-focus" onClick="{{ closeRouting }}" aria-label="Close routing inspector" style="min-width:40px;min-height:40px;background:var(--panel);border:1px solid var(--border);color:var(--muted);cursor:pointer;font-size:16px;">✕</button>
+        </div>
+      </div>
+
+      <sc-if value="{{ routingLoading }}" hint-placeholder-val="{{ false }}">
+        <div role="status" aria-live="polite" aria-busy="true" style="padding:24px;display:grid;gap:14px;">
+          <div class="routing-skeleton" style="width:38%;"></div>
+          <div class="routing-skeleton" style="height:280px;width:100%;"></div>
+          <div class="routing-skeleton" style="width:72%;"></div>
+          <span class="mc" style="color:var(--signal);">QUERYING FIBER GOSSIP RPC</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ routingHasError }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="margin:auto;width:min(560px,calc(100% - 32px));border:1px solid var(--alarm);padding:18px;background:var(--panel);">
+          <div class="mc" style="color:var(--alarm);margin-bottom:8px;">ROUTING RPC UNAVAILABLE</div>
+          <div style="font-size:13px;line-height:1.55;color:var(--text);word-break:break-word;">{{ routingError }}</div>
+          <button class="ff-focus" onClick="{{ reloadRouting }}" style="min-height:42px;margin-top:14px;background:var(--alarm);color:var(--void);border:none;padding:0 18px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:11px;">RETRY</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ routingReady }}" hint-placeholder-val="{{ false }}">
+        <div class="routing-body">
+          <section class="routing-graph-pane" aria-label="Live gossip graph">
+            <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--hairline);border-bottom:1px solid var(--hairline);">
+              <sc-for list="{{ routingStats }}" as="stat" hint-placeholder-count="5">
+                <div style="background:var(--panel);padding:9px 11px;min-width:0;"><span class="mc" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ stat.label }}</span><span class="num" style="display:block;margin-top:3px;color:{{ stat.color }};font-size:14px;">{{ stat.value }}</span></div>
+              </sc-for>
+            </div>
+            <div class="routing-canvas">{{ routingCanvas }}</div>
+            <div style="padding:8px 11px;border-bottom:1px solid var(--hairline);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+              <span class="mc">DIRECTIONAL CHANNELS</span><span class="mc" style="color:{{ routingWarningColor }};">{{ routingWarningLabel }}</span>
+            </div>
+            <sc-if value="{{ routingGraphEmpty }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;"><span class="mc" style="color:var(--faint);">NO CHANNEL ANNOUNCEMENTS RETURNED</span></div>
+            </sc-if>
+            <sc-if value="{{ routingGraphHasChannels }}" hint-placeholder-val="{{ true }}">
+              <div class="routing-channel-list">
+                <sc-for list="{{ routingChannelRows }}" as="row" hint-placeholder-count="4">
+                  <button class="ff-focus" onClick="{{ row.select }}" style="min-height:56px;background:{{ row.background }};border:none;padding:9px 11px;text-align:left;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;">
+                    <span style="font-size:12px;font-weight:600;color:var(--bone);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ row.label }}</span><span class="mc" style="color:{{ row.stateColor }};">{{ row.state }}</span>
+                    <span class="num" style="font-size:10px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ row.outpoint }}</span><span class="mc" style="color:var(--muted);">{{ row.asset }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </section>
+
+          <section class="routing-detail-pane" aria-label="Route and channel details">
+            <div style="padding:14px;border-bottom:1px solid var(--hairline);">
+              <div class="mc" style="color:var(--bone);margin-bottom:10px;">CHANNEL DETAIL</div>
+              <sc-if value="{{ routingHasSelectedChannel }}" hint-placeholder-val="{{ false }}">
+                <div class="num" style="font-size:10px;color:var(--muted);word-break:break-all;margin-bottom:10px;">{{ routingSelectedOutpoint }}</div>
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;padding:0 0 10px;">
+                  <span class="mc">CAPACITY</span><span class="num" style="font-size:10px;color:var(--text);">{{ routingSelectedCapacity }}</span>
+                  <span class="mc">ASSET</span><span class="mc" style="color:var(--signal);">{{ routingSelectedAsset }}</span>
+                </div>
+                <sc-for list="{{ routingDirections }}" as="direction" hint-placeholder-count="2">
+                  <div style="border-top:1px solid var(--hairline);padding:10px 0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;">
+                    <span style="font-size:12px;color:var(--bone);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ direction.path }}</span><span class="mc" style="color:{{ direction.color }};">{{ direction.state }}</span>
+                    <span class="mc">FEE · {{ direction.fee }} PPM</span><span class="num" style="font-size:10px;color:var(--text);">{{ direction.liquidity }}</span>
+                    <span class="mc">ANNOUNCEMENT</span><span class="num" style="font-size:10px;color:var(--muted);">{{ direction.age }}</span>
+                  </div>
+                </sc-for>
+              </sc-if>
+              <sc-if value="{{ routingNoSelectedChannel }}" hint-placeholder-val="{{ true }}">
+                <div class="mc" style="color:var(--faint);padding:10px 0;">NO CHANNEL SELECTED</div>
+              </sc-if>
+            </div>
+
+            <div style="padding:14px;border-bottom:1px solid var(--hairline);">
+              <div class="mc" style="color:var(--bone);margin-bottom:12px;">EXPLICIT FIBER ROUTE</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <label><span class="mc" style="display:block;margin-bottom:5px;">FROM</span><select class="routing-field" value="{{ routingFrom }}" onChange="{{ setRoutingFrom }}"><sc-for list="{{ routingNodeOptions }}" as="option" hint-placeholder-count="3"><option value="{{ option.name }}">{{ option.name }}</option></sc-for></select></label>
+                <label><span class="mc" style="display:block;margin-bottom:5px;">TO</span><select class="routing-field" value="{{ routingTo }}" onChange="{{ setRoutingTo }}"><sc-for list="{{ routingNodeOptions }}" as="option" hint-placeholder-count="3"><option value="{{ option.name }}">{{ option.name }}</option></sc-for></select></label>
+                <label style="grid-column:1/-1;"><span class="mc" style="display:block;margin-bottom:5px;">VIA · INFERRED PREFILL</span><input class="routing-field" value="{{ routingVia }}" onInput="{{ setRoutingVia }}" autocomplete="off" spellcheck="false"></label>
+                <label><span class="mc" style="display:block;margin-bottom:5px;">AMOUNT</span><input class="routing-field" type="number" min="1" step="1" value="{{ routingAmount }}" onInput="{{ setRoutingAmount }}"></label>
+                <div><span class="mc" style="display:block;margin-bottom:5px;">ASSET</span><div style="display:flex;gap:1px;background:var(--border);border:1px solid var(--border);height:42px;"><button class="ff-focus" onClick="{{ routingAssetCkb }}" style="flex:1;border:none;background:{{ routingCkbBg }};color:{{ routingCkbFg }};font-family:'Geist Mono',monospace;font-size:10px;cursor:pointer;">CKB</button><button class="ff-focus" onClick="{{ routingAssetUdt }}" style="flex:1;border:none;background:{{ routingUdtBg }};color:{{ routingUdtFg }};font-family:'Geist Mono',monospace;font-size:10px;cursor:pointer;">UDT</button></div></div>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:12px;">
+                <button class="ff-focus" onClick="{{ inspectRoutingPath }}" disabled="{{ routingActionBusy }}" style="min-height:42px;flex:1;background:var(--panel-2);color:var(--signal);border:1px solid var(--signal);cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:10px;">INSPECT</button>
+                <button class="ff-focus" onClick="{{ payRoutingPath }}" disabled="{{ routingActionBusy }}" style="min-height:42px;flex:1;background:var(--ember);color:var(--void);border:none;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:10px;">SEND</button>
+              </div>
+              <sc-if value="{{ routingActionBusy }}" hint-placeholder-val="{{ false }}"><div role="status" aria-live="polite" aria-busy="true" class="mc" style="color:var(--signal);margin-top:10px;">WAITING FOR FIBER RPC</div></sc-if>
+              <sc-if value="{{ routingActionHasError }}" hint-placeholder-val="{{ false }}"><div role="alert" style="margin-top:10px;padding:10px;border:1px solid var(--alarm);font-size:11px;line-height:1.5;color:var(--alarm);word-break:break-word;">{{ routingActionError }}</div></sc-if>
+            </div>
+
+            <sc-if value="{{ routingHasRoute }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:14px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;"><span class="mc" style="color:var(--bone);">ATTEMPTED ROUTE</span><span class="mc" style="color:var(--signal);">FIBER · BUILD_ROUTER</span></div>
+                <sc-for list="{{ routingRouteHops }}" as="hop" hint-placeholder-count="2">
+                  <div style="display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:7px;align-items:center;padding:8px 0;border-top:1px solid var(--hairline);"><span class="num" style="font-size:10px;color:var(--faint);">{{ hop.index }}</span><span style="min-width:0;"><span style="display:block;font-size:12px;color:var(--bone);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ hop.target }}</span><span class="num" style="display:block;margin-top:3px;font-size:9px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ hop.channel }}</span></span><span class="num" style="font-size:10px;color:var(--muted);">{{ hop.amount }}</span></div>
+                </sc-for>
+                <div style="display:flex;justify-content:space-between;gap:10px;padding-top:10px;border-top:1px solid var(--hairline);"><span class="mc">FEE · {{ routingRouteFee }} BASE UNITS</span><span class="mc" style="color:{{ routingFinalColor }};">FINAL · {{ routingFinalLabel }}</span></div>
+              </div>
+            </sc-if>
+          </section>
+        </div>
+      </sc-if>
+    </div>
   </sc-if>
 
   <!-- ============ NODE READOUT DRAWER ============ -->
@@ -501,7 +631,7 @@
           <button onClick="{{ incPay }}" style="background:var(--panel-2);color:var(--bone);border:none;width:46px;cursor:pointer;font-size:18px;">+</button>
         </div>
         <div style="background:var(--inset);border:1px solid var(--hairline);padding:12px 14px;margin-bottom:18px;">
-          <span class="mc" style="display:block;margin-bottom:8px;">ROUTE · {{ payHopsLabel }} HOPS</span>
+          <span class="mc" style="display:block;margin-bottom:8px;">TOPOLOGY PREVIEW · INFERRED · {{ payHopsLabel }} HOPS</span>
           {{ payRoute }}
         </div>
         <button onClick="{{ confirmPay }}" style="width:100%;background:{{ sendBg }};color:{{ sendFg }};border:none;padding:14px;cursor:pointer;font-weight:700;font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;">{{ sendLabel }}</button>
@@ -726,6 +856,9 @@ class Component extends DCLogic {
     nodeAction: null, nodeActionBusy: false, nodeActionError: '', nodeActionResult: '',
     forceCloseOpen: false, forceCloseTarget: null, forceCloseConfirm: '', forceCloseBusy: false, forceCloseError: '', forceCloseReport: null,
     payUdt: false, capUdt: false, invoiceUdt: false, fundUdt: false, pendingOpens: [], nets: [], cch: null,
+    routingOpen: false, routingLoading: false, routingError: '', routingGraph: null, routingSelectedChannel: null,
+    routingFrom: '', routingTo: '', routingVia: '', routingAmount: 100, routingUdt: false,
+    routingActionBusy: false, routingActionError: '', routingRoute: null,
   };
 
   constructor(props) {
@@ -783,6 +916,7 @@ class Component extends DCLogic {
   // ---------------- graph helpers ----------------
   node(id) { return this.state.nodes.find(n => n.id === id); }
   fmt(n) { return (n || 0).toLocaleString('en-US'); }
+  shortKey(value) { value = String(value || ''); return value.length > 18 ? value.slice(0, 10) + '…' + value.slice(-6) : value; }
   now() { return new Date().toTimeString().slice(0, 8); }
   degree(id) { return this.state.channels.filter(c => c.from === id || c.to === id).length; }
   sz() { const n = this.state.nodes.length; return n <= 4 ? 1 : n <= 6 ? 0.85 : n <= 8 ? 0.74 : 0.64; }
@@ -859,7 +993,7 @@ class Component extends DCLogic {
   fundAssetUdt = () => this.setState({ fundUdt: true });
   setMode = (id) => this.setState({ mode: id });
   _refreshNets = () => { var F = this; fetch('/api/networks').then(function (r) { return r.json(); }).then(function (list) { F._forgeNets = list || []; F.setState({ nets: list || [] }); }).catch(function () {}); };
-  goEmpty = () => { clearInterval(this._boot); this._refreshNets(); this.setState({ screen: 'empty', sel: null, payOpen: false, fundOpen: false, capOpen: false }); };
+  goEmpty = () => { clearInterval(this._boot); this._refreshNets(); this.setState({ screen: 'empty', sel: null, payOpen: false, fundOpen: false, capOpen: false, routingOpen: false }); };
   goWizard = () => { clearInterval(this._boot); this._nameOrder = this._shuffle(this.NAMES); const t = this.build(this.state.preset, this.effN(), this.state.funding); this.setState({ screen: 'wizard', wizardStep: 1, sel: null, ...t, chState: Object.fromEntries(t.channels.map(c => [c.id, 'ready'])) }); };
   enterWizard = () => this.goWizard();
   closeWizard = () => this.goEmpty();
@@ -971,6 +1105,99 @@ class Component extends DCLogic {
     });
     clearTimeout(this._resT); this._resT = setTimeout(() => this.setState({ showResult: false }), 2200);
   }
+
+  // ---------------- live routing inspector ----------------
+  _routingSuggestedVia(fromName, toName, udt) {
+    const from = this.state.nodes.find(n => n.name === fromName), to = this.state.nodes.find(n => n.name === toName);
+    if (!from || !to || from.id === to.id) return '';
+    const channels = this.state.channels.filter(c => !c.pending && !!c.udt === !!udt);
+    const path = this._pathNodes(this.state.nodes, channels, from.id, to.id);
+    if (path.length <= 2) return '';
+    return path.slice(1, -1).map(id => { const node = this.node(id); return node ? node.name : ''; }).filter(Boolean).join(',');
+  }
+  _demoRoutingGraph() {
+    const now = Date.now(), nodes = this.state.nodes.map(n => ({
+      pubkey: n.fullPubkey || ('demo-' + n.id), name: n.name, announcedName: n.name,
+      nameSource: 'managed-layout', source: 'fiber.graph_nodes', graphAdvertised: true,
+      version: 'preview', addresses: [], features: [], chainHash: 'demo',
+      autoAcceptMinCkbFundingBaseUnits: null, updatedAtMs: String(now), ageMs: '0', freshness: 'fresh',
+      degree: this.degree(n.id), component: 0, disconnected: this.degree(n.id) === 0,
+    }));
+    const pubkey = id => { const node = this.node(id); return node ? (node.fullPubkey || ('demo-' + id)) : id; };
+    const channels = this.state.channels.filter(c => !c.pending).map(c => ({
+      outpoint: c.channelId || c.hash, node1: pubkey(c.from), node2: pubkey(c.to),
+      capacityBaseUnits: String(Math.round(c.cap * 100000000)), chainHash: 'demo',
+      asset: { kind: c.udt ? 'udt' : 'ckb', typeScript: null }, createdAtMs: String(now - 1000),
+      directions: [
+        { from: pubkey(c.from), to: pubkey(c.to), announcement: 'present', enabled: true, outboundLiquidityBaseUnits: String(Math.round((this.state.balances[c.id] || c.cap / 2) * 100000000)), feeRateMillionths: '0', tlcExpiryDeltaMs: '86400000', tlcMinimumBaseUnits: '1', updatedAtMs: String(now), ageMs: '0', freshness: 'fresh' },
+        { from: pubkey(c.to), to: pubkey(c.from), announcement: 'present', enabled: true, outboundLiquidityBaseUnits: String(Math.round((c.cap - (this.state.balances[c.id] || c.cap / 2)) * 100000000)), feeRateMillionths: '0', tlcExpiryDeltaMs: '86400000', tlcMinimumBaseUnits: '1', updatedAtMs: String(now), ageMs: '0', freshness: 'fresh' },
+      ],
+    }));
+    return { schemaVersion: 1, kind: 'fiber-routing-graph', net: this.state.name.replace(/^forge-/, ''), source: 'demo-topology', observer: { name: nodes[0] ? nodes[0].name : '', pubkey: nodes[0] ? nodes[0].pubkey : '' }, observedAt: new Date(now).toISOString(), limits: { requested: 80, maximum: 250, nodesReturned: nodes.length, channelsReturned: channels.length, nodesTruncated: false, channelsTruncated: false }, nodes, channels, summary: { components: nodes.length ? 1 : 0, isolatedNodes: nodes.filter(n => n.degree === 0).length, unreachableNodes: nodes.filter(n => n.disconnected).length, incompleteDirections: 0, staleDirections: 0, disabledDirections: 0 }, warnings: [] };
+  }
+  openRouting = () => {
+    const fromNode = this.node(this.state.payFrom) || this.state.nodes[0];
+    const toNode = this.node(this.state.payTo) || this.state.nodes.find(n => !fromNode || n.id !== fromNode.id);
+    const from = fromNode ? fromNode.name : '', to = toNode ? toNode.name : '';
+    this._routingReturnFocus = document.activeElement;
+    this.setState({
+      routingOpen: true, routingLoading: true, routingError: '', routingGraph: null,
+      routingSelectedChannel: null, routingFrom: from, routingTo: to,
+      routingVia: this._routingSuggestedVia(from, to, false), routingUdt: false,
+      routingActionBusy: false, routingActionError: '', routingRoute: null,
+    }, () => {
+      this.reloadRouting();
+      requestAnimationFrame(() => { const close = document.getElementById('routing-close'); if (close) close.focus(); });
+    });
+  };
+  closeRouting = () => this.setState({ routingOpen: false, routingActionBusy: false }, () => {
+    const trigger = document.getElementById('routing-trigger');
+    if (trigger) trigger.focus();
+    else if (this._routingReturnFocus && this._routingReturnFocus.focus) this._routingReturnFocus.focus();
+  });
+  reloadRouting = () => {
+    if (!this.state.routingOpen) return;
+    if (!window.__FORGE__) {
+      const graph = this._demoRoutingGraph();
+      this.setState({ routingLoading: false, routingError: '', routingGraph: graph, routingSelectedChannel: graph.channels[0] ? graph.channels[0].outpoint : null });
+      return;
+    }
+    const self = this, observer = this.state.nodes[0] ? this.state.nodes[0].name : '';
+    this.setState({ routingLoading: true, routingError: '' });
+    fetch('/api/routing?net=' + encodeURIComponent(this._forgeNet()) + '&node=' + encodeURIComponent(observer) + '&limit=80')
+      .then(function (response) { return response.json().then(function (body) { if (!response.ok || (body && body.error)) throw new Error(body && body.error ? body.error : ('HTTP ' + response.status)); return body; }); })
+      .then(function (graph) { self.setState({ routingLoading: false, routingError: '', routingGraph: graph, routingSelectedChannel: graph && graph.channels && graph.channels[0] ? graph.channels[0].outpoint : null }); })
+      .catch(function (error) { self.setState({ routingLoading: false, routingGraph: null, routingError: String(error && error.message ? error.message : error).slice(0, 280) }); });
+  };
+  setRoutingFrom = (event) => { const value = event.target.value; this.setState(s => ({ routingFrom: value, routingVia: this._routingSuggestedVia(value, s.routingTo, s.routingUdt), routingRoute: null, routingActionError: '' })); };
+  setRoutingTo = (event) => { const value = event.target.value; this.setState(s => ({ routingTo: value, routingVia: this._routingSuggestedVia(s.routingFrom, value, s.routingUdt), routingRoute: null, routingActionError: '' })); };
+  setRoutingVia = (event) => this.setState({ routingVia: event.target.value, routingRoute: null, routingActionError: '' });
+  setRoutingAmount = (event) => this.setState({ routingAmount: Math.max(1, Math.floor(Number(event.target.value) || 1)), routingRoute: null, routingActionError: '' });
+  routingAssetCkb = () => this.setState(s => ({ routingUdt: false, routingVia: this._routingSuggestedVia(s.routingFrom, s.routingTo, false), routingRoute: null, routingActionError: '' }));
+  routingAssetUdt = () => this.setState(s => ({ routingUdt: true, routingVia: this._routingSuggestedVia(s.routingFrom, s.routingTo, true), routingRoute: null, routingActionError: '' }));
+  selectRoutingChannel = (outpoint) => this.setState({ routingSelectedChannel: outpoint });
+  _routingRequest(pay) {
+    if (this.state.routingActionBusy) return;
+    const rawVia = String(this.state.routingVia || '');
+    const via = rawVia.trim() ? rawVia.split(',').map(name => name.trim()) : [];
+    const body = { net: this._forgeNet(), from: this.state.routingFrom, to: this.state.routingTo, amount: this.state.routingAmount, via, udt: this.state.routingUdt };
+    if (!body.from || !body.to || body.from === body.to) { this.setState({ routingActionError: 'Sender and receiver must be distinct managed nodes.' }); return; }
+    if (!window.__FORGE__) {
+      this.setState({ routingActionBusy: false, routingRoute: null, routingActionError: 'Start a managed network to query Fiber build_router. Preview topology is inferred only.' });
+      return;
+    }
+    const self = this;
+    this.setState({ routingActionBusy: true, routingActionError: '', routingRoute: null });
+    fetch(pay ? '/api/route/pay' : '/api/route/inspect', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (response) { return response.json().then(function (result) { if (!response.ok || (result && result.error)) throw new Error(result && result.error ? result.error : ('HTTP ' + response.status)); return result; }); })
+      .then(function (result) {
+        self.setState(function (state) { return { routingActionBusy: false, routingActionError: '', routingRoute: result, events: pay ? [{ t: self.now(), c: result.status === 'Success' ? 'var(--flux)' : 'var(--alarm)', msg: 'ROUTED PAYMENT ' + body.from + '→' + body.to + ' ' + String(result.status || 'UNKNOWN').toUpperCase() }, ...state.events].slice(0, 8) : state.events }; });
+        if (pay && self._forgePollFn) self._forgePollFn();
+      })
+      .catch(function (error) { self.setState({ routingActionBusy: false, routingRoute: null, routingActionError: String(error && error.message ? error.message : error).slice(0, 280) }); });
+  }
+  inspectRoutingPath = () => this._routingRequest(false);
+  payRoutingPath = () => this._routingRequest(true);
 
   // ---------------- fund ----------------
   openFund = () => this.setState(s => ({ fundOpen: true, fundTarget: (s.sel && s.sel.type === 'node') ? s.sel.id : s.nodes[0].id }));
@@ -1231,7 +1458,7 @@ class Component extends DCLogic {
     var F = this;
     this._forgeNet_ = net;
     this._forgeFitted = false;
-    this.setState({ events: [], nodeLogEntries: [], nodeLogs: '', pendingOpens: [], sel: null, nodeAction: null, nodeActionBusy: false, nodeActionError: '', nodeActionResult: '', forceCloseOpen: false, forceCloseTarget: null, forceCloseConfirm: '', forceCloseBusy: false, forceCloseError: '', forceCloseReport: null });
+    this.setState({ events: [], nodeLogEntries: [], nodeLogs: '', pendingOpens: [], sel: null, nodeAction: null, nodeActionBusy: false, nodeActionError: '', nodeActionResult: '', forceCloseOpen: false, forceCloseTarget: null, forceCloseConfirm: '', forceCloseBusy: false, forceCloseError: '', forceCloseReport: null, routingOpen: false, routingGraph: null, routingRoute: null, routingActionError: '' });
     var first = true;
     this._forgeApply = function (v) {
       if (v && v.nodes && v.nodes.length && F._forgeNet_ === net) {
@@ -1345,7 +1572,7 @@ class Component extends DCLogic {
   zoomIn = () => { const r = this._floorEl.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 1.25); };
   zoomOut = () => { const r = this._floorEl.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 0.8); };
   handleWheel(e) { if (!e.target || !e.target.closest || !e.target.closest('[data-floor]')) return; e.preventDefault(); const r = this._floorEl.getBoundingClientRect(); this.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0016)); }
-  handleKey(e) { if (e.key === 'Escape' && this.state.forceCloseOpen && !this.state.forceCloseBusy) { e.preventDefault(); this.cancelForceClose(); return; } if (e.key === 'Escape' && this.state.nodeAction && !this.state.nodeActionBusy) { e.preventDefault(); this.cancelNodeAction(); return; } if (window.__FORGE__ && this.state.screen === 'floor' && (e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); this._forgeCycle(); return; } if (!(e.metaKey || e.ctrlKey)) return; if (e.key === '0') { e.preventDefault(); this.fitView(); } else if (e.key === '1') { e.preventDefault(); this.reset100(); } }
+  handleKey(e) { if (e.key === 'Escape' && this.state.routingOpen && !this.state.routingActionBusy) { e.preventDefault(); this.closeRouting(); return; } if (e.key === 'Escape' && this.state.forceCloseOpen && !this.state.forceCloseBusy) { e.preventDefault(); this.cancelForceClose(); return; } if (e.key === 'Escape' && this.state.nodeAction && !this.state.nodeActionBusy) { e.preventDefault(); this.cancelNodeAction(); return; } if (window.__FORGE__ && this.state.screen === 'floor' && (e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); this._forgeCycle(); return; } if (!(e.metaKey || e.ctrlKey)) return; if (e.key === '0') { e.preventDefault(); this.fitView(); } else if (e.key === '1') { e.preventDefault(); this.reset100(); } }
   onPointerDown = (e) => { if (e.target.closest && (e.target.closest('[data-node]') || e.target.closest('[data-conduit]'))) return; this._pan = { x: e.clientX, y: e.clientY, vx: this._view.x, vy: this._view.y, moved: false }; try { this._floorEl.setPointerCapture(e.pointerId); } catch (_) {} this.applyView(); };
   onPointerMove = (e) => { if (!this._pan) return; const dx = e.clientX - this._pan.x, dy = e.clientY - this._pan.y; if (Math.abs(dx) + Math.abs(dy) > 3) this._pan.moved = true; this._view.x = this._pan.vx + dx; this._view.y = this._pan.vy + dy; this.applyView(); };
   onPointerUp = (e) => { const moved = this._pan && this._pan.moved; this._pan = null; try { this._floorEl.releasePointerCapture(e.pointerId); } catch (_) {} this.applyView(); if (!moved && this.state.sel) this.clearSel(); };
@@ -1580,6 +1807,53 @@ class Component extends DCLogic {
       h('div', { style: { position: 'absolute', left: '8%', top: '10%', width: '70%', height: '66%', border: '1px solid var(--ember)', opacity: 0.5, pointerEvents: 'none' } }));
   }
 
+  routingAge(value) {
+    if (value == null || !/^-?\d+$/.test(String(value))) return 'unknown';
+    const ms = Number(value);
+    if (!Number.isFinite(ms)) return 'unknown';
+    if (ms < 0) return Math.ceil(Math.abs(ms) / 1000) + 's ahead';
+    if (ms < 60000) return Math.floor(ms / 1000) + 's ago';
+    if (ms < 3600000) return Math.floor(ms / 60000) + 'm ago';
+    if (ms < 86400000) return Math.floor(ms / 3600000) + 'h ago';
+    return Math.floor(ms / 86400000) + 'd ago';
+  }
+
+  routingCanvas() {
+    const h = React.createElement, graph = this.state.routingGraph;
+    if (!graph || !graph.nodes || !graph.nodes.length) return h('div', { className: 'mc', style: { height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--faint)' } }, 'NO ANNOUNCED NODES');
+    const managed = new Set(this.state.nodes.map(node => node.name));
+    const nodes = graph.nodes.slice().sort((a, b) => Number(managed.has(b.name)) - Number(managed.has(a.name)) || a.name.localeCompare(b.name)).slice(0, 40);
+    const visible = new Set(nodes.map(node => node.pubkey)), positions = new Map(), cx = 400, cy = 180;
+    nodes.forEach((node, index) => {
+      if (nodes.length === 1) { positions.set(node.pubkey, { x: cx, y: cy }); return; }
+      const ring = Math.floor(index / 14), start = ring * 14, count = Math.min(14, nodes.length - start), offset = index - start;
+      const radius = 72 + ring * 49, angle = -Math.PI / 2 + (offset * Math.PI * 2 / count) + ring * 0.14;
+      positions.set(node.pubkey, { x: cx + Math.cos(angle) * radius * 1.65, y: cy + Math.sin(angle) * radius });
+    });
+    const lines = (graph.channels || []).filter(channel => visible.has(channel.node1) && visible.has(channel.node2)).slice(0, 80).map(channel => {
+      const a = positions.get(channel.node1), b = positions.get(channel.node2), directions = channel.directions || [];
+      const selected = channel.outpoint === this.state.routingSelectedChannel;
+      const anyEnabled = directions.some(direction => direction.enabled === true);
+      const stale = directions.some(direction => direction.freshness === 'stale' || direction.freshness === 'future');
+      const color = selected ? 'var(--signal)' : !anyEnabled ? 'var(--alarm)' : stale ? 'var(--amber)' : 'var(--border)';
+      return h('line', { key: channel.outpoint, x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: color, strokeWidth: selected ? 3 : 1.5, opacity: selected ? 1 : 0.9 });
+    });
+    const marks = nodes.map(node => {
+      const p = positions.get(node.pubkey), local = this.state.nodes.find(item => item.name === node.name);
+      const color = node.disconnected ? 'var(--alarm)' : local ? local.hue : node.freshness === 'stale' ? 'var(--amber)' : 'var(--flux)';
+      const showLabel = nodes.length <= 18 || !!local;
+      return h('g', { key: node.pubkey },
+        h('circle', { cx: p.x, cy: p.y, r: local ? 8 : 5, fill: 'var(--inset)', stroke: color, strokeWidth: local ? 3 : 2 }),
+        h('circle', { cx: p.x, cy: p.y, r: 2.5, fill: color }),
+        showLabel ? h('text', { x: p.x, y: p.y + 19, textAnchor: 'middle', fill: local ? 'var(--bone)' : 'var(--muted)', fontFamily: 'Geist Mono,monospace', fontSize: local ? 10 : 8 }, node.name.length > 15 ? node.name.slice(0, 13) + '…' : node.name) : null,
+        h('title', null, node.name + ' · ' + node.freshness + (node.disconnected ? ' · disconnected' : '')));
+    });
+    return h('svg', { viewBox: '0 0 800 360', width: '100%', height: '100%', role: 'img', 'aria-label': 'Fiber gossip graph showing ' + nodes.length + ' nodes and ' + lines.length + ' channels', preserveAspectRatio: 'xMidYMid meet' },
+      h('title', null, 'Live Fiber gossip graph'),
+      h('desc', null, 'Lines are announced channels. Managed nodes use their forge colors. Stale announcements are amber and unavailable links are red.'),
+      h('g', null, lines), h('g', null, marks));
+  }
+
   renderVals() {
     const S = this.state, sel = S.sel;
     const n = sel && sel.type === 'node' ? this.node(sel.id) : null;
@@ -1651,6 +1925,42 @@ class Component extends DCLogic {
     const cchLightningReady = !!(cch && cch.lightning && cch.lightning.state === 'ready');
     const cchStateColor = !cch ? 'var(--faint)' : cch.state === 'ready' ? 'var(--flux)' : cch.state === 'settling' ? 'var(--amber)' : 'var(--alarm)';
 
+    const routingGraph = S.routingGraph, routingNames = new Map((routingGraph && routingGraph.nodes || []).map(node => [node.pubkey, node.name]));
+    const routingSelected = routingGraph && (routingGraph.channels || []).find(channel => channel.outpoint === S.routingSelectedChannel);
+    const routingState = channel => {
+      const directions = channel.directions || [];
+      if (!directions.length || directions.some(direction => direction.announcement === 'missing' || direction.enabled == null)) return ['INCOMPLETE', 'var(--faint)'];
+      if (directions.every(direction => direction.enabled === false)) return ['DISABLED', 'var(--alarm)'];
+      if (directions.some(direction => direction.freshness === 'future')) return ['FUTURE', 'var(--amber)'];
+      if (directions.some(direction => direction.freshness === 'stale')) return ['STALE', 'var(--amber)'];
+      return ['ENABLED', 'var(--flux)'];
+    };
+    const routingChannelRows = (routingGraph && routingGraph.channels || []).slice(0, 80).map(channel => {
+      const state = routingState(channel);
+      return { select: () => this.selectRoutingChannel(channel.outpoint), label: (routingNames.get(channel.node1) || this.shortKey(channel.node1)) + ' ⇄ ' + (routingNames.get(channel.node2) || this.shortKey(channel.node2)), outpoint: this.shortKey(channel.outpoint), asset: String(channel.asset && channel.asset.kind || 'unknown').toUpperCase(), state: state[0], stateColor: state[1], background: channel.outpoint === S.routingSelectedChannel ? 'var(--panel-2)' : 'var(--panel)' };
+    });
+    const routingDirections = routingSelected ? (routingSelected.directions || []).map(direction => {
+      const missing = direction.announcement === 'missing', disabled = direction.enabled === false, unknown = direction.enabled == null;
+      const state = missing ? 'MISSING' : disabled ? 'DISABLED' : unknown ? 'UNKNOWN' : String(direction.freshness || 'unknown').toUpperCase();
+      const color = missing || unknown ? 'var(--faint)' : disabled ? 'var(--alarm)' : direction.freshness === 'fresh' ? 'var(--flux)' : 'var(--amber)';
+      return { path: (routingNames.get(direction.from) || this.shortKey(direction.from)) + ' → ' + (routingNames.get(direction.to) || this.shortKey(direction.to)), state, color, fee: direction.feeRateMillionths == null ? '?' : direction.feeRateMillionths, liquidity: direction.outboundLiquidityBaseUnits == null ? 'UNKNOWN' : direction.outboundLiquidityBaseUnits + ' BASE', age: this.routingAge(direction.ageMs) };
+    }) : [];
+    const routingSummary = routingGraph && routingGraph.summary || {};
+    const routingStats = [
+      { label: 'NODES', value: String(routingGraph && routingGraph.nodes ? routingGraph.nodes.length : 0), color: 'var(--bone)' },
+      { label: 'CHANNELS', value: String(routingGraph && routingGraph.channels ? routingGraph.channels.length : 0), color: 'var(--signal)' },
+      { label: 'STALE DIR', value: String(routingSummary.staleDirections || 0), color: routingSummary.staleDirections ? 'var(--amber)' : 'var(--flux)' },
+      { label: 'DISCONNECTED', value: String(routingSummary.unreachableNodes || 0), color: routingSummary.unreachableNodes ? 'var(--alarm)' : 'var(--flux)' },
+      { label: 'DISABLED', value: String(routingSummary.disabledDirections || 0), color: routingSummary.disabledDirections ? 'var(--alarm)' : 'var(--flux)' },
+    ];
+    const routingWarnings = routingGraph && routingGraph.warnings || [];
+    const routingBounded = !!(routingGraph && routingGraph.limits && (routingGraph.limits.nodesTruncated || routingGraph.limits.channelsTruncated));
+    const routingReport = S.routingRoute, routingTrace = routingReport && routingReport.attemptedRoute;
+    const routingRouteHops = routingTrace ? (routingTrace.hops || []).map((hop, index) => ({ index: String(index + 1).padStart(2, '0'), target: hop.targetName, channel: this.shortKey(hop.channelOutpoint), amount: hop.amountReceivedBaseUnits })) : [];
+    const routingFinalSuccess = !!(routingReport && routingReport.finalSuccessfulRoute);
+    const routingFinalLabel = !routingReport ? '' : routingReport.kind === 'fiber-route-inspection' ? 'NOT SENT' : routingFinalSuccess ? 'SUCCESSFUL' : 'NO SUCCESS';
+    const routingFinalColor = routingFinalSuccess ? 'var(--flux)' : routingReport && routingReport.kind === 'fiber-routed-payment' ? 'var(--alarm)' : 'var(--muted)';
+
     const pf = this.node(S.payFrom), pt = this.node(S.payTo);
     // A payment can only route over channels of its own asset, so filter before pathfinding.
     const payChans = S.channels.filter(c => !!c.udt === !!S.payUdt);
@@ -1680,7 +1990,19 @@ class Component extends DCLogic {
       cchFiberLabel: cch && cch.fiber ? cch.fiber.userNode + ' → ' + cch.fiber.hubNode : 'UNAVAILABLE', cchFiberState: cchFiberReady ? 'CHANNEL READY' : 'ACTION REQUIRED', cchFiberColor: cchFiberReady ? 'var(--flux)' : 'var(--alarm)',
       cchOperatorLabel: cch && cch.operator ? cch.operator.containerName : 'UNAVAILABLE', cchOperatorState: cchOperatorReady ? 'RPC READY' : 'ACTION REQUIRED', cchOperatorColor: cchOperatorReady ? 'var(--gold)' : 'var(--alarm)',
       cchLightningState: cchLightningReady ? 'LIQUIDITY READY' : 'ACTION REQUIRED', cchLightningColor: cchLightningReady ? 'var(--signal)' : 'var(--alarm)',
-      enterWizard: this.enterWizard, openPay: this.openPay, openFund: this.openFund, openCap: this.openCap, clearSel: this.clearSel, goFloor: this.goFloor, confirmCloseChannel: this.confirmCloseChannel, requestForceClose: this.requestForceClose, forgeCycle: () => this._forgeCycle(), cyclePayFrom: this.cyclePayFrom, cyclePayTo: this.cyclePayTo,
+      enterWizard: this.enterWizard, openPay: this.openPay, openRouting: this.openRouting, openFund: this.openFund, openCap: this.openCap, clearSel: this.clearSel, goFloor: this.goFloor, confirmCloseChannel: this.confirmCloseChannel, requestForceClose: this.requestForceClose, forgeCycle: () => this._forgeCycle(), cyclePayFrom: this.cyclePayFrom, cyclePayTo: this.cyclePayTo,
+      routingOpen: S.routingOpen, routingLoading: S.routingLoading, routingHasError: !!S.routingError && !S.routingLoading, routingError: S.routingError,
+      routingReady: !!routingGraph && !S.routingLoading && !S.routingError, routingCanvas: this.routingCanvas(),
+      routingSourceLabel: routingGraph ? String(routingGraph.source || 'Fiber RPC').toUpperCase() + ' · OBSERVER ' + String(routingGraph.observer && routingGraph.observer.name || '?').toUpperCase() : 'GRAPH_NODES + GRAPH_CHANNELS',
+      routingStats, routingWarningLabel: (routingWarnings.length ? routingWarnings.length + ' WARNINGS' : 'NO WARNINGS') + (routingBounded ? ' · BOUNDED' : ''), routingWarningColor: routingWarnings.length || routingBounded ? 'var(--amber)' : 'var(--flux)',
+      routingGraphEmpty: !!routingGraph && !(routingGraph.channels || []).length, routingGraphHasChannels: !!routingGraph && !!(routingGraph.channels || []).length,
+      routingChannelRows, routingHasSelectedChannel: !!routingSelected, routingNoSelectedChannel: !routingSelected, routingSelectedOutpoint: routingSelected ? routingSelected.outpoint : '', routingSelectedCapacity: routingSelected && routingSelected.capacityBaseUnits != null ? routingSelected.capacityBaseUnits + ' BASE UNITS' : 'UNKNOWN', routingSelectedAsset: routingSelected ? String(routingSelected.asset && routingSelected.asset.kind || 'unknown').toUpperCase() : '', routingDirections,
+      routingNodeOptions: S.nodes.map(node => ({ name: node.name })), routingFrom: S.routingFrom, routingTo: S.routingTo, routingVia: S.routingVia, routingAmount: String(S.routingAmount),
+      setRoutingFrom: this.setRoutingFrom, setRoutingTo: this.setRoutingTo, setRoutingVia: this.setRoutingVia, setRoutingAmount: this.setRoutingAmount,
+      routingAssetCkb: this.routingAssetCkb, routingAssetUdt: this.routingAssetUdt, routingCkbBg: sw(!S.routingUdt).bg, routingCkbFg: sw(!S.routingUdt).fg, routingUdtBg: sw(S.routingUdt).bg, routingUdtFg: sw(S.routingUdt).fg,
+      reloadRouting: this.reloadRouting, closeRouting: this.closeRouting, inspectRoutingPath: this.inspectRoutingPath, payRoutingPath: this.payRoutingPath,
+      routingActionBusy: S.routingActionBusy, routingActionHasError: !!S.routingActionError, routingActionError: S.routingActionError,
+      routingHasRoute: !!routingTrace, routingRouteHops, routingRouteFee: routingTrace ? (routingTrace.totalFeeBaseUnits == null ? 'UNKNOWN' : routingTrace.totalFeeBaseUnits) : '', routingFinalLabel, routingFinalColor,
       zoomPct: String(S.zoomPct), zoomIn: this.zoomIn, zoomOut: this.zoomOut, zoomFit: this.fitView,
       bootSteps, bootLabel, bootPctW: Math.round(bs / total * 100) + '%',
       isNode: isFloor && !!n, isChannel: isFloor && !!ch,

@@ -49,6 +49,8 @@ when Fiber Forge can identify a specific target and safe next step.
 | `OPERATION_TIMEOUT` | The overall provisioning deadline elapsed; automatic rollback completed first. |
 | `PAYMENT_FAILED` | Fiber could not create or route the requested payment; inspect connectivity and channel balances. |
 | `PROVISION_FAILED` | Provisioning failed at a named node, peer, channel, or routing phase. |
+| `ROUTING_INVALID` | An explicit path, amount, or Fiber-built router did not satisfy the route contract and was not submitted. |
+| `ROUTING_UNAVAILABLE` | The selected node could not provide the required graph data or build the requested explicit route. Ordinary status inspection remains available. |
 | `ROLLBACK_FAILED` | Provisioning failed and automatic cleanup also encountered an error. |
 | `DOCKER_OPERATION_FAILED` | Another named Docker inspection or cleanup operation failed. |
 | `UNEXPECTED` | A failure outside the classified lifecycle paths. |

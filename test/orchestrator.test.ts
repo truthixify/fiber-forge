@@ -112,6 +112,10 @@ interface SimulatedNode {
   settlementStep: number;
   commitmentHash: string | null;
   closingHash: string | null;
+  routedPaymentHash: string | null;
+  lastRouter: unknown[] | null;
+  graphLimits: string[];
+  malformedRouter: boolean;
 }
 
 async function lifecycleFixture(engine = new FakeEngine()): Promise<{
@@ -180,6 +184,10 @@ async function lifecycleFixture(engine = new FakeEngine()): Promise<{
         settlementStep: 0,
         commitmentHash: null,
         closingHash: null,
+        routedPaymentHash: null,
+        lastRouter: null,
+        graphLimits: [],
+        malformedRouter: false,
       },
     ],
     [
@@ -195,6 +203,10 @@ async function lifecycleFixture(engine = new FakeEngine()): Promise<{
         settlementStep: 0,
         commitmentHash: null,
         closingHash: null,
+        routedPaymentHash: null,
+        lastRouter: null,
+        graphLimits: [],
+        malformedRouter: false,
       },
     ],
   ]);
@@ -234,6 +246,99 @@ async function lifecycleFixture(engine = new FakeEngine()): Promise<{
               },
             ],
           };
+        }
+        if (method === "graph_nodes") {
+          const request = params[0] as { limit: string };
+          simulated.graphLimits.push(request.limit);
+          return {
+            nodes: [
+              {
+                pubkey: simulated.pubkey,
+                node_name:
+                  simulated.pubkey === "0xalice" ? "Alice RPC" : "Bob RPC",
+                version: "0.9.0-rc7",
+                addresses: [],
+                features: [],
+                timestamp: `0x${Date.now().toString(16)}`,
+                chain_hash: "0xchain",
+                auto_accept_min_ckb_funding_amount: "0x5f5e100",
+                udt_cfg_infos: [],
+              },
+              {
+                pubkey: simulated.peerPubkey,
+                node_name:
+                  simulated.peerPubkey === "0xalice" ? "Alice RPC" : "Bob RPC",
+                version: "0.9.0-rc7",
+                addresses: [],
+                features: [],
+                timestamp: `0x${Date.now().toString(16)}`,
+                chain_hash: "0xchain",
+                auto_accept_min_ckb_funding_amount: "0x5f5e100",
+                udt_cfg_infos: [],
+              },
+            ],
+            last_cursor: "0x01",
+          };
+        }
+        if (method === "graph_channels") {
+          const request = params[0] as { limit: string };
+          simulated.graphLimits.push(request.limit);
+          const direction = {
+            timestamp: `0x${Date.now().toString(16)}`,
+            enabled: true,
+            outbound_liquidity: "0x174876e800",
+            tlc_expiry_delta: "0x5265c00",
+            tlc_minimum_value: "0x1",
+            fee_rate: "0x0",
+          };
+          return {
+            channels: [
+              {
+                channel_outpoint: "0xoutpoint",
+                node1: "0xalice",
+                node2: "0xbob",
+                created_timestamp: `0x${Date.now().toString(16)}`,
+                update_info_of_node1: direction,
+                update_info_of_node2: direction,
+                capacity: "0x2e90edd000",
+                chain_hash: "0xchain",
+                udt_type_script: null,
+              },
+            ],
+            last_cursor: "0x02",
+          };
+        }
+        if (method === "build_router") {
+          const request = params[0] as {
+            amount: string;
+            hops_info: { pubkey: string }[];
+          };
+          if (simulated.malformedRouter) {
+            return { router_hops: [{ target: request.hops_info[0]?.pubkey }] };
+          }
+          return {
+            router_hops: request.hops_info.map((hop) => ({
+              target: hop.pubkey,
+              channel_outpoint: "0xoutpoint",
+              amount_received: request.amount,
+              incoming_tlc_expiry: "0x5265c00",
+            })),
+          };
+        }
+        if (method === "new_invoice") {
+          return { invoice_address: "fibd1testinvoice" };
+        }
+        if (method === "send_payment_with_router") {
+          const request = params[0] as { router: unknown[] };
+          simulated.lastRouter = request.router;
+          simulated.routedPaymentHash = "0xrouted";
+          return {
+            payment_hash: simulated.routedPaymentHash,
+            status: "Created",
+          };
+        }
+        if (method === "get_payment" && simulated.routedPaymentHash) {
+          return { status: "Success" };
         }
         if (method === "shutdown_channel") {
           const request = params[0] as {
@@ -558,6 +663,120 @@ describe("Orchestrator node lifecycle", () => {
         resource: "NodeLifecycleOptions.timeoutMs",
       });
       expect(await engine.status("forge-duo-node-1")).toBe("running");
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Orchestrator routing inspection", () => {
+  it("queries one observer, caps the live gossip result, and preserves managed names", async () => {
+    const { orchestrator, nodes, stateDir } = await lifecycleFixture();
+    try {
+      const graph = await orchestrator.inspectRoutingGraph("duo", {
+        observer: "alice",
+        limit: 10,
+      });
+      expect(graph).toMatchObject({
+        kind: "fiber-routing-graph",
+        net: "duo",
+        observer: { name: "alice", pubkey: "0xalice" },
+        limits: {
+          requested: 10,
+          maximum: 250,
+          nodesTruncated: false,
+          channelsTruncated: false,
+        },
+        summary: { components: 1, isolatedNodes: 0, unreachableNodes: 0 },
+      });
+      expect(graph.nodes.map((node) => node.name).sort()).toEqual([
+        "alice",
+        "bob",
+      ]);
+      expect(graph.channels[0]).toMatchObject({
+        outpoint: "0xoutpoint",
+        asset: { kind: "ckb" },
+        directions: [
+          { from: "0xalice", to: "0xbob", enabled: true },
+          { from: "0xbob", to: "0xalice", enabled: true },
+        ],
+      });
+      expect(nodes.get(18300)?.graphLimits).toEqual(["0xb", "0xb"]);
+      expect(nodes.get(18301)?.graphLimits).toEqual([]);
+
+      nodes.get(18300)!.graphLimits.length = 0;
+      await orchestrator.inspectRoutingGraph("duo", { observer: "alice" });
+      expect(nodes.get(18300)?.graphLimits).toEqual(["0x65", "0x65"]);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps Fiber's attempted route distinct from terminal payment success", async () => {
+    const { orchestrator, nodes, stateDir } = await lifecycleFixture();
+    try {
+      const inspected = await orchestrator.inspectRoute(
+        "duo",
+        "alice",
+        "bob",
+        1,
+      );
+      expect(inspected).toMatchObject({
+        kind: "fiber-route-inspection",
+        asset: "ckb",
+        requestedAmount: 1,
+        attemptedRoute: {
+          source: "fiber.build_router",
+          pathSource: "explicit",
+          amountBaseUnits: "100000000",
+          totalFeeBaseUnits: "0",
+          hops: [
+            {
+              targetName: "bob",
+              targetPubkey: "0xbob",
+              channelOutpoint: "0xoutpoint",
+              amountReceivedBaseUnits: "100000000",
+            },
+          ],
+        },
+        finalSuccessfulRoute: null,
+      });
+
+      const paid = await orchestrator.payWithRoute("duo", "alice", "bob", 1);
+      expect(paid).toMatchObject({
+        kind: "fiber-routed-payment",
+        status: "Success",
+        paymentHash: "0xrouted",
+        attemptedRoute: { source: "fiber.build_router" },
+        finalSuccessfulRoute: { source: "fiber.build_router" },
+      });
+      expect(nodes.get(18300)?.lastRouter).toEqual([
+        {
+          target: "0xbob",
+          channel_outpoint: "0xoutpoint",
+          amount_received: "0x5f5e100",
+          incoming_tlc_expiry: "0x5265c00",
+        },
+      ]);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects repeated paths and malformed Fiber route responses before sending", async () => {
+    const { orchestrator, nodes, stateDir } = await lifecycleFixture();
+    try {
+      await expect(
+        orchestrator.inspectRoute("duo", "alice", "bob", 1, {
+          via: ["alice"],
+        }),
+      ).rejects.toMatchObject({ code: "ROUTING_INVALID" });
+
+      nodes.get(18300)!.malformedRouter = true;
+      await expect(
+        orchestrator.payWithRoute("duo", "alice", "bob", 1),
+      ).rejects.toMatchObject({ code: "ROUTING_INVALID" });
+      expect(nodes.get(18300)?.lastRouter).toBeNull();
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }

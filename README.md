@@ -61,6 +61,9 @@ second of any change.
 - Click a channel to see its capacity and the balance on each side. The **Send payment across**
   button starts a payment along that channel, with the asset (CKB or UDT) already set to match it.
 - The **Pay** button sends a payment between any two nodes and animates the route it takes.
+- The **Routes** button opens the live Fiber gossip graph, directional channel details, and explicit
+  Fiber-built route inspection. Inferred previews and successful payment routes are labeled
+  separately.
 - The **Spawn** button opens the creation wizard. As you select a preset, the preview redraws to show
   that topology; you can adjust the node count and then create the network without leaving the browser.
 - The creation screen also lists the networks you already have. Click one to reopen it and pick up
@@ -92,6 +95,9 @@ fiber-forge down --all              # remove every network at once
 
 # move value (node names come from `up` or `status`)
 fiber-forge pay trio feynman galileo 42          # multi-hop payment
+fiber-forge route graph trio --node feynman --json
+fiber-forge route inspect trio feynman galileo 42 --via lorentz --json
+fiber-forge route pay trio feynman galileo 42 --via lorentz --json
 fiber-forge invoice trio lorentz 100             # create an invoice
 fiber-forge channel open trio feynman galileo 1000
 fiber-forge channel ls trio
@@ -163,7 +169,8 @@ The SDK exposes high-level network lifecycle and topology operations. Docker int
 keys, raw RPC helpers, and source-file imports are not public API. See [the SDK contract](docs/sdk.md)
 for the complete surface and compatibility policy. The [integration guide](docs/integration.md)
 connects the CLI, SDK, GitHub Action, standalone example, sandbox, release status, and current
-verification evidence without assuming repository internals.
+verification evidence without assuming repository internals. [Routing inspection](docs/routing-inspection.md)
+documents the exact pinned Fiber data sources and the boundary between inferred and actual routes.
 
 ## Topologies
 
@@ -241,7 +248,8 @@ also checks the Docker daemon architecture and both image manifest lists before 
   named extension-free xUDT work while deferring RCE policy claims until Fiber exposes a complete
   proof-witness lifecycle.
 - **Resilience** — stuck HTLC simulation and force-close/on-chain settlement visibility.
-- **Routing** — multi-path payments, per-hop fee and route inspection, and a view of the gossip graph.
+- **Routing** — extend the shipped explicit-route inspector with automatic-route visibility if Fiber
+  exposes it in a future release, then evaluate multi-path payment inspection.
 - **Scenarios** — a curated library of portable failure and recovery recipes.
 - **Cross-chain** — the local-only [CCH compatibility and trust boundary](docs/cch-feasibility.md)
   is proven in both directions, and the [disposable Lightning backend](docs/lightning-backend.md) is

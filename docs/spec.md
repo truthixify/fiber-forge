@@ -117,6 +117,9 @@ GUI (React/vite, served on localhost) ──► fiber-forge daemon HTTP+WS API (
   hashed bundle. Inspect performs no execution. Replay validates before Docker access, requires a
   fresh caller-selected network, creates new keys/state, compares portable outcomes, and purges all
   resources it created.
+- FR-15 Route inspection preserves live Fiber gossip and `build_router` data with source labels,
+  precision-safe quantities, bounded output, and explicit attempted-versus-successful semantics.
+  Locally inferred connectivity is never represented as the route chosen by Fiber.
 
 ## 7. Topology schema (YAML)
 

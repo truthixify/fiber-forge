@@ -126,6 +126,58 @@ describe("FnnRpc", () => {
     expect(t.calls[0].params).toEqual([{ pubkey: "0xpeer" }]);
   });
 
+  it("queries bounded raw gossip pages using Fiber's hex limit", async () => {
+    const t = new FakeTransport(() => ({ nodes: [], channels: [] }));
+    const rpc = new FnnRpc(t);
+    await rpc.graphNodes(251);
+    await rpc.graphChannels(17);
+    expect(t.calls).toEqual([
+      { method: "graph_nodes", params: [{ limit: "0xfb" }] },
+      { method: "graph_channels", params: [{ limit: "0x11" }] },
+    ]);
+  });
+
+  it("maps explicit route construction and execution to the pinned Fiber RPC", async () => {
+    const router = [
+      {
+        target: "0xbob",
+        channel_outpoint: "0xoutpoint",
+        amount_received: "0x5f5e100",
+        incoming_tlc_expiry: "0x186a0",
+      },
+    ];
+    const t = new FakeTransport((method) =>
+      method === "build_router"
+        ? { router_hops: router }
+        : { payment_hash: "0xhash", status: "Created" },
+    );
+    const rpc = new FnnRpc(t);
+    const built = await rpc.buildRouter({
+      amount: "0x5f5e100",
+      hops: [{ pubkey: "0xbob" }],
+    });
+    await rpc.sendPaymentWithRouter({
+      invoice: "fibd1invoice",
+      router: (built as { router_hops: typeof router }).router_hops,
+    });
+
+    expect(t.calls).toEqual([
+      {
+        method: "build_router",
+        params: [
+          {
+            amount: "0x5f5e100",
+            hops_info: [{ pubkey: "0xbob" }],
+          },
+        ],
+      },
+      {
+        method: "send_payment_with_router",
+        params: [{ invoice: "fibd1invoice", router }],
+      },
+    ]);
+  });
+
   it("includes closed channels only when requested", async () => {
     const t = new FakeTransport(() => ({ channels: [] }));
     await new FnnRpc(t).listChannels(undefined, true);

@@ -35,6 +35,10 @@ import {
   type ScenarioReport,
   type ScenarioRunOptions,
   type UpOptions,
+  type ExplicitRouteOptions,
+  type RouteInspectionReport,
+  type RoutedPaymentReport,
+  type RoutingGraphSnapshot,
 } from "@truthixify/fiber-forge/sdk";
 
 type Equal<Left, Right> =
@@ -111,6 +115,8 @@ type ExpectedForgeErrorCode =
   | "PORT_IN_USE"
   | "PROVISION_FAILED"
   | "ROLLBACK_FAILED"
+  | "ROUTING_INVALID"
+  | "ROUTING_UNAVAILABLE"
   | "UNEXPECTED";
 
 type _UpOptionsContract = Assert<Equal<UpOptions, ExpectedUpOptions>>;
@@ -149,6 +155,9 @@ type AppForge = Pick<
   | "inspectBundle"
   | "replayBundle"
   | "inspect"
+  | "inspectRoutingGraph"
+  | "inspectRoute"
+  | "payWithRoute"
   | "cchStatus"
   | "proveCchTransfers"
   | "inspectNode"
@@ -169,6 +178,27 @@ type AppForge = Pick<
 async function exerciseContract(client: AppForge): Promise<void> {
   const layout: NetworkLayout = await client.up(topology, upOptions);
   const view: NetworkView = await client.inspect(layout.net);
+  const graph: RoutingGraphSnapshot = await client.inspectRoutingGraph(
+    layout.net,
+    { observer: topology.nodes[0].name, limit: 50 },
+  );
+  const routeOptions: ExplicitRouteOptions = {
+    via: topology.nodes.slice(1, -1).map((node) => node.name),
+  };
+  const route: Promise<RouteInspectionReport> = client.inspectRoute(
+    layout.net,
+    topology.nodes[0].name,
+    topology.nodes.at(-1)!.name,
+    1,
+    routeOptions,
+  );
+  const routedPayment: Promise<RoutedPaymentReport> = client.payWithRoute(
+    layout.net,
+    topology.nodes[0].name,
+    topology.nodes.at(-1)!.name,
+    1,
+    routeOptions,
+  );
   const cch: CchTopologyStatus = await client.cchStatus(layout.net);
   const cchProofOptions: CchProofOptions = {
     timeoutMs: DEFAULT_CCH_PROOF_TIMEOUT_MS,
@@ -207,6 +237,9 @@ async function exerciseContract(client: AppForge): Promise<void> {
   void forceOptions;
   void settlement;
   void inspected;
+  void graph;
+  void route;
+  void routedPayment;
   void lifecycleOptions;
   await client.down(view.net, downOptions);
 }

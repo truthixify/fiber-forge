@@ -85,6 +85,9 @@ assert.equal(typeof forge.exportBundle, "function");
 assert.equal(typeof forge.inspectBundle, "function");
 assert.equal(typeof forge.replayBundle, "function");
 assert.equal(typeof forge.proveCchTransfers, "function");
+assert.equal(typeof forge.inspectRoutingGraph, "function");
+assert.equal(typeof forge.inspectRoute, "function");
+assert.equal(typeof forge.payWithRoute, "function");
 assert.equal(sdk.planNetwork(sdk.preset("duo")).nodes.length, 2);
 assert.deepEqual(
   sdk.errorDetails(

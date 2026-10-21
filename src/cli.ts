@@ -28,6 +28,11 @@ import {
   Orchestrator,
 } from "./orchestrator.js";
 import { preset, presetHelp } from "./presets.js";
+import {
+  type RouteInspectionReport,
+  type RoutedPaymentReport,
+  type RoutingGraphSnapshot,
+} from "./routing.js";
 import { parseScenario, runScenario } from "./scenario.js";
 import { type Topology, parseTopology } from "./topology.js";
 import * as ui from "./ui.js";
@@ -373,6 +378,129 @@ function printSettlement(report: ChannelSettlementReport): void {
     console.log(`  ${ui.muted("next")}         ${ui.text(report.nextAction)}`);
   }
   console.log("");
+}
+
+function printRoutingGraph(graph: RoutingGraphSnapshot): void {
+  console.log(ui.heading2(`routing graph · ${graph.net}`));
+  console.log(
+    `  ${ui.muted("observer")}  ${ui.text(graph.observer.name)}   ${ui.muted(ui.shortHash(graph.observer.pubkey))}`,
+  );
+  console.log(
+    `  ${ui.muted("source")}    ${ui.text(graph.source)}   ${ui.muted(`${graph.nodes.length} nodes · ${graph.channels.length} channels`)}`,
+  );
+  console.log(ui.heading2("announcements"));
+  if (graph.nodes.length === 0) {
+    console.log(ui.muted("  no graph nodes returned"));
+  } else {
+    console.log(
+      ui.table(
+        ["NODE", "ANNOUNCED", "FRESHNESS", "DEGREE", "PUBKEY"],
+        graph.nodes.map((node) => [
+          ui.text(node.name),
+          node.graphAdvertised ? ui.success("yes") : ui.muted("no"),
+          node.freshness === "fresh"
+            ? ui.success(node.freshness)
+            : node.freshness === "unknown"
+              ? ui.muted(node.freshness)
+              : ui.gold(node.freshness),
+          ui.muted(String(node.degree)),
+          ui.dim(ui.shortHash(node.pubkey)),
+        ]),
+      ),
+    );
+  }
+  console.log(ui.heading2("directional channels"));
+  if (graph.channels.length === 0) {
+    console.log(ui.muted("  no graph channels returned"));
+  } else {
+    const names = new Map(graph.nodes.map((node) => [node.pubkey, node.name]));
+    console.log(
+      ui.table(
+        ["FROM", "TO", "STATE", "FEE PPM", "LIQUIDITY", "OUTPOINT"],
+        graph.channels.flatMap((channel) =>
+          channel.directions.map((direction) => [
+            ui.text(names.get(direction.from) ?? ui.shortHash(direction.from)),
+            ui.text(names.get(direction.to) ?? ui.shortHash(direction.to)),
+            direction.announcement === "missing"
+              ? ui.muted("missing")
+              : direction.enabled === true
+                ? ui.success(direction.freshness)
+                : direction.enabled === false
+                  ? ui.error("disabled")
+                  : ui.muted("unknown"),
+            ui.muted(direction.feeRateMillionths ?? "?"),
+            ui.muted(direction.outboundLiquidityBaseUnits ?? "unknown"),
+            ui.dim(ui.shortHash(channel.outpoint)),
+          ]),
+        ),
+      ),
+    );
+  }
+  if (graph.limits.nodesTruncated || graph.limits.channelsTruncated) {
+    console.log(
+      `\n  ${ui.gold("bounded")} ${ui.muted(`output capped at ${graph.limits.requested} nodes/channels`)}`,
+    );
+  }
+  if (graph.warnings.length > 0) {
+    console.log(
+      `  ${ui.gold(`${graph.warnings.length} warning${graph.warnings.length === 1 ? "" : "s"}`)} ${ui.muted("use --json for field paths")}`,
+    );
+  }
+  console.log("");
+}
+
+function printRouteInspection(
+  report: RouteInspectionReport,
+  inspectionOnly = true,
+): void {
+  const route = report.attemptedRoute;
+  console.log(ui.heading2(`Fiber route · ${report.net}`));
+  console.log(
+    `  ${ui.muted("source")}  ${ui.text(route.source)}   ${ui.muted("explicit path")}`,
+  );
+  console.log(
+    `  ${ui.muted("path")}    ${route.requestedPath.map((node) => ui.text(node.name)).join(ui.muted(" -> "))}`,
+  );
+  for (const [index, hop] of route.hops.entries()) {
+    console.log(
+      `  ${ui.muted(String(index + 1).padStart(2, "0"))}      ${ui.text(hop.targetName)}   ${ui.dim(ui.shortHash(hop.channelOutpoint))}   ${ui.muted(`${hop.amountReceivedBaseUnits} base units`)}`,
+    );
+  }
+  console.log(
+    `  ${ui.muted("fee")}     ${ui.gold(route.totalFeeBaseUnits ?? "unknown")} ${ui.muted("base units · derived from Fiber hop amounts")}`,
+  );
+  if (inspectionOnly) {
+    console.log(
+      `  ${ui.muted("result")}  ${ui.text("attempted route only")}   ${ui.muted("no payment sent")}\n`,
+    );
+  }
+}
+
+function printRoutedPayment(report: RoutedPaymentReport): void {
+  printRouteInspection(
+    {
+      schemaVersion: 1,
+      kind: "fiber-route-inspection",
+      net: report.net,
+      observer: report.attemptedRoute.requestedPath[0],
+      asset: report.asset,
+      requestedAmount: report.amount,
+      attemptedRoute: report.attemptedRoute,
+      finalSuccessfulRoute: null,
+      warnings: report.warnings,
+    },
+    false,
+  );
+  console.log(
+    `  ${ui.muted("payment")} ${report.status === "Success" ? ui.success(report.status) : ui.error(report.status)}   ${ui.dim(ui.shortHash(report.paymentHash))}`,
+  );
+  console.log(
+    `  ${ui.muted("final")}   ${report.finalSuccessfulRoute ? ui.success("successful route confirmed") : ui.muted("no successful route")}\n`,
+  );
+}
+
+function parseVia(value?: string): string[] {
+  return value ? value.split(",").map((name) => name.trim()) : [];
 }
 
 function printLightningStatus(status: LightningBackendStatus): void {
@@ -790,6 +918,120 @@ export function buildCli(): Command {
           progress.fail("settle", details.message);
           fail(details.message, details.action);
         }
+      },
+    );
+
+  const route = program
+    .command("route")
+    .description(
+      "inspect Fiber gossip and execute explicit Fiber-built routes",
+    );
+
+  route
+    .command("graph")
+    .description("inspect one node's live Fiber gossip graph")
+    .argument("<net>", "network name")
+    .option("--node <name>", "managed node whose graph is queried")
+    .option(
+      "--limit <n>",
+      "maximum nodes and channels returned (1-250)",
+      (value) => Number.parseInt(value, 10),
+      100,
+    )
+    .option("--json", "print machine-readable JSON")
+    .action(
+      async (
+        net: string,
+        options: { node?: string; limit: number; json?: boolean },
+      ) => {
+        const graph = await orchestrator().inspectRoutingGraph(net, {
+          observer: options.node,
+          limit: options.limit,
+        });
+        if (options.json) printJson(graph);
+        else printRoutingGraph(graph);
+      },
+    );
+
+  route
+    .command("inspect")
+    .description("ask Fiber to validate and price an explicit node path")
+    .argument("<net>", "network name")
+    .argument("<from>", "sender node")
+    .argument("<to>", "receiver node")
+    .argument("<amount>", "whole CKB or UDT amount", (value) => Number(value))
+    .option("--via <nodes>", "ordered intermediate names, comma-separated")
+    .option("--udt", "inspect a bundled dev-UDT route")
+    .option(
+      "--final-expiry <ms>",
+      "override Fiber's final TLC expiry delta",
+      (value) => Number.parseInt(value, 10),
+    )
+    .option("--json", "print machine-readable JSON")
+    .action(
+      async (
+        net: string,
+        from: string,
+        to: string,
+        amount: number,
+        options: {
+          via?: string;
+          udt?: boolean;
+          finalExpiry?: number;
+          json?: boolean;
+        },
+      ) => {
+        const report = await orchestrator().inspectRoute(
+          net,
+          from,
+          to,
+          amount,
+          {
+            via: parseVia(options.via),
+            udt: options.udt,
+            finalTlcExpiryDeltaMs: options.finalExpiry,
+          },
+        );
+        if (options.json) printJson(report);
+        else printRouteInspection(report);
+      },
+    );
+
+  route
+    .command("pay")
+    .description("send a payment over an explicit Fiber-built route")
+    .argument("<net>", "network name")
+    .argument("<from>", "sender node")
+    .argument("<to>", "receiver node")
+    .argument("<amount>", "whole CKB or UDT amount", (value) => Number(value))
+    .option("--via <nodes>", "ordered intermediate names, comma-separated")
+    .option("--udt", "use the bundled dev UDT")
+    .option("--description <text>", "invoice description")
+    .option("--json", "print machine-readable JSON")
+    .action(
+      async (
+        net: string,
+        from: string,
+        to: string,
+        amount: number,
+        options: {
+          via?: string;
+          udt?: boolean;
+          description?: string;
+          json?: boolean;
+        },
+      ) => {
+        const report = await orchestrator().payWithRoute(
+          net,
+          from,
+          to,
+          amount,
+          { via: parseVia(options.via), udt: options.udt },
+          options.description,
+        );
+        if (options.json) printJson(report);
+        else printRoutedPayment(report);
+        if (report.status !== "Success") process.exitCode = 2;
       },
     );
 

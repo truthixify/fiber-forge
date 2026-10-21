@@ -27,6 +27,13 @@ import {
   type UpOptions,
 } from "./orchestrator.js";
 import {
+  type ExplicitRouteOptions,
+  type RouteInspectionReport,
+  type RoutedPaymentReport,
+  type RoutingGraphOptions,
+  type RoutingGraphSnapshot,
+} from "./routing.js";
+import {
   type Scenario,
   type ScenarioReport,
   type ScenarioRunOptions,
@@ -137,6 +144,21 @@ export type {
   PaymentReport,
   UpOptions,
 } from "./orchestrator.js";
+export type {
+  ExplicitRouteOptions,
+  FiberRouteTrace,
+  FiberRouterHop,
+  InferredRouteCandidate,
+  RouteInspectionReport,
+  RoutedPaymentReport,
+  RoutingChannel,
+  RoutingDirection,
+  RoutingFreshness,
+  RoutingGraphOptions,
+  RoutingGraphSnapshot,
+  RoutingNode,
+  RoutingWarning,
+} from "./routing.js";
 /** Options for constructing the default Docker-backed SDK client. */
 export interface FiberForgeOptions {
   /** Directory used for persisted network layouts. Defaults to `~/.fiber-forge`. */
@@ -171,6 +193,25 @@ export interface FiberForge {
     options: ReplayBundleOptions,
   ): Promise<ReplayBundleResult>;
   inspect(net: string): Promise<NetworkView>;
+  inspectRoutingGraph(
+    net: string,
+    options?: RoutingGraphOptions,
+  ): Promise<RoutingGraphSnapshot>;
+  inspectRoute(
+    net: string,
+    from: string,
+    to: string,
+    amount: number,
+    options?: ExplicitRouteOptions,
+  ): Promise<RouteInspectionReport>;
+  payWithRoute(
+    net: string,
+    from: string,
+    to: string,
+    amount: number,
+    options?: ExplicitRouteOptions,
+    description?: string,
+  ): Promise<RoutedPaymentReport>;
   cchStatus(net: string): Promise<CchTopologyStatus>;
   proveCchTransfers(
     net: string,

@@ -48,7 +48,8 @@ The SDK exports:
 - scenario parsing/running plus typed recipe export, inert bundle inspection, and fresh replay;
 - the `duo`, `trio`, `hub`, and opt-in `cch` resolver plus line, ring, and star builders;
 - `ForgeError`, `errorDetails`, and the stable `ForgeErrorCode`/`ForgeErrorDetails` types;
-- layout, network view, channel, payment, and lifecycle option types; and
+- layout, network view, channel, payment, routing graph, explicit route, and lifecycle option types;
+  and
 - `version`, read from the installed package metadata.
 
 Low-level Docker operations, generated keys, dev-chain funding internals, raw Fiber RPC helpers,
@@ -66,6 +67,9 @@ unsupported.
 | `inspectBundle(path)` | Returns verified manifest, recipe summary, and compatibility without exposing artifact contents. | Read-only: no Docker call, image pull, extraction, adjacent file, or scenario execution. The complete archive is validated first. |
 | `replayBundle(path, options)` | Provisions `options.network`, runs the recipe, compares portable outcomes, and returns `ReplayBundleResult`. | Requires an absent caller-selected target, exact package/image pins, a supported host, and a bounded timeout. Success, mismatch, cancellation, and post-provision failure all purge the target before return/rejection. |
 | `inspect(net)` / `list()` | Return `NetworkView` or `NetworkSummary[]`. | Best-effort inspection: unreachable nodes/chains are represented as stopped, zero, or omitted live data instead of making the whole view unavailable. RPC calls have a ten-second request bound. |
+| `inspectRoutingGraph(net, options?)` | Returns a normalized `RoutingGraphSnapshot` from one managed node's live `graph_nodes` and `graph_channels` RPCs. | Defaults to 100 records and caps requests at 250. Invalid records become bounded warnings or are skipped; this separate query cannot break ordinary `inspect` polling. |
+| `inspectRoute(net, from, to, amount, options?)` | Returns Fiber's exact `build_router` hops for an explicit path; `options.via` names ordered intermediates. | Validates a simple managed-node path of at most eight hops. It does not send value, so `finalSuccessfulRoute` is always `null`. |
+| `payWithRoute(net, from, to, amount, options?, description?)` | Builds and submits an explicit route, then returns attempted and final-successful route fields. | The normalized router must exactly match the requested path and amount before submission. `finalSuccessfulRoute` exists only after terminal Fiber `Success`. |
 | `cchStatus(net)` | Returns the versioned Fiber/CCH/Lightning boundary status for an integrated CCH topology. | Reports `unsupported` for an ordinary Fiber network without pulling or starting any CCH dependency. CCH readiness is derived from the operator RPC, private Lightning backend, both Fiber nodes, and the exact wrapped channel. |
 | `proveCchTransfers(net, options?)` | Executes Fiber-to-Lightning and Lightning-to-Fiber transfers and returns a secret-safe `CchTransferProofReport`. | Local `cch` topologies only. The overall terminal-settlement timeout defaults to two minutes and accepts `signal`; success requires CCH `Success`, matching payment hashes, terminal Fiber/Lightning state, and exact balance deltas in both directions. |
 | `inspectNode(net, node)` | Returns a `NodeLifecycleReport` without mutation. | Reads actual Docker state. A running node is checked for RPC identity, peers, and channels; stopped or externally removed containers remain explicit states. |
@@ -120,6 +124,11 @@ try {
 
 Unknown exceptions are normalized to `UNEXPECTED`. The complete code list and JSON shape are in
 [Lifecycle errors](lifecycle-errors.md).
+
+Graph-derived candidates are inference, not payment evidence. The pinned release does not expose
+the automatically chosen route from a production `get_payment` response. See
+[Routing and gossip inspection](routing-inspection.md) for source fields, labels, bounds, and CLI
+examples.
 
 ## Dependency Injection
 

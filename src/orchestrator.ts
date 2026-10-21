@@ -96,6 +96,7 @@ import { runtimeImages } from "./package-metadata.js";
 import { findFreePort, findFreePortBlock, isPortFree } from "./ports.js";
 import {
   type Channel,
+  type FiberRpcRouterHop,
   FnnRpc,
   HttpTransport,
   type NodeInfo,
@@ -109,6 +110,20 @@ import {
   peerIdOf,
   shannonHexToCkb,
 } from "./rpc.js";
+import {
+  DEFAULT_ROUTING_GRAPH_LIMIT,
+  MAX_ROUTE_HOPS,
+  clampRoutingGraphLimit,
+  normalizeFiberRoute,
+  normalizeRoutingGraph,
+  type ExplicitRouteOptions,
+  type FiberRouteTrace,
+  type RouteInspectionReport,
+  type RoutedPaymentReport,
+  type RoutingGraphOptions,
+  type RoutingGraphSnapshot,
+  type RoutingWarning,
+} from "./routing.js";
 import {
   parseScenario,
   runScenario as executeScenario,
@@ -1326,6 +1341,129 @@ export class Orchestrator {
         );
       }
       await waitWithGuard(1500, guard, resource);
+    }
+  }
+
+  /** Inspect one managed node's live Fiber gossip graph through a bounded, defensive model. */
+  async inspectRoutingGraph(
+    net: string,
+    options: RoutingGraphOptions = {},
+  ): Promise<RoutingGraphSnapshot> {
+    const state = await this.readState(net);
+    const observer = this.requireNode(
+      state,
+      options.observer ?? state.nodes[0]?.name ?? "",
+    );
+    const limit = clampRoutingGraphLimit(
+      options.limit ?? DEFAULT_ROUTING_GRAPH_LIMIT,
+    );
+    const rpc = this.rpcFor(observer.rpcHostPort);
+    let nodePage: unknown;
+    let channelPage: unknown;
+    try {
+      // One extra record makes truncation observable while the public result remains capped.
+      [nodePage, channelPage] = await Promise.all([
+        rpc.graphNodes(limit + 1),
+        rpc.graphChannels(limit + 1),
+      ]);
+    } catch (error) {
+      throw new ForgeError(
+        "ROUTING_UNAVAILABLE",
+        `routing graph is unavailable from node "${observer.name}"`,
+        {
+          resource: `${net}/${observer.name}`,
+          action:
+            "verify the pinned Fiber RPC supports graph_nodes and graph_channels, then retry",
+          cause: error,
+        },
+      );
+    }
+    return normalizeRoutingGraph({
+      net,
+      observer: { name: observer.name, pubkey: observer.pubkey },
+      knownNodes: state.nodes.map(({ name, pubkey }) => ({ name, pubkey })),
+      nodePage,
+      channelPage,
+      limit,
+    });
+  }
+
+  /** Ask Fiber to validate, select channels for, and price an explicit managed-node path. */
+  async inspectRoute(
+    net: string,
+    from: string,
+    to: string,
+    amount: number,
+    options: ExplicitRouteOptions = {},
+  ): Promise<RouteInspectionReport> {
+    const built = await this.buildExplicitRoute(net, from, to, amount, options);
+    return {
+      schemaVersion: 1,
+      kind: "fiber-route-inspection",
+      net,
+      observer: { name: built.path[0].name, pubkey: built.path[0].pubkey },
+      asset: built.asset,
+      requestedAmount: amount,
+      attemptedRoute: built.route,
+      finalSuccessfulRoute: null,
+      warnings: built.warnings,
+    };
+  }
+
+  /** Execute the exact route returned by Fiber and report attempted versus successful route state. */
+  async payWithRoute(
+    net: string,
+    from: string,
+    to: string,
+    amount: number,
+    options: ExplicitRouteOptions = {},
+    description?: string,
+  ): Promise<RoutedPaymentReport> {
+    const built = await this.buildExplicitRoute(net, from, to, amount, options);
+    try {
+      const receiver = built.state.nodes.find((node) => node.name === to)!;
+      const { invoice_address } = await this.rpcFor(
+        receiver.rpcHostPort,
+      ).newInvoice({
+        amount: `0x${built.amountBaseUnits.toString(16)}`,
+        description,
+        udtTypeScript: built.udtTypeScript,
+      });
+      const sent = await built.rpc.sendPaymentWithRouter({
+        invoice: invoice_address,
+        router: built.rawRouter,
+        udtTypeScript: built.udtTypeScript,
+      });
+      if (!sent || typeof sent.payment_hash !== "string") {
+        throw new Error("send_payment_with_router returned no payment hash");
+      }
+      const status = await this.waitPayment(built.rpc, sent.payment_hash);
+      return {
+        schemaVersion: 1,
+        kind: "fiber-routed-payment",
+        net,
+        from,
+        to,
+        asset: built.asset,
+        amount,
+        paymentHash: sent.payment_hash,
+        status,
+        attemptedRoute: built.route,
+        finalSuccessfulRoute: status === "Success" ? built.route : null,
+        warnings: built.warnings,
+      };
+    } catch (error) {
+      if (error instanceof ForgeError) throw error;
+      throw new ForgeError(
+        "PAYMENT_FAILED",
+        `routed payment from "${from}" to "${to}" failed`,
+        {
+          resource: `${net}/${from}/${to}`,
+          action:
+            "inspect the attempted Fiber route and directional liquidity, then retry",
+          cause: error,
+        },
+      );
     }
   }
 
@@ -3766,6 +3904,164 @@ export class Orchestrator {
       }
       await sleep(Math.min(500, Math.max(1, deadline - Date.now())));
     }
+  }
+
+  private async buildExplicitRoute(
+    net: string,
+    from: string,
+    to: string,
+    amount: number,
+    options: ExplicitRouteOptions,
+  ): Promise<{
+    state: NetworkState;
+    path: NetworkState["nodes"];
+    rpc: FnnRpc;
+    asset: "ckb" | "udt";
+    amountBaseUnits: bigint;
+    udtTypeScript: UdtScript | undefined;
+    rawRouter: FiberRpcRouterHop[];
+    route: FiberRouteTrace;
+    warnings: RoutingWarning[];
+  }> {
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      throw new ForgeError(
+        "ROUTING_INVALID",
+        "route amount must be a positive whole number",
+        {
+          resource: "amount",
+          action: "provide a positive whole CKB or UDT amount",
+        },
+      );
+    }
+    const via = options.via ?? [];
+    if (
+      !Array.isArray(via) ||
+      via.some((name) => typeof name !== "string" || name.length === 0)
+    ) {
+      throw new ForgeError(
+        "ROUTING_INVALID",
+        "route intermediates must be an ordered list of managed node names",
+        {
+          resource: "via",
+          action: "provide node names in source-to-target order",
+        },
+      );
+    }
+    if (
+      options.finalTlcExpiryDeltaMs !== undefined &&
+      (!Number.isSafeInteger(options.finalTlcExpiryDeltaMs) ||
+        options.finalTlcExpiryDeltaMs <= 0)
+    ) {
+      throw new ForgeError(
+        "ROUTING_INVALID",
+        "final TLC expiry delta must be a positive whole number of milliseconds",
+        {
+          resource: "finalTlcExpiryDeltaMs",
+          action: "remove the override or provide a positive integer",
+        },
+      );
+    }
+
+    const names = [from, ...via, to];
+    if (from === to || new Set(names).size !== names.length) {
+      throw new ForgeError(
+        "ROUTING_INVALID",
+        "explicit payment routes cannot repeat the sender, receiver, or an intermediate node",
+        {
+          resource: `${net}/${names.join("->")}`,
+          action:
+            "provide a simple ordered path between distinct managed nodes",
+        },
+      );
+    }
+    if (names.length - 1 > MAX_ROUTE_HOPS) {
+      throw new ForgeError(
+        "ROUTING_INVALID",
+        `explicit route exceeds the ${MAX_ROUTE_HOPS}-hop inspection bound`,
+        {
+          resource: `${net}/${names.join("->")}`,
+          action: `use at most ${MAX_ROUTE_HOPS - 1} intermediate nodes`,
+        },
+      );
+    }
+    const state = await this.readState(net);
+    const path = names.map((name) => this.requireNode(state, name));
+    const amountBaseUnits = BigInt(amount) * 100_000_000n;
+    const udtTypeScript = options.udt
+      ? await this.makeChain(state.ckbHostPort).udtScript()
+      : undefined;
+    const rpc = this.rpcFor(path[0].rpcHostPort);
+    let raw: unknown;
+    try {
+      raw = await rpc.buildRouter({
+        amount: `0x${amountBaseUnits.toString(16)}`,
+        hops: path.slice(1).map((node) => ({ pubkey: node.pubkey })),
+        udtTypeScript,
+        ...(options.finalTlcExpiryDeltaMs === undefined
+          ? {}
+          : {
+              finalTlcExpiryDelta: `0x${BigInt(
+                options.finalTlcExpiryDeltaMs,
+              ).toString(16)}`,
+            }),
+      });
+    } catch (error) {
+      throw new ForgeError(
+        "ROUTING_UNAVAILABLE",
+        `Fiber could not build the explicit route ${names.join(" -> ")}`,
+        {
+          resource: `${net}/${names.join("->")}`,
+          action:
+            "inspect graph direction, freshness, capacity, and outbound liquidity, then retry",
+          cause: error,
+        },
+      );
+    }
+    const root =
+      typeof raw === "object" && raw !== null && !Array.isArray(raw)
+        ? (raw as Record<string, unknown>)
+        : null;
+    const rawRouter = Array.isArray(root?.router_hops) ? root.router_hops : [];
+    const normalized = normalizeFiberRoute(
+      raw,
+      path.map(({ name, pubkey }) => ({ name, pubkey })),
+      amountBaseUnits,
+    );
+    const expectedTargets = path.slice(1).map((node) => node.pubkey);
+    const observedTargets = normalized.route.hops.map(
+      (hop) => hop.targetPubkey,
+    );
+    const lastAmount = normalized.route.hops.at(-1)?.amountReceivedBaseUnits;
+    const valid =
+      rawRouter.length === expectedTargets.length &&
+      normalized.route.hops.length === expectedTargets.length &&
+      observedTargets.every(
+        (pubkey, index) => pubkey === expectedTargets[index],
+      ) &&
+      lastAmount === amountBaseUnits.toString() &&
+      normalized.route.totalFeeBaseUnits !== null;
+    if (!valid) {
+      throw new ForgeError(
+        "ROUTING_INVALID",
+        "Fiber returned a route that did not match the explicit path or requested amount",
+        {
+          resource: `${net}/${names.join("->")}`,
+          action:
+            "verify the pinned Fiber RPC response shape before executing this route",
+        },
+      );
+    }
+    return {
+      state,
+      path,
+      rpc,
+      asset: options.udt ? "udt" : "ckb",
+      amountBaseUnits,
+      udtTypeScript,
+      rawRouter: rawRouter as FiberRpcRouterHop[],
+      route: normalized.route,
+      warnings: normalized.warnings,
+    };
   }
 
   private async payInvoiceInternal(

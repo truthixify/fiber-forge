@@ -100,6 +100,22 @@ export interface OpenChannelParams {
   udtTypeScript?: UdtScript;
 }
 
+export interface BuildRouterParams {
+  /** Payment amount in shannons or UDT base units, encoded as `0x` hex. */
+  amount: string;
+  /** Ordered hops after the source; the final entry is the payment target. */
+  hops: { pubkey: string; channelOutpoint?: string }[];
+  udtTypeScript?: UdtScript;
+  finalTlcExpiryDelta?: string;
+}
+
+export interface FiberRpcRouterHop {
+  target: string;
+  channel_outpoint: string;
+  amount_received: string;
+  incoming_tlc_expiry: string;
+}
+
 /** The typed FNN client. */
 export class FnnRpc {
   constructor(private readonly transport: RpcTransport) {}
@@ -163,6 +179,58 @@ export class FnnRpc {
       channels?: unknown[];
     };
     return result.channels?.length ?? 0;
+  }
+
+  /** Fetch one bounded raw node page. Callers must normalize the untrusted response shape. */
+  graphNodes(limit: number): Promise<unknown> {
+    return this.transport.call("graph_nodes", [
+      { limit: `0x${BigInt(limit).toString(16)}` },
+    ]);
+  }
+
+  /** Fetch one bounded raw channel page. Callers must normalize the untrusted response shape. */
+  graphChannels(limit: number): Promise<unknown> {
+    return this.transport.call("graph_channels", [
+      { limit: `0x${BigInt(limit).toString(16)}` },
+    ]);
+  }
+
+  /** Ask Fiber to validate and fully price an explicit ordered node path. */
+  buildRouter(params: BuildRouterParams): Promise<unknown> {
+    return this.transport.call("build_router", [
+      {
+        amount: params.amount,
+        hops_info: params.hops.map((hop) => ({
+          pubkey: hop.pubkey,
+          ...(hop.channelOutpoint
+            ? { channel_outpoint: hop.channelOutpoint }
+            : {}),
+        })),
+        ...(params.udtTypeScript
+          ? { udt_type_script: params.udtTypeScript }
+          : {}),
+        ...(params.finalTlcExpiryDelta
+          ? { final_tlc_expiry_delta: params.finalTlcExpiryDelta }
+          : {}),
+      },
+    ]);
+  }
+
+  /** Execute exactly the router previously returned by Fiber's `build_router`. */
+  sendPaymentWithRouter(params: {
+    invoice: string;
+    router: FiberRpcRouterHop[];
+    udtTypeScript?: UdtScript;
+  }): Promise<{ payment_hash: string; status: string }> {
+    return this.transport.call("send_payment_with_router", [
+      {
+        invoice: params.invoice,
+        router: params.router,
+        ...(params.udtTypeScript
+          ? { udt_type_script: params.udtTypeScript }
+          : {}),
+      },
+    ]) as Promise<{ payment_hash: string; status: string }>;
   }
 
   /**

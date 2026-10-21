@@ -8,6 +8,10 @@ import {
   type NodeLifecycleAction,
   type NodeLifecycleReport,
 } from "../src/orchestrator";
+import {
+  type FiberRouteTrace,
+  type RoutingGraphSnapshot,
+} from "../src/routing";
 
 const view: NetworkView = {
   net: "duo",
@@ -78,8 +82,82 @@ const settlementReport: ChannelSettlementReport = {
   nextAction: null,
 };
 
+const routeTrace: FiberRouteTrace = {
+  source: "fiber.build_router",
+  pathSource: "explicit",
+  requestedPath: [
+    { name: "alice", pubkey: "0xalice" },
+    { name: "bob", pubkey: "0xbob" },
+  ],
+  amountBaseUnits: "100000000",
+  totalFeeBaseUnits: "0",
+  hops: [
+    {
+      targetPubkey: "0xbob",
+      targetName: "bob",
+      channelOutpoint: "0xoutpoint",
+      amountReceivedBaseUnits: "100000000",
+      incomingTlcExpiryMs: "86400000",
+    },
+  ],
+};
+
+const routingGraph: RoutingGraphSnapshot = {
+  schemaVersion: 1,
+  kind: "fiber-routing-graph",
+  net: "duo",
+  source: "fiber.graph_nodes+fiber.graph_channels",
+  observer: { name: "alice", pubkey: "0xalice" },
+  observedAt: "2026-10-20T12:00:00.000Z",
+  limits: {
+    requested: 100,
+    maximum: 250,
+    nodesReturned: 0,
+    channelsReturned: 0,
+    nodesTruncated: false,
+    channelsTruncated: false,
+  },
+  nodes: [],
+  channels: [],
+  summary: {
+    components: 0,
+    isolatedNodes: 0,
+    unreachableNodes: 0,
+    incompleteDirections: 0,
+    staleDirections: 0,
+    disabledDirections: 0,
+  },
+  warnings: [],
+};
+
 const backend: Backend = {
   inspect: async () => view,
+  inspectRoutingGraph: async () => routingGraph,
+  inspectRoute: async () => ({
+    schemaVersion: 1,
+    kind: "fiber-route-inspection",
+    net: "duo",
+    observer: { name: "alice", pubkey: "0xalice" },
+    asset: "ckb",
+    requestedAmount: 1,
+    attemptedRoute: routeTrace,
+    finalSuccessfulRoute: null,
+    warnings: [],
+  }),
+  payWithRoute: async () => ({
+    schemaVersion: 1,
+    kind: "fiber-routed-payment",
+    net: "duo",
+    from: "alice",
+    to: "bob",
+    asset: "ckb",
+    amount: 1,
+    paymentHash: "0xpayment",
+    status: "Success",
+    attemptedRoute: routeTrace,
+    finalSuccessfulRoute: routeTrace,
+    warnings: [],
+  }),
   inspectNode: async () => lifecycleReport("inspect"),
   stopNode: async () => lifecycleReport("stop"),
   startNode: async () => lifecycleReport("start"),
@@ -208,6 +286,93 @@ describe("daemon", () => {
         operation: "inspect",
         phase: "settled",
       });
+    } finally {
+      server.close();
+    }
+  });
+
+  it("keeps live routing inspection separate from ordinary state polling", async () => {
+    const server = await serveGui(backend, 0);
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const graph = await get(port, "/api/routing?net=duo&node=alice&limit=25");
+      expect(graph.status).toBe(200);
+      await expect(graph.json()).resolves.toMatchObject({
+        kind: "fiber-routing-graph",
+        observer: { name: "alice" },
+      });
+
+      const inspected = await post(port, "/api/route/inspect", {
+        net: "duo",
+        from: "alice",
+        to: "bob",
+        amount: 1,
+        via: [],
+      });
+      await expect(inspected.json()).resolves.toMatchObject({
+        kind: "fiber-route-inspection",
+        attemptedRoute: { source: "fiber.build_router" },
+        finalSuccessfulRoute: null,
+      });
+
+      const paid = await post(port, "/api/route/pay", {
+        net: "duo",
+        from: "alice",
+        to: "bob",
+        amount: 1,
+        via: [],
+      });
+      await expect(paid.json()).resolves.toMatchObject({
+        kind: "fiber-routed-payment",
+        status: "Success",
+        attemptedRoute: { source: "fiber.build_router" },
+        finalSuccessfulRoute: { source: "fiber.build_router" },
+      });
+
+      const ordinary = await get(port, "/api/state?net=duo");
+      expect(ordinary.status).toBe(200);
+      await expect(ordinary.json()).resolves.toMatchObject({ net: "duo" });
+    } finally {
+      server.close();
+    }
+  });
+
+  it("rejects malformed route options instead of executing a changed path", async () => {
+    let paymentCalled = false;
+    const server = await serveGui(
+      {
+        ...backend,
+        payWithRoute: async (...args) => {
+          paymentCalled = true;
+          return backend.payWithRoute(...args);
+        },
+      },
+      0,
+    );
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const response = await post(port, "/api/route/pay", {
+        net: "duo",
+        from: "alice",
+        to: "bob",
+        amount: 1,
+        via: [42],
+      });
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        error: "via must be an array of non-empty managed node names",
+      });
+      expect(paymentCalled).toBe(false);
+
+      const whitespace = await post(port, "/api/route/pay", {
+        net: "duo",
+        from: "alice",
+        to: "bob",
+        amount: 1,
+        via: ["   "],
+      });
+      expect(whitespace.status).toBe(400);
+      expect(paymentCalled).toBe(false);
     } finally {
       server.close();
     }

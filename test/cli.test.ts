@@ -221,6 +221,80 @@ describe("resolveTopology", () => {
     });
   });
 
+  it("registers bounded graph inspection and explicit routed payment commands", async () => {
+    const route = buildCli().commands.find(
+      (command) => command.name() === "route",
+    );
+    expect(route?.commands.map((command) => command.name())).toEqual([
+      "graph",
+      "inspect",
+      "pay",
+    ]);
+    const inspect = route?.commands.find(
+      (command) => command.name() === "inspect",
+    );
+    expect(inspect?.options.map((option) => option.long)).toEqual(
+      expect.arrayContaining(["--via", "--udt", "--final-expiry", "--json"]),
+    );
+
+    const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
+    await main([
+      "node",
+      "fiber-forge",
+      "route",
+      "graph",
+      "missing-routing",
+      "--json",
+    ]);
+    expect(JSON.parse(String(stderr.mock.calls[0][0]))).toMatchObject({
+      ok: false,
+      error: { code: "NETWORK_NOT_FOUND", resource: "missing-routing" },
+    });
+
+    process.exitCode = undefined;
+    await main([
+      "node",
+      "fiber-forge",
+      "route",
+      "inspect",
+      "missing-routing",
+      "alice",
+      "bob",
+      "1",
+      "--via",
+      "alice",
+      "--json",
+    ]);
+    expect(JSON.parse(String(stderr.mock.calls[1][0]))).toMatchObject({
+      ok: false,
+      error: {
+        code: "ROUTING_INVALID",
+        resource: "missing-routing/alice->alice->bob",
+      },
+    });
+    expect(process.exitCode).toBe(1);
+
+    process.exitCode = undefined;
+    await main([
+      "node",
+      "fiber-forge",
+      "route",
+      "inspect",
+      "missing-routing",
+      "alice",
+      "carol",
+      "1",
+      "--via",
+      "bob,,dora",
+      "--json",
+    ]);
+    expect(JSON.parse(String(stderr.mock.calls[2][0]))).toMatchObject({
+      ok: false,
+      error: { code: "ROUTING_INVALID", resource: "via" },
+    });
+    expect(process.exitCode).toBe(1);
+  });
+
   it("emits a structured force-close confirmation failure in JSON mode", async () => {
     const stderr = vi.spyOn(console, "error").mockImplementation(() => {});
 

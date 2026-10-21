@@ -26,11 +26,37 @@ import {
   type PaymentReport,
 } from "./orchestrator.js";
 import { preset } from "./presets.js";
+import {
+  type ExplicitRouteOptions,
+  type RouteInspectionReport,
+  type RoutedPaymentReport,
+  type RoutingGraphOptions,
+  type RoutingGraphSnapshot,
+} from "./routing.js";
 import { type Topology } from "./topology.js";
 
 /** The orchestrator operations the daemon exposes over HTTP (the Orchestrator implements these). */
 export interface Backend {
   inspect(net: string): Promise<NetworkView>;
+  inspectRoutingGraph(
+    net: string,
+    options?: RoutingGraphOptions,
+  ): Promise<RoutingGraphSnapshot>;
+  inspectRoute(
+    net: string,
+    from: string,
+    to: string,
+    amount: number,
+    options?: ExplicitRouteOptions,
+  ): Promise<RouteInspectionReport>;
+  payWithRoute(
+    net: string,
+    from: string,
+    to: string,
+    amount: number,
+    options?: ExplicitRouteOptions,
+    description?: string,
+  ): Promise<RoutedPaymentReport>;
   inspectNode(net: string, node: string): Promise<NodeLifecycleReport>;
   stopNode(net: string, node: string): Promise<NodeLifecycleReport>;
   startNode(net: string, node: string): Promise<NodeLifecycleReport>;
@@ -117,6 +143,31 @@ function sendJson(
 
 const str = (v: unknown): string => String(v ?? "");
 const num = (v: unknown): number => Number(v ?? 0);
+
+function parseRouteOptions(
+  body: Record<string, unknown>,
+):
+  | { options: ExplicitRouteOptions; error?: never }
+  | { options?: never; error: string } {
+  if (
+    body.via !== undefined &&
+    (!Array.isArray(body.via) ||
+      body.via.some(
+        (name) => typeof name !== "string" || name.trim().length === 0,
+      ))
+  ) {
+    return { error: "via must be an array of non-empty managed node names" };
+  }
+  if (body.udt !== undefined && typeof body.udt !== "boolean") {
+    return { error: "udt must be a boolean" };
+  }
+  return {
+    options: {
+      via: (body.via ?? []) as string[],
+      udt: body.udt === true,
+    },
+  };
+}
 
 /** Build a (uniquely-named) topology for a spawn request from the wizard. */
 async function spawnTopology(
@@ -230,6 +281,24 @@ export function createDaemon(backend: Backend): Server {
         sendJson(response, 200, await backend.channels(net));
         return;
       }
+      if (method === "GET" && path === "/api/routing") {
+        const net = parsed.searchParams.get("net");
+        if (!net) {
+          sendJson(response, 400, { error: "net query parameter required" });
+          return;
+        }
+        const observer = parsed.searchParams.get("node") ?? undefined;
+        const rawLimit = parsed.searchParams.get("limit");
+        sendJson(
+          response,
+          200,
+          await backend.inspectRoutingGraph(net, {
+            observer,
+            ...(rawLimit === null ? {} : { limit: Number(rawLimit) }),
+          }),
+        );
+        return;
+      }
       if (method === "GET" && path === "/api/channel/settlement") {
         const net = parsed.searchParams.get("net");
         const node = parsed.searchParams.get("node");
@@ -281,6 +350,47 @@ export function createDaemon(backend: Backend): Server {
               num(body.amount),
               undefined,
               Boolean(body.udt),
+            ),
+          );
+          return;
+        }
+        if (path === "/api/route/inspect") {
+          const parsedOptions = parseRouteOptions(body);
+          if (parsedOptions.error) {
+            sendJson(response, 400, { error: parsedOptions.error });
+            return;
+          }
+          sendJson(
+            response,
+            200,
+            await backend.inspectRoute(
+              str(body.net),
+              str(body.from),
+              str(body.to),
+              num(body.amount),
+              parsedOptions.options,
+            ),
+          );
+          return;
+        }
+        if (path === "/api/route/pay") {
+          const parsedOptions = parseRouteOptions(body);
+          if (parsedOptions.error) {
+            sendJson(response, 400, { error: parsedOptions.error });
+            return;
+          }
+          sendJson(
+            response,
+            200,
+            await backend.payWithRoute(
+              str(body.net),
+              str(body.from),
+              str(body.to),
+              num(body.amount),
+              parsedOptions.options,
+              typeof body.description === "string"
+                ? body.description
+                : undefined,
             ),
           );
           return;
