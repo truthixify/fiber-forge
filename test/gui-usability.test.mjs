@@ -19,7 +19,7 @@ describe("GUI topology and payment usability", () => {
     const html = await readFile(join(repoDir, "assets/gui/index.html"), "utf8");
 
     expect(html).toContain(
-      "const assetColor = ch.udt ? 'var(--flux)' : 'var(--gold)'",
+      "const assetColor = ch.udt ? 'var(--flux)' : 'var(--ember)'",
     );
     expect(html).toContain("const trackPad = Math.max(18");
     expect(html).toContain("stroke: 'transparent', strokeWidth: width + 18");

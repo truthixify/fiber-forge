@@ -429,7 +429,7 @@
             <span style="display:flex;align-items:center;gap:8px;"><span class="mc" style="color:var(--gold);">ON-CHAIN WALLET · CKB</span><button class="ff-focus" onClick="{{ openFundCkb }}" style="min-height:40px;background:transparent;color:var(--muted);border:1px solid var(--border);padding:5px 8px;cursor:pointer;font-family:'Geist Mono',monospace;font-size:9px;">+ ADD CKB</button></span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:baseline;">
-            <span class="num" style="font-size:16px;color:var(--gold);">{{ nInChannelCkb }}</span>
+            <span class="num" style="font-size:16px;color:var(--ember);">{{ nInChannelCkb }}</span>
             <span class="mc">CKB IN CHANNELS · {{ nCkbChannels }}</span>
           </div>
           <sc-if value="{{ nHasUdt }}" hint-placeholder-val="{{ false }}">
@@ -1767,7 +1767,7 @@ class Component extends DCLogic {
     const ch = this.state.sel && this.state.channels.find(c => c.id === this.state.sel.id);
     if (!ch) return null;
     const f = Math.max(0, Math.min(1, (this.state.balances[ch.id] != null ? this.state.balances[ch.id] : ch.cap / 2) / ch.cap)), h = React.createElement;
-    const assetColor = ch.udt ? 'var(--flux)' : 'var(--gold)';
+    const assetColor = ch.udt ? 'var(--flux)' : 'var(--ember)';
     return h('div', { style: { position: 'relative', height: 20, background: 'var(--inset)', border: '1px solid var(--hairline)', display: 'flex' } },
       h('div', { style: { width: (f * 100) + '%', background: assetColor, transition: 'width .6s cubic-bezier(.2,.8,.2,1)' } }),
       h('div', { style: { flex: 1, background: 'var(--panel-2)' } }));
@@ -1855,7 +1855,7 @@ class Component extends DCLogic {
         h('text', { x: mid.x, y: mid.y + 2, fill: 'var(--amber)', fontSize: 8, fontFamily: 'Geist Mono,monospace', letterSpacing: '1.4', textAnchor: 'middle' }, 'OPENING'));
     }
 
-    const assetColor = ch.udt ? 'var(--flux)' : 'var(--gold)', pid = 'p-' + ch.id, igniting = this.state.igniteId === ch.id;
+    const assetColor = ch.udt ? 'var(--flux)' : 'var(--ember)', pid = 'p-' + ch.id, igniting = this.state.igniteId === ch.id;
     return h('g', { key: ch.id, 'data-conduit': '1', onClick, style: { cursor: 'pointer', pointerEvents }, opacity: dim },
       h('path', { d, stroke: 'transparent', strokeWidth: width + 18, fill: 'none', strokeLinecap: 'round' }),
       h('path', { d, stroke: assetColor, strokeWidth: width + 10, fill: 'none', opacity: 0.13, strokeLinecap: 'round', style: { filter: 'blur(6px)' }, pointerEvents: 'none' }),
@@ -2001,7 +2001,7 @@ class Component extends DCLogic {
       const bal = S.balances[c.id] != null ? S.balances[c.id] : c.cap / 2;
       const local = c.from === n.id ? bal : c.cap - bal;
       const canClose = !!c.channelId && !c.pending;
-      return { peer: peer ? peer.name : '?', local: this.fmt(Math.round(local)), remote: this.fmt(Math.round(c.cap - local)), state: (S.chState[c.id] || 'ready').toUpperCase(), localW: Math.round(local / c.cap * 100) + '%', unit: c.udt ? 'UDT' : 'CKB', assetColor: c.udt ? 'var(--flux)' : 'var(--gold)', badge: c.udt ? 'UDT' : '', badgeShow: !!c.udt, canClose: canClose, select: () => this.select('channel', c.id), close: () => this._closeChan(c.channelId, n.name) };
+      return { peer: peer ? peer.name : '?', local: this.fmt(Math.round(local)), remote: this.fmt(Math.round(c.cap - local)), state: (S.chState[c.id] || 'ready').toUpperCase(), localW: Math.round(local / c.cap * 100) + '%', unit: c.udt ? 'UDT' : 'CKB', assetColor: c.udt ? 'var(--flux)' : 'var(--ember)', badge: c.udt ? 'UDT' : '', badgeShow: !!c.udt, canClose: canClose, select: () => this.select('channel', c.id), close: () => this._closeChan(c.channelId, n.name) };
     }) : [];
     const nodePeersList = n ? Array.from(new Set(nodeChans.map(c => c.peer))).map(name => { const pn = S.nodes.find(x => x.name === name); return { name, port: pn ? (':' + pn.port) : '', select: () => { if (pn) this.select('node', pn.id); } }; }) : [];
     const tabStyle = (t) => ({ go: () => this.setNodeTab(t), bd: S.nodeTab === t ? '2px solid var(--ember)' : '2px solid transparent', fg: S.nodeTab === t ? 'var(--bone)' : 'var(--muted)' });
@@ -2038,7 +2038,7 @@ class Component extends DCLogic {
     const presetName = { duo: 'Duo', trio: 'Trio', hub: 'Hub', cch: 'CCH', line: 'Line', ring: 'Ring', star: 'Star' }[S.preset];
     const eN = this.effN(), reviewCmd = showN ? (S.preset + ':' + eN) : S.preset;
     const reviewCh = S.preset === 'duo' || S.preset === 'cch' ? 1 : S.preset === 'trio' ? 2 : S.preset === 'line' ? eN - 1 : S.preset === 'ring' ? eN : eN - 1;
-    const channelFilters = [['all', 'ALL'], ['ckb', 'CKB'], ['udt', 'UDT']].map(([id, label]) => ({ label, set: () => this.setChannelFilter(id), active: S.channelFilter === id, bg: S.channelFilter === id ? (id === 'udt' ? 'var(--flux)' : id === 'ckb' ? 'var(--gold)' : 'var(--bone)') : 'var(--panel)', fg: S.channelFilter === id ? 'var(--void)' : 'var(--muted)' }));
+    const channelFilters = [['all', 'ALL'], ['ckb', 'CKB'], ['udt', 'UDT']].map(([id, label]) => ({ label, set: () => this.setChannelFilter(id), active: S.channelFilter === id, bg: S.channelFilter === id ? (id === 'udt' ? 'var(--flux)' : id === 'ckb' ? 'var(--ember)' : 'var(--bone)') : 'var(--panel)', fg: S.channelFilter === id ? 'var(--void)' : 'var(--muted)' }));
     const pairNodes = (S.pairSel || []).map(id => this.node(id)).filter(Boolean);
     const pairSelectionLabel = pairNodes.length ? pairNodes.map(node => node.name).join(' ⇄ ') + (pairNodes.length === 1 ? ' ⇄ —' : '') : '';
 
@@ -2110,7 +2110,7 @@ class Component extends DCLogic {
       modes: modeDefs.map(([key, label, id]) => ({ key, label, set: () => this.setMode(id), bg: S.mode === id ? 'var(--ember)' : 'var(--panel)', fg: S.mode === id ? '#1a0b06' : 'var(--muted)' })),
       channelFilters,
       pairSelectionVisible: pairNodes.length > 0, pairSelectionCount: String(pairNodes.length), pairSelectionLabel, pairSelectionDisabled: pairNodes.length !== 2, openPairChannel: this.openPairChannel, clearPairSelection: this.clearPairSelection,
-      vitals: [{ k: 'CKB CAPACITY', val: this.fmt(totalCkbCap) + ' CKB', c: 'var(--gold)' }, ...(totalUdtCap > 0 ? [{ k: 'UDT CAPACITY', val: this.fmt(totalUdtCap) + ' UDT', c: 'var(--flux)' }] : []), { k: 'ON-CHAIN', val: this.fmt(totalOnchain) + ' CKB', c: 'var(--gold)' }, { k: 'BLOCK', val: '#' + (S.block || 0), c: 'var(--text)' }],
+      vitals: [{ k: 'CKB CAPACITY', val: this.fmt(totalCkbCap) + ' CKB', c: 'var(--ember)' }, ...(totalUdtCap > 0 ? [{ k: 'UDT CAPACITY', val: this.fmt(totalUdtCap) + ' UDT', c: 'var(--flux)' }] : []), { k: 'ON-CHAIN', val: this.fmt(totalOnchain) + ' CKB', c: 'var(--gold)' }, { k: 'BLOCK', val: '#' + (S.block || 0), c: 'var(--text)' }],
       vNodes: String(N), vChannels: String(readyChans.length),
       events: S.events, lastCmd: S.lastCmd,
       cchVisible: !!cch, cchStateLabel: cch ? String(cch.state || 'unknown').toUpperCase() : '', cchStateColor,
@@ -2157,7 +2157,7 @@ class Component extends DCLogic {
       nodeChans, nodePeersList, nodeLogsText, logLevels, nodeChanEmpty: nodeChans.length === 0, nodePeerEmpty: nodePeersList.length === 0,
       openInvoice: this.openInvoice, invoiceOpen: S.invoiceOpen, closeInvoice: this.closeInvoice, genInvoice: this.genInvoice, copyInvoice: this.copyInvoice, incInvoice: this.incInvoice, decInvoice: this.decInvoice,
       invoiceAmtDisp: this.fmt(S.invoiceAmt), invoiceAddr: S.invoiceAddr, invoiceHasAddr: !!S.invoiceAddr, invoiceBusy: S.invoiceBusy, invoiceNodeName: n ? n.name : '',
-      chFrom: ch ? this.node(ch.from).name : '', chTo: ch ? this.node(ch.to).name : '', chCap: ch ? this.fmt(ch.cap) : '', chLocal: ch ? this.fmt(chLocal) : '', chRemote: ch ? this.fmt(ch.cap - chLocal) : '', chHash: ch ? ch.hash : '', chUnit: ch && ch.udt ? 'UDT' : 'CKB', chIsUdt: !!(ch && ch.udt), chAssetColor: ch && ch.udt ? 'var(--flux)' : 'var(--gold)',
+      chFrom: ch ? this.node(ch.from).name : '', chTo: ch ? this.node(ch.to).name : '', chCap: ch ? this.fmt(ch.cap) : '', chLocal: ch ? this.fmt(chLocal) : '', chRemote: ch ? this.fmt(ch.cap - chLocal) : '', chHash: ch ? ch.hash : '', chUnit: ch && ch.udt ? 'UDT' : 'CKB', chIsUdt: !!(ch && ch.udt), chAssetColor: ch && ch.udt ? 'var(--flux)' : 'var(--ember)',
       forceCloseUnavailable: !ch || !ch.channelId || !!ch.pending,
       forceCloseOpen: S.forceCloseOpen, forceCloseNode: forceTarget.node || '', forceCloseChannelId: forceTarget.channelId || '', forceCloseConfirm: S.forceCloseConfirm,
       setForceCloseConfirm: this.setForceCloseConfirm, cancelForceClose: this.cancelForceClose, confirmForceClose: this.confirmForceClose, refreshForceClose: this.refreshForceClose,
