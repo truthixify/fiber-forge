@@ -90,10 +90,12 @@ GUI (React/vite, served on localhost) ──► fiber-forge daemon HTTP+WS API (
 - FR-2 `fiber-forge down <net>` removes containers + network; `--keep` preserves the CKB volume;
   `--purge` also removes saved node/layout state; `--all` (no net) tears down every network at once.
 - FR-3 The GUI reflects node/channel/balance state within 2s of change (poll or WS push).
-- FR-4 Opening a channel from the GUI requires only source, target, capacity; the orchestrator
-  handles funding, acceptance, and readiness.
-- FR-5 One-click payment: GUI picks receiver, generates an invoice, pays it from the chosen
-  sender, and animates the route (multi-hop visible on `trio`).
+- FR-4 Opening a channel from the GUI requires only funding node, peer, asset, and capacity; the
+  orchestrator handles funding, acceptance, and readiness. The GUI supports selecting a pair from
+  the topology and links payment route failures to the same prefilled channel form.
+- FR-5 One-click payment: GUI picks receiver, shows the inferred route's directional balance
+  bottleneck and shortfall, generates an invoice, pays it from the chosen sender, and animates the
+  route (multi-hop visible on `trio`). Fiber remains authoritative for final routing and fees.
 - FR-6 `fiber-forge status --json` emits machine-readable network state (ports, pubkeys, channels)
   for scripting and CI.
 - FR-7 Per-node log panel streams `docker logs` with level filtering.

@@ -53,14 +53,17 @@ daemon over HTTP and a WebSocket, so it reflects the real state of the nodes and
 second of any change.
 
 - The graph is the network: each node — named after a scientist or philosopher, with a new set each
-  time — and the channels between them, showing live balances and channel states.
+  time — and the channels between them. CKB and UDT channels use stable asset colors; filters let
+  you isolate either asset, while exact endpoint balances remain in channel details.
 - Click a node to open its panel. It shows the node's on-chain and UDT balances, its channels, and
   its streaming logs, which you can filter by level. The panel can stop, start, or restart that
   node with confirmation and reports the actual RPC, peer, and channel state afterward. The minimap
   in the bottom-left corner is clickable too — click a node there to jump to it.
-- Click a channel to see its capacity and the balance on each side. The **Send payment across**
-  button starts a payment along that channel, with the asset (CKB or UDT) already set to match it.
-- The **Pay** button sends a payment between any two nodes and animates the route it takes.
+- Click a channel to see its capacity and the balance held by each named endpoint. Peer and channel
+  rows in a node panel navigate to those details. Hold Command or Control while selecting two nodes
+  to open a channel between that pair.
+- The **Pay** button previews the route's visible outbound liquidity and any shortfall before send.
+  A missing or underfunded route links directly to a prefilled channel form.
 - The **Routes** button opens the live Fiber gossip graph, directional channel details, and explicit
   Fiber-built route inspection. Inferred previews and successful payment routes are labeled
   separately.
