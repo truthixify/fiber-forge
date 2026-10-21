@@ -19,9 +19,21 @@ jobs:
           cache: npm
           registry-url: "https://registry.npmjs.org"
       - run: npm ci
+      - id: release
+        name: verify release metadata
+        run: |
+          node --input-type=module - <<'NODE'
+          import { appendFileSync, readFileSync } from "node:fs";
+          const { version } = JSON.parse(readFileSync("package.json", "utf8"));
+          const tagVersion = process.env.GITHUB_REF_NAME.replace(/^v/, "");
+          if (version !== tagVersion) {
+            throw new Error(`tag ${process.env.GITHUB_REF_NAME} does not match package version ${version}`);
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `npm-tag=${version.includes("-") ? "next" : "latest"}\n`);
+          NODE
       - name: verify source and packed artifact
         run: make ci
       - name: publish package
-        run: npm publish
+        run: npm publish --tag "${{ steps.release.outputs.npm-tag }}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -29,9 +29,9 @@ permissions:
 steps:
   - uses: actions/checkout@v7
   - id: forge
-    uses: truthixify/fiber-forge@a34cc3cac1f034404a16d9597d41b002789331d6
+    uses: truthixify/fiber-forge@9300bea5f9ec5e72bfdec30b6648a8e79325063d
     with:
-      package-version: 0.4.0-rc.1
+      package-version: 0.4.0
       topology: trio
   - run: npm test
     env:

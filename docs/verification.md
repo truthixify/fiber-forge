@@ -20,6 +20,10 @@ Live E2E runs on every push to `main`, runtime-relevant pull requests, manual di
 weekly schedule. The workflow is also reusable: `publish.yml` calls it as a prerequisite, so a
 `v*` tag cannot reach `npm publish` after a failed or incomplete live gate.
 
+The publish job also requires the pushed `v*` tag to exactly match `package.json`. Stable versions
+publish under npm's `latest` dist-tag; prerelease versions publish under `next`, so an RC cannot
+silently replace the default install.
+
 Pull requests that change source, Docker assets, live tests, package inputs, or either runtime
 workflow automatically receive the live check. A reviewer can also dispatch it manually before
 merge.

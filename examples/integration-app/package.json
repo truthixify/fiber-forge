@@ -12,6 +12,6 @@
     "test:failure": "node src/local.mjs --fail-after-payment"
   },
   "dependencies": {
-    "@truthixify/fiber-forge": "0.4.0-rc.1"
+    "@truthixify/fiber-forge": "0.4.0"
   }
 }

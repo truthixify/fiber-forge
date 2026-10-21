@@ -5,7 +5,7 @@
   "createdAt": "2026-10-20T00:00:02.000Z",
   "generator": {
     "package": "@truthixify/fiber-forge",
-    "version": "0.4.0-rc.1"
+    "version": "0.4.0"
   },
   "runtime": {
     "images": {

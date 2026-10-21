@@ -3,11 +3,9 @@
 Fiber Forge exposes its supported programmatic API through the ESM-only
 `@truthixify/fiber-forge/sdk` subpath. The package root remains CLI-oriented.
 
-The SDK documented here belongs to the `0.4.0-rc.1` release candidate and is not yet published on
-npm. Use the packed candidate workflow in the [integration guide](integration.md) for current
-verification. Do not install `0.2.9` expecting this export; that released version predates the SDK.
-Once `npm view @truthixify/fiber-forge@0.4.0-rc.1 version` succeeds, applications can pin it with
-`npm install --save-exact @truthixify/fiber-forge@0.4.0-rc.1`.
+The SDK documented here is published in `0.4.0`. Pin it with
+`npm install --save-exact @truthixify/fiber-forge@0.4.0`; earlier `0.2.x` releases predate the SDK.
+The [integration guide](integration.md) records the packed-artifact and live verification evidence.
 
 ```ts
 import { createFiberForge, preset } from "@truthixify/fiber-forge/sdk";

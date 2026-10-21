@@ -13,49 +13,49 @@ you need.
 
 ## Version status
 
-As of 2026-10-20, [`0.2.9`](https://www.npmjs.com/package/@truthixify/fiber-forge/v/0.2.9)
-is the latest npm release. It supports the released CLI but predates the public SDK, GitHub Action,
-standalone integration example, Codespaces sandbox, and strict loopback Docker bindings documented
-below.
+As of 2026-10-21, [`0.4.0`](https://www.npmjs.com/package/@truthixify/fiber-forge/v/0.4.0)
+is the latest npm release. It includes the CLI, public SDK, self-cleaning GitHub Action, standalone
+integration example, Codespaces sandbox, strict loopback Docker bindings, recovery and fault
+controls, safe export/replay, CCH transfer proofs, and routing inspection.
 
-Those integration features are verified as candidate `0.4.0-rc.1` at immutable commit
-[`a34cc3cac1f034404a16d9597d41b002789331d6`](https://github.com/truthixify/fiber-forge/commit/a34cc3cac1f034404a16d9597d41b002789331d6).
-They are not yet an npm release. The release-dependent commands are labeled accordingly; this guide
-does not represent the candidate as published.
+The implementation promoted in `0.4.0` is pinned at immutable commit
+[`9300bea5f9ec5e72bfdec30b6648a8e79325063d`](https://github.com/truthixify/fiber-forge/commit/9300bea5f9ec5e72bfdec30b6648a8e79325063d).
+The stable tag adds release metadata, documentation, and npm publication safeguards; the runtime
+implementation is unchanged from that reviewed commit.
 
-The currently released CLI can be checked without using a moving npm tag:
+Check the exact release without using a moving npm tag:
 
 ```sh
-npx --yes @truthixify/fiber-forge@0.2.9 --version
+npx --yes @truthixify/fiber-forge@0.4.0 --version
 ```
 
-## Reproduce the candidate
+## Reproduce the release
 
 Node.js 20 or newer and a running Docker daemon are required. This clean-room sequence checks out
-the exact integration candidate, installs its lockfile, verifies the packed package, then runs the
+the exact release, installs its lockfile, verifies the packed package, then runs the
 standalone application against a real three-node network:
 
 ```sh
 git clone https://github.com/truthixify/fiber-forge.git
 cd fiber-forge
-git checkout a34cc3cac1f034404a16d9597d41b002789331d6
+git checkout v0.4.0
 npm ci
 npm run build
 npm run test:package
 npm run example:local
 ```
 
-`example:local` packs the candidate, installs it with production dependencies into a fresh temporary
+`example:local` packs the release, installs it with production dependencies into a fresh temporary
 application, creates an isolated trio through `@truthixify/fiber-forge/sdk`, completes a one-CKB
 `first -> third` payment, and purges its exact network and state in `finally`. Its source is under
 [`examples/integration-app`](../examples/integration-app/README.md).
 
 ## SDK application
 
-After `0.4.0-rc.1` is present on npm, install that exact version:
+Install the exact stable version:
 
 ```sh
-npm install --save-exact @truthixify/fiber-forge@0.4.0-rc.1
+npm install --save-exact @truthixify/fiber-forge@0.4.0
 ```
 
 Import only the declared subpath. Keep lifecycle ownership in one scope and always purge in
@@ -88,8 +88,7 @@ the [SDK contract](sdk.md). Imports from `src/`, `dist/`, Docker helpers, raw RP
 
 ## GitHub Action
 
-The Action also requires the candidate package to be published before an external repository can
-use it. Once that release gate is satisfied, pin both trust inputs independently:
+Pin the Action code and npm package independently:
 
 ```yaml
 permissions:
@@ -98,9 +97,9 @@ permissions:
 steps:
   - uses: actions/checkout@v7
   - id: forge
-    uses: truthixify/fiber-forge@a34cc3cac1f034404a16d9597d41b002789331d6
+    uses: truthixify/fiber-forge@9300bea5f9ec5e72bfdec30b6648a8e79325063d
     with:
-      package-version: 0.4.0-rc.1
+      package-version: 0.4.0
       topology: trio
   - run: node test/fiber-payment.mjs
     env:
@@ -132,7 +131,7 @@ limits, diagnostics, and self-hosted-runner recovery.
 
 ## Hosted sandbox
 
-[Open the candidate in GitHub Codespaces](https://codespaces.new/truthixify/fiber-forge?quickstart=1)
+[Open Fiber Forge in GitHub Codespaces](https://codespaces.new/truthixify/fiber-forge?quickstart=1)
 to launch a per-user Docker-in-Docker tenant. It automatically starts a funded trio, proves a
 multi-hop payment, forwards only GUI port 5178 privately, and purges runtime state after four hours.
 The [sandbox guide](sandbox.md) covers reset, cost and quota ownership, isolation, and incident
@@ -160,11 +159,11 @@ operate a shared or paid deployment.
 | --- | --- |
 | Released CLI `0.2.9`, Linux amd64 live paths | [durable record](evidence/linux-amd64-2026-10-20.json), [workflow run](https://github.com/truthixify/fiber-forge/actions/runs/39363776395) |
 | Released CLI `0.2.9`, macOS arm64 live paths | [durable record](evidence/macos-arm64-2026-10-20.json) |
-| Candidate package, SDK, and packed application | [CI run](https://github.com/truthixify/fiber-forge/actions/runs/39373695579) |
-| Candidate Action success, deliberate consumer failure, and independent post cleanup | [Action run](https://github.com/truthixify/fiber-forge/actions/runs/39373696256) |
-| Candidate Linux live network, payment, recovery, UDT, rollback, and cleanup | [live run](https://github.com/truthixify/fiber-forge/actions/runs/39373695575) |
-| Candidate Codespaces/devcontainer launch on macOS arm64 | [sandbox record](evidence/sandbox-macos-arm64-2026-10-20.json) |
+| Promoted implementation, SDK, and packed application | [CI run](https://github.com/truthixify/fiber-forge/actions/runs/39539424400) |
+| Action success, deliberate consumer failure, and independent post cleanup | [Action run](https://github.com/truthixify/fiber-forge/actions/runs/39539424307) |
+| Linux live network, payment, recovery, UDT, replay, routing, rollback, and cleanup | [live run](https://github.com/truthixify/fiber-forge/actions/runs/39539424327) |
+| Bidirectional CCH transfer proof with cold and warm starts | [CCH run](https://github.com/truthixify/fiber-forge/actions/runs/39539424317) |
+| Codespaces/devcontainer launch on macOS arm64 | [sandbox record](evidence/sandbox-macos-arm64-2026-10-20.json) |
 
-The candidate evidence is tied to commit `a34cc3cac1f034404a16d9597d41b002789331d6`; it is not a
-substitute for an npm release. Publishing or tagging remains a separate, explicitly approved
-operation.
+The implementation evidence is tied to commit `9300bea5f9ec5e72bfdec30b6648a8e79325063d`.
+Environment records retain their original package versions so historical claims remain auditable.

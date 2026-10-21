@@ -5,12 +5,11 @@ registers a job-final post hook that removes the exact network, volume, containe
 state. Use a full Action commit SHA and an exact npm package version; those are separate trust and
 compatibility decisions.
 
-The Action and SDK are verified together at candidate commit
-`a34cc3cac1f034404a16d9597d41b002789331d6`, but package `0.4.0-rc.1` is not yet published on npm.
-The workflow below is therefore release-ready reference, not a currently runnable external install.
-The [candidate Action run](https://github.com/truthixify/fiber-forge/actions/runs/39373696256)
-uses the exact packed artifact through a repository-only override. Do not substitute released CLI
-version `0.2.9`; it predates the public SDK and loopback-binding hardening required by this Action.
+The Action and SDK implementation promoted into package `0.4.0` was verified together at commit
+`9300bea5f9ec5e72bfdec30b6648a8e79325063d`. The
+[Action evidence run](https://github.com/truthixify/fiber-forge/actions/runs/39539424307)
+uses the exact packed release candidate and checks cleanup after both a successful consumer and a
+deliberate consumer failure.
 
 ```yaml
 permissions:
@@ -19,9 +18,9 @@ permissions:
 steps:
   - uses: actions/checkout@v7
   - id: forge
-    uses: truthixify/fiber-forge@a34cc3cac1f034404a16d9597d41b002789331d6
+    uses: truthixify/fiber-forge@9300bea5f9ec5e72bfdec30b6648a8e79325063d
     with:
-      package-version: 0.4.0-rc.1
+      package-version: 0.4.0
       topology: trio
   - run: node examples/integration-app/src/connection.mjs
     env:
@@ -39,7 +38,7 @@ GitHub-hosted runners are disposable; a self-hosted runner should run the workfl
 pre-cleans the same deterministic network, or use:
 
 ```console
-npx --yes --package @truthixify/fiber-forge@0.4.0-rc.1 \
+npx --yes --package @truthixify/fiber-forge@0.4.0 \
   fiber-forge down trio --purge
 ```
 
@@ -56,8 +55,8 @@ Node's standard library; Node runtime changes, npm package dependencies, and pin
 in the evidence workflow are reviewed with the normal dependency-update cadence and rerun both the
 successful and deliberate-failure jobs.
 
-The repository evidence workflow packs the current package as a release candidate, installs that
+The repository evidence workflow packs the current package, installs that
 exact tarball with lifecycle scripts disabled, completes a real three-node multi-hop payment, and
 independently checks Docker cleanup after a deliberately failing consumer. Public consumers install
-the exact registry version named by `package-version`; the candidate-tarball override is reserved
-for this repository's pre-release gate.
+the exact registry version named by `package-version`; the tarball override is reserved for this
+repository's pre-release gate.
