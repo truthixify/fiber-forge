@@ -58,11 +58,15 @@ describe("integration documentation", () => {
     expect(examplePackage.dependencies[rootPackage.name]).toBe(
       rootPackage.version,
     );
-    expect(workflow).toContain("version !== tagVersion");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("version !== releaseVersion");
     expect(workflow).toContain('version.includes("-") ? "next" : "latest"');
     expect(workflow).toContain(
       'npm publish --tag "${{ steps.release.outputs.npm-tag }}"',
     );
+    expect(workflow).toContain("id-token: write");
+    expect(workflow).toContain("node-version: 24");
+    expect(workflow).not.toContain("NODE_AUTH_TOKEN");
   });
 
   it("uses only the public SDK import in the canonical sample", async () => {
