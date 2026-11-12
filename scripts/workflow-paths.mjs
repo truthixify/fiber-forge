@@ -46,6 +46,7 @@ export const workflowPathGroups = Object.freeze({
   action: [
     ...sharedRuntimePaths,
     ".github/workflows/action-e2e.yml",
+    ".github/workflows/publish.yml",
     "action.yml",
     "action/**",
     "examples/integration-app/**",

@@ -17,9 +17,23 @@ jobs:
   metadata:
     runs-on: ubuntu-latest
     outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
       npm-tag: ${{ steps.release.outputs.npm-tag }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Verify tagged commit is on the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git fetch --no-tags origin "$DEFAULT_BRANCH"
+          if ! git merge-base --is-ancestor HEAD "origin/$DEFAULT_BRANCH"; then
+            echo "Release tag is not contained in the default branch" >&2
+            exit 1
+          fi
       - uses: actions/setup-node@v7
         with:
           node-version: 20
@@ -27,6 +41,8 @@ jobs:
         name: Verify release metadata
         env:
           RELEASE_VERSION: ${{ github.event.inputs.version || github.ref_name }}
+          RELEASE_REF_NAME: ${{ github.ref_name }}
+          RELEASE_REF_TYPE: ${{ github.ref_type }}
         run: |
           node --input-type=module - <<'NODE'
           import { appendFileSync, readFileSync } from "node:fs";
@@ -35,7 +51,20 @@ jobs:
           if (version !== releaseVersion) {
             throw new Error(`release ${process.env.RELEASE_VERSION} does not match package version ${version}`);
           }
-          appendFileSync(process.env.GITHUB_OUTPUT, `npm-tag=${version.includes("-") ? "next" : "latest"}\n`);
+          const tag = `v${version}`;
+          if (process.env.RELEASE_REF_TYPE !== "tag" || process.env.RELEASE_REF_NAME !== tag) {
+            throw new Error(`release must run from existing tag ${tag}`);
+          }
+          appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            [
+              `version=${version}`,
+              `tag=${tag}`,
+              `npm-tag=${version.includes("-") ? "next" : "latest"}`,
+              `prerelease=${version.includes("-") ? "true" : "false"}`,
+              "",
+            ].join("\n"),
+          );
           NODE
 
   source-ci:
@@ -59,8 +88,12 @@ jobs:
     needs: metadata
     uses: ./.github/workflows/cch-e2e.yml
 
+  action-e2e:
+    needs: metadata
+    uses: ./.github/workflows/action-e2e.yml
+
   publish:
-    needs: [metadata, source-ci, live-e2e, cch-e2e]
+    needs: [metadata, source-ci, live-e2e, cch-e2e, action-e2e]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -73,4 +106,54 @@ jobs:
           registry-url: "https://registry.npmjs.org"
       - run: npm ci --engine-strict
       - name: publish package
-        run: npm publish --tag "${{ needs.metadata.outputs.npm-tag }}"
+        run: npm publish --provenance --tag "${{ needs.metadata.outputs.npm-tag }}"
+
+  registry-smoke:
+    needs: [metadata, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+      - name: Verify the published package from a clean consumer
+        run: node scripts/verify-registry-artifact.mjs "${{ needs.metadata.outputs.version }}"
+
+  github-release:
+    needs: [metadata, registry-smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare release notes with evidence links
+        env:
+          RELEASE_NOTES: ${{ runner.temp }}/fiber-forge-release-notes.md
+          RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          cp .github/release-notes.md "$RELEASE_NOTES"
+          {
+            echo
+            echo "## Evidence"
+            echo
+            echo "- [Release workflow run](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+            echo "- [Published npm package](https://www.npmjs.com/package/@truthixify/fiber-forge/v/${RELEASE_VERSION})"
+          } >> "$RELEASE_NOTES"
+      - name: Create GitHub Release from the existing tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ runner.temp }}/fiber-forge-release-notes.md
+          RELEASE_PRERELEASE: ${{ needs.metadata.outputs.prerelease }}
+          RELEASE_TAG: ${{ needs.metadata.outputs.tag }}
+        run: |
+          release_flags=()
+          if [ "$RELEASE_PRERELEASE" = "true" ]; then
+            release_flags+=(--prerelease --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" \
+            --verify-tag \
+            --fail-on-no-commits \
+            --title "Fiber Forge $RELEASE_TAG" \
+            --notes-file "$RELEASE_NOTES" \
+            "${release_flags[@]}"

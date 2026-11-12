@@ -52,6 +52,11 @@ describe("live workflow path policy", () => {
       cch: true,
       action: true,
     });
+    expect(classifyWorkflowPaths([".github/workflows/publish.yml"])).toEqual({
+      ordinary: true,
+      cch: true,
+      action: true,
+    });
   });
 
   it("emits stable GitHub output values", () => {
@@ -121,11 +126,12 @@ describe("merge and release workflow contracts", () => {
     expect(upload.with["retention-days"]).toBe(14);
   });
 
-  it("requires source, ordinary live, and CCH gates for publication", async () => {
+  it("requires every release gate and default-branch ancestry", async () => {
     const [publish, guide] = await Promise.all([
       workflow("publish.yml"),
       readFile(join(repoDir, "docs", "verification.md"), "utf8"),
     ]);
+    const normalizedGuide = guide.replace(/\s+/g, " ");
 
     expect(publish.jobs["live-e2e"].uses).toBe("./.github/workflows/e2e.yml");
     expect(publish.jobs["cch-e2e"].uses).toBe(
@@ -136,13 +142,79 @@ describe("merge and release workflow contracts", () => {
       "source-ci",
       "live-e2e",
       "cch-e2e",
+      "action-e2e",
     ]);
-    expect(guide).toContain("`ci / required`");
-    expect(guide).toContain("`merge-gate / required`");
-    expect(guide).toContain("ordinary live E2E never substitutes for CCH");
-    expect(guide).toContain(
+    expect(publish.jobs["action-e2e"].uses).toBe(
+      "./.github/workflows/action-e2e.yml",
+    );
+    expect(publish.jobs["registry-smoke"].needs).toEqual([
+      "metadata",
+      "publish",
+    ]);
+    expect(publish.jobs["github-release"].needs).toEqual([
+      "metadata",
+      "registry-smoke",
+    ]);
+    expect(publish.jobs["github-release"].permissions).toEqual({
+      contents: "write",
+    });
+    expect(publish.jobs.metadata.outputs).toMatchObject({
+      version: "${{ steps.release.outputs.version }}",
+      tag: "${{ steps.release.outputs.tag }}",
+      prerelease: "${{ steps.release.outputs.prerelease }}",
+    });
+    const metadataCheckout = publish.jobs.metadata.steps.find(
+      (step) => step.uses === "actions/checkout@v7",
+    );
+    const ancestryCheck = publish.jobs.metadata.steps.find(
+      (step) => step.name === "Verify tagged commit is on the default branch",
+    );
+    expect(metadataCheckout.with["fetch-depth"]).toBe(0);
+    expect(ancestryCheck.env.DEFAULT_BRANCH).toBe(
+      "${{ github.event.repository.default_branch }}",
+    );
+    expect(ancestryCheck.run).toContain(
+      'git merge-base --is-ancestor HEAD "origin/$DEFAULT_BRANCH"',
+    );
+    const metadataCheck = publish.jobs.metadata.steps.find(
+      (step) => step.name === "Verify release metadata",
+    );
+    expect(metadataCheck.env.RELEASE_REF_TYPE).toBe("${{ github.ref_type }}");
+    expect(metadataCheck.run).toContain(
+      'process.env.RELEASE_REF_TYPE !== "tag"',
+    );
+    const publishStep = publish.jobs.publish.steps.find(
+      (step) => step.name === "publish package",
+    );
+    expect(publishStep.run).toContain("npm publish --provenance");
+    const registrySetup = publish.jobs["registry-smoke"].steps.find(
+      (step) => step.uses === "actions/setup-node@v7",
+    );
+    const registryCheck = publish.jobs["registry-smoke"].steps.find(
+      (step) =>
+        step.name === "Verify the published package from a clean consumer",
+    );
+    expect(registrySetup.with["node-version"]).toBe(20);
+    expect(registryCheck.run).toContain(
+      'verify-registry-artifact.mjs "${{ needs.metadata.outputs.version }}"',
+    );
+    const releaseStep = publish.jobs["github-release"].steps.find(
+      (step) => step.name === "Create GitHub Release from the existing tag",
+    );
+    expect(releaseStep.run).toContain("--verify-tag");
+    expect(releaseStep.run).toContain("--fail-on-no-commits");
+    expect(normalizedGuide).toContain("`ci / required`");
+    expect(normalizedGuide).toContain("`merge-gate / required`");
+    expect(normalizedGuide).toContain(
+      "ordinary live E2E never substitutes for CCH",
+    );
+    expect(normalizedGuide).toContain(
       "npm view @truthixify/fiber-forge@<version> version",
     );
-    expect(guide).toContain("must be inspected and enabled separately");
+    expect(normalizedGuide).toContain("active default-branch ruleset");
+    expect(normalizedGuide).toContain("has no bypass actor");
+    expect(normalizedGuide).toContain("clean Node 20 consumer");
+    expect(normalizedGuide).toContain("already-existing tag");
+    expect(normalizedGuide).toContain("contained in the default branch");
   });
 });
