@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const repoDir = fileURLToPath(new URL("..", import.meta.url));
-const releaseImplementationSha = "9300bea5f9ec5e72bfdec30b6648a8e79325063d";
+const releaseImplementationSha = "9960c0eee7efdce288dbcb6d444e174c24b60e67";
+const releaseVersion = "0.4.1";
 
 async function text(path) {
   return readFile(join(repoDir, path), "utf8");
@@ -16,7 +17,7 @@ describe("integration documentation", () => {
 
     expect(guide).toContain("is the latest published npm package");
     expect(guide).toContain(
-      "https://www.npmjs.com/package/@truthixify/fiber-forge/v/0.4.0",
+      `https://www.npmjs.com/package/@truthixify/fiber-forge/v/${releaseVersion}`,
     );
     expect(guide).toContain(releaseImplementationSha);
     expect(guide).not.toContain("not yet an npm release");
@@ -41,7 +42,7 @@ describe("integration documentation", () => {
       expect(document).toContain(
         `uses: truthixify/fiber-forge@${releaseImplementationSha}`,
       );
-      expect(document).toContain("package-version: 0.4.0");
+      expect(document).toContain(`package-version: ${releaseVersion}`);
     }
     expect(actionGuide).not.toContain("not yet published on npm");
     expect(actionGuide).toContain("post hook");
@@ -54,7 +55,7 @@ describe("integration documentation", () => {
       text(".github/workflows/publish.yml"),
     ]);
 
-    expect(rootPackage.version).toBe("0.4.0");
+    expect(rootPackage.version).toBe(releaseVersion);
     expect(examplePackage.dependencies[rootPackage.name]).toBe(
       rootPackage.version,
     );

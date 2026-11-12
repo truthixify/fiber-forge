@@ -1,4 +1,4 @@
-# Fiber Forge follow-up release
+# Fiber Forge 0.4.1
 
 This release publishes the channel-liquidity GUI improvements already reviewed on the default
 branch and hardens the package and release path around them.

@@ -5,11 +5,9 @@ registers a job-final post hook that removes the exact network, volume, containe
 state. Use a full Action commit SHA and an exact npm package version; those are separate trust and
 compatibility decisions.
 
-The Action and SDK implementation promoted into package `0.4.0` was verified together at commit
-`9300bea5f9ec5e72bfdec30b6648a8e79325063d`. The
-[Action evidence run](https://github.com/truthixify/fiber-forge/actions/runs/39539424307)
-uses the exact packed release candidate and checks cleanup after both a successful consumer and a
-deliberate consumer failure.
+The Action and SDK implementation promoted into package `0.4.1` is pinned at commit
+`9960c0eee7efdce288dbcb6d444e174c24b60e67`. The release gate packs that exact source and checks
+cleanup after both a successful consumer and a deliberate consumer failure before npm publication.
 
 ```yaml
 permissions:
@@ -18,9 +16,9 @@ permissions:
 steps:
   - uses: actions/checkout@v7
   - id: forge
-    uses: truthixify/fiber-forge@9300bea5f9ec5e72bfdec30b6648a8e79325063d
+    uses: truthixify/fiber-forge@9960c0eee7efdce288dbcb6d444e174c24b60e67
     with:
-      package-version: 0.4.0
+      package-version: 0.4.1
       topology: trio
   - run: node examples/integration-app/src/connection.mjs
     env:
@@ -38,7 +36,7 @@ GitHub-hosted runners are disposable; a self-hosted runner should run the workfl
 pre-cleans the same deterministic network, or use:
 
 ```console
-npx --yes --package @truthixify/fiber-forge@0.4.0 \
+npx --yes --package @truthixify/fiber-forge@0.4.1 \
   fiber-forge down trio --purge
 ```
 
