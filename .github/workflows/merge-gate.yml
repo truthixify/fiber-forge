@@ -45,7 +45,7 @@ jobs:
     uses: ./.github/workflows/action-e2e.yml
 
   required:
-    name: required
+    name: merge-gate / required
     if: always()
     needs: [changes, ordinary-live, cch-live, action-live]
     runs-on: ubuntu-latest

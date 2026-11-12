@@ -70,6 +70,7 @@ describe("merge and release workflow contracts", () => {
   it("reports one stable required source result", async () => {
     const ci = await workflow("ci.yml");
 
+    expect(ci.jobs.required.name).toBe("ci / required");
     expect(ci.jobs.required.if).toBe("always()");
     expect(ci.jobs.required.needs).toEqual(["ci", "runtime-compatibility"]);
   });
@@ -88,6 +89,7 @@ describe("merge and release workflow contracts", () => {
     expect(gate.jobs["action-live"].uses).toBe(
       "./.github/workflows/action-e2e.yml",
     );
+    expect(gate.jobs.required.name).toBe("merge-gate / required");
     expect(gate.jobs.required.if).toBe("always()");
     expect(gate.jobs.required.needs).toEqual([
       "changes",
