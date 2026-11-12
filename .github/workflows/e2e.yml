@@ -21,18 +21,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    paths:
-      - ".github/workflows/e2e.yml"
-      - ".github/workflows/publish.yml"
-      - "assets/**"
-      - "package.json"
-      - "package-lock.json"
-      - "scripts/live-evidence.mjs"
-      - "scripts/verify-packed-artifact.mjs"
-      - "src/**"
-      - "test/e2e.test.ts"
-      - "test/live-evidence.test.mjs"
   schedule:
     - cron: "0 6 * * 1" # Mondays 06:00 UTC
 

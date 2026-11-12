@@ -14,24 +14,17 @@ permissions:
   contents: read
 
 jobs:
-  live-e2e:
-    uses: ./.github/workflows/e2e.yml
-
-  publish:
-    needs: live-e2e
+  metadata:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
+    outputs:
+      npm-tag: ${{ steps.release.outputs.npm-tag }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
-          registry-url: "https://registry.npmjs.org"
-      - run: npm ci
+          node-version: 20
       - id: release
-        name: verify release metadata
+        name: Verify release metadata
         env:
           RELEASE_VERSION: ${{ github.event.inputs.version || github.ref_name }}
         run: |
@@ -44,7 +37,40 @@ jobs:
           }
           appendFileSync(process.env.GITHUB_OUTPUT, `npm-tag=${version.includes("-") ? "next" : "latest"}\n`);
           NODE
-      - name: verify source and packed artifact
-        run: make ci
+
+  source-ci:
+    needs: metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --engine-strict
+      - run: npm audit --omit=dev --audit-level=high
+      - run: make ci
+
+  live-e2e:
+    needs: metadata
+    uses: ./.github/workflows/e2e.yml
+
+  cch-e2e:
+    needs: metadata
+    uses: ./.github/workflows/cch-e2e.yml
+
+  publish:
+    needs: [metadata, source-ci, live-e2e, cch-e2e]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+      - run: npm ci --engine-strict
       - name: publish package
-        run: npm publish --tag "${{ steps.release.outputs.npm-tag }}"
+        run: npm publish --tag "${{ needs.metadata.outputs.npm-tag }}"

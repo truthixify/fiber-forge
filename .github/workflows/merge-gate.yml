@@ -1,0 +1,77 @@
+name: merge-gate
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: merge-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      ordinary: ${{ steps.paths.outputs.ordinary }}
+      cch: ${{ steps.paths.outputs.cch }}
+      action: ${{ steps.paths.outputs.action }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: paths
+        name: Classify changed paths
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/workflow-paths.mjs "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+  ordinary-live:
+    needs: changes
+    if: needs.changes.outputs.ordinary == 'true'
+    uses: ./.github/workflows/e2e.yml
+
+  cch-live:
+    needs: changes
+    if: needs.changes.outputs.cch == 'true'
+    uses: ./.github/workflows/cch-e2e.yml
+
+  action-live:
+    needs: changes
+    if: needs.changes.outputs.action == 'true'
+    uses: ./.github/workflows/action-e2e.yml
+
+  required:
+    name: required
+    if: always()
+    needs: [changes, ordinary-live, cch-live, action-live]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify applicable live gates
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          ORDINARY_REQUIRED: ${{ needs.changes.outputs.ordinary }}
+          ORDINARY_RESULT: ${{ needs.ordinary-live.result }}
+          CCH_REQUIRED: ${{ needs.changes.outputs.cch }}
+          CCH_RESULT: ${{ needs.cch-live.result }}
+          ACTION_REQUIRED: ${{ needs.changes.outputs.action }}
+          ACTION_RESULT: ${{ needs.action-live.result }}
+        run: |
+          node --input-type=module - <<'NODE'
+          const failures = [];
+          if (process.env.CHANGES_RESULT !== "success") {
+            failures.push(`path classification: ${process.env.CHANGES_RESULT}`);
+          }
+          for (const [name, required, result] of [
+            ["ordinary live", process.env.ORDINARY_REQUIRED, process.env.ORDINARY_RESULT],
+            ["CCH", process.env.CCH_REQUIRED, process.env.CCH_RESULT],
+            ["Action", process.env.ACTION_REQUIRED, process.env.ACTION_RESULT],
+          ]) {
+            const expected = required === "true" ? "success" : "skipped";
+            if (result !== expected) failures.push(`${name}: expected ${expected}, received ${result}`);
+          }
+          if (failures.length > 0) throw new Error(failures.join("; "));
+          NODE

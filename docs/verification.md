@@ -3,8 +3,11 @@
 Fiber Forge separates fast unit/package CI from Docker-backed runtime evidence:
 
 - [`ci.yml`](https://github.com/truthixify/fiber-forge/actions/workflows/ci.yml) runs formatting,
-  type checks, unit tests, builds, SDK consumer checks, and the packed-artifact smoke on every push
-  and pull request.
+  type checks, unit tests, builds, Node 20/24 runtime compatibility, SDK consumer checks, and the
+  packed-artifact smoke on every push and pull request.
+- [`merge-gate.yml`](https://github.com/truthixify/fiber-forge/actions/workflows/merge-gate.yml) is
+  created for every pull request targeting `main`. It selects the ordinary live, CCH, and Action
+  suites from the complete changed-file list, then reports one stable required result.
 - [`e2e.yml`](https://github.com/truthixify/fiber-forge/actions/workflows/e2e.yml) installs and checks
   the packed artifact, verifies native manifests for both pinned images before pulling, then runs
   real CKB/Fiber provisioning, automatic and explicit-router multi-hop CKB payments, live gossip and
@@ -16,17 +19,48 @@ Fiber Forge separates fast unit/package CI from Docker-backed runtime evidence:
 
 ## Trigger And Release Policy
 
-Live E2E runs on every push to `main`, runtime-relevant pull requests, manual dispatch, and the
-weekly schedule. The workflow is also reusable: `publish.yml` calls it as a prerequisite, so a
-`v*` tag cannot reach `npm publish` after a failed or incomplete live gate.
+Ordinary live E2E runs on every push to `main`, manual dispatch, and the weekly schedule. CCH runs
+on relevant `main` pushes, manual dispatch, and a weekly Thursday schedule. Action E2E runs on
+relevant `main` pushes and manual dispatch. All three workflows are reusable by the pull-request and
+release gates.
 
-The publish job also requires the pushed `v*` tag to exactly match `package.json`. Stable versions
-publish under npm's `latest` dist-tag; prerelease versions publish under `next`, so an RC cannot
-silently replace the default install.
+Pull requests do not rely on path-filtered workflow creation because GitHub leaves a required check
+pending when its entire workflow is skipped. `merge-gate.yml` always starts, classifies changes,
+skips irrelevant jobs inside that run, and fails its `required` job if classification or any
+applicable live suite fails, times out, or is cancelled. A documentation-only change therefore gets
+a completed gate without spending live-runner time. Changes to shared source, packed assets, package
+metadata, or the classifier itself run all three live suites.
 
-Pull requests that change source, Docker assets, live tests, package inputs, or either runtime
-workflow automatically receive the live check. A reviewer can also dispatch it manually before
-merge.
+The stable checks intended for the default-branch ruleset are `ci / required` and
+`merge-gate / required`, together with an approving review. Workflow files cannot enforce repository
+settings: the ruleset must be inspected and enabled separately by an authorized repository
+administrator. Until that happens, these checks report policy but do not prevent a maintainer from
+merging manually.
+
+The publish workflow first verifies that the selected ref's `package.json` exactly matches the
+requested version or pushed `v*` tag. The same commit must then pass Node 20 source/package CI,
+ordinary packed live E2E, and the separate packed CCH proof. `npm publish` runs only after all three
+jobs succeed; ordinary live E2E never substitutes for CCH. Stable versions publish under npm's
+`latest` dist-tag and prerelease versions under `next`.
+
+## Failed Or Cancelled Release
+
+Do not force-move a tag or dispatch publication from a different commit to work around a failed
+gate. Inspect the ordinary and CCH evidence artifacts first, including cleanup. If the failure was
+transient, the source is unchanged, and cleanup is verified, rerun the same workflow on the same
+ref. If a code or metadata change is required, prepare a new commit and version rather than reusing
+the failed tag.
+
+If a publish job was interrupted after registry upload may have started, check the exact version
+before rerunning:
+
+```sh
+npm view @truthixify/fiber-forge@<version> version
+```
+
+An existing registry version is immutable and must not be published again. Record any partial
+release state, fix the remaining release metadata from a new version where necessary, and keep the
+failed workflow and its evidence available for review.
 
 ## Evidence Artifact
 

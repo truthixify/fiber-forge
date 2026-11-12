@@ -2,35 +2,28 @@ name: cch-e2e
 
 # Optional CCH dependencies are isolated from the ordinary Fiber live gate.
 on:
+  workflow_call:
   workflow_dispatch:
   push:
     branches:
       - main
     paths:
       - ".github/workflows/cch-e2e.yml"
+      - ".github/workflows/merge-gate.yml"
+      - ".github/workflows/publish.yml"
       - "package.json"
       - "package-lock.json"
+      - "tsconfig.json"
+      - "tsconfig.build.json"
       - "scripts/live-evidence.mjs"
       - "scripts/cch-evidence.mjs"
       - "scripts/cch-packed-runner.mjs"
       - "scripts/cch-runner-state.mjs"
+      - "scripts/workflow-paths.mjs"
       - "bin/**"
       - "assets/**"
-      - "src/cch.ts"
-      - "src/cch-proof.ts"
-      - "src/ckb.ts"
-      - "src/cli.ts"
-      - "src/config.ts"
-      - "src/engine.ts"
-      - "src/errors.ts"
-      - "src/lightning.ts"
-      - "src/orchestrator.ts"
-      - "src/package-metadata.ts"
-      - "src/ports.ts"
-      - "src/presets.ts"
-      - "src/rpc.ts"
-      - "src/sdk.ts"
-      - "src/topology.ts"
+      - "examples/cch-two-way.sh"
+      - "src/**"
       - "test/cch.test.ts"
       - "test/cch-proof.test.ts"
       - "test/cch-evidence.test.mjs"
@@ -38,13 +31,15 @@ on:
       - "test/cch-status.test.ts"
       - "test/lightning-e2e.test.ts"
       - "test/cch-topology-e2e.test.ts"
+  schedule:
+    - cron: "37 5 * * 4" # Thursdays 05:37 UTC
 
 permissions:
   contents: read
 
 concurrency:
-  group: cch-e2e-${{ github.ref }}
-  cancel-in-progress: false
+  group: cch-e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   cch-proof:
