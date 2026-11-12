@@ -26,6 +26,15 @@ credentials. The workflow publishes bounded `summary.json`, `summary.md`, and `d
 artifacts and verifies removal of all seven containers, the Docker network, six named volumes, and
 the persisted network directory after each run.
 
+The installed runner atomically records every provisioning, proof, status, cleanup, and finalization
+phase before and after it runs. Each live phase has a referenced deadline tied to the existing
+operation timeout, so an unsettled operation cannot disappear without leaving its last entered
+phase. The outer evidence records the child exit code, signal, duration, timeout state, active or
+failed phase, and sanitized bounded diagnostics. Docker inspection errors fail cleanup evidence;
+they are never treated as proof that a resource is absent. The historical reason and verification
+boundary are recorded in
+[the runner lifecycle evidence](evidence/cch-runner-lifecycle-2026-11-12.md).
+
 This proves a disposable development path only. CKB runs in devnet mode, Bitcoin runs in regtest,
 the operator supplies both liquidity pools, and the wrapped asset uses a trusted 1:1 fixture rate.
 The report is not a Bitcoin reserve proof, a custody audit, or evidence of mainnet safety.
