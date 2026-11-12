@@ -9,11 +9,12 @@
 
 Setting up even a two-node local Fiber network today takes many manual steps: run a CKB dev chain,
 mine, fund addresses, write two `config.yml` files, start two `fnn` processes, exchange peer
-addresses, and drive channel opening over raw JSON-RPC. Core issue #1262 (quick-start scripts) is
-still open, and every tutorial begins with this setup. Lightning has Polar, which became the standard
-local-testing tool for that ecosystem; Fiber has no equivalent. fiber-forge is meant to fill that
-gap: running `fiber-forge up trio` gives you three connected nodes with funded channels and a live
-graph GUI.
+addresses, and drive channel opening over raw JSON-RPC. Upstream Fiber merged
+[PR #1262](https://github.com/nervosnetwork/fiber/pull/1262), adding installation and quick-start
+scripts for an individual node. Those scripts do not own a disposable multi-node CKB/Fiber topology,
+channel readiness, test traffic, or deterministic teardown. Lightning has Polar for that broader
+local-testing workflow; Fiber Forge fills the equivalent gap: running `fiber-forge up trio` gives
+you three connected nodes with funded channels and a live graph GUI.
 
 ## 2. Deliverables
 
@@ -34,13 +35,14 @@ graph GUI.
 
 ## 3. Scope
 
-**MVP:** CKB-denominated channels; the named presets (`duo`/`trio`/`hub`), parametric `shape:N`
-topologies (`line`/`ring`/`star`), and custom YAML; graph GUI with open/pay/close actions and log
-streaming; deterministic teardown; validated on Linux amd64 and macOS arm64 with Docker Desktop.
-**Stretch:** a named, extension-free xUDT asset preset following the reviewed
-[xUDT/RCE compatibility boundary](xudt-rce-compatibility.md); headless CI mode
-(`fiber-forge up --no-ui --json`). RCE policy enforcement remains out of scope until Fiber exposes
-the proof-witness lifecycle needed by every funding and settlement transaction.
+**Current:** CKB and bundled simple-UDT channels; the named presets (`duo`/`trio`/`hub`), parametric
+`shape:N` topologies (`line`/`ring`/`star`), and custom YAML; graph GUI with open/pay/close actions
+and log streaming; deterministic teardown; public SDK and self-cleaning GitHub Action; validated on
+Linux amd64 with Docker Engine and macOS arm64 with Docker Desktop.
+**Pending:** a named, extension-free xUDT asset preset following the reviewed
+[xUDT/RCE compatibility boundary](xudt-rce-compatibility.md). RCE policy enforcement remains out of
+scope until Fiber exposes the proof-witness lifecycle needed by every funding and settlement
+transaction.
 **Non-goals:** testnet/mainnet management (local devnet only); node version matrixing (pinned
 image); Windows-native. WSL2 is the intended Windows path but remains unverified.
 
@@ -138,20 +140,19 @@ funding:
   per_node_ckb: 10000        # on-chain balance transferred at boot
 ```
 
-## 8. Build order
+## 8. Implementation record
 
-1. **Spike: single node up.** Hand-write compose for ckb-dev + one fnn v0.8.1; prove funding →
-   `node_info` returns. Everything hard is discovered here (image platforms, config quirks).
-2. Orchestrator lib: network lifecycle (create/destroy), config generation, port allocation,
-   readiness probes. Test: `duo` comes up and tears down cleanly, twice in a row.
-3. Funding module + peer wiring + channel opening state machine. Test: `duo` reaches
-   `CHANNEL_READY`; FR-1 error paths (kill a container mid-open) covered.
-4. CLI surface (`up/down/status`) + topology parser/validator (FR-8 unit tests).
-5. Forge daemon API (HTTP+WS) + GUI: graph view, node cards, open-channel modal, pay flow,
-   log panel. Test: FR-3/4/5 against a live `trio`.
-6. Presets, `--json`, docs, README GIFs. E2E script: `fiber-forge up trio` → multi-hop payment
-   asserts `Success` → `fiber-forge down` — this script is also CI.
-7. Stretch items only after the E2E is green and recorded.
+The original build sequence is complete and retained here as historical context, not pending work:
+
+1. Proved a single Fiber node against the local CKB dev chain and recorded the image/configuration
+   constraints.
+2. Implemented isolated network lifecycle, configuration, port allocation, and readiness probes.
+3. Added CKB funding, peer wiring, and bounded channel opening through `CHANNEL_READY`.
+4. Added the CLI and topology validation surfaces.
+5. Added the daemon and live GUI for graph, channel, payment, node, and log workflows.
+6. Added machine-readable commands and real packed-artifact Docker verification.
+7. Extended the shipped product with the SDK, GitHub Action, scenarios, replay bundles, recovery,
+   force-close settlement, routing inspection, and local CCH workflows.
 
 ## 9. Acceptance criteria
 
@@ -187,8 +188,17 @@ participants get it in one command."
   timeout as a named failure with the node's last log lines attached (feeds FR-1).
 - **Demo risk:** images pre-pulled; recorded video fallback per submission rules.
 
-## 12. Roadmap (post-hackathon)
+## 12. Pending work
 
-Adopt v0.9 images behind a version flag · UDT/multi-asset presets by default · scenario
-marketplace (shareable topology+traffic bundles) · headless CI mode as a GitHub Action ·
-upstream the compose harness as the answer to fiber#1262 (DAO-grant scope).
+- Validate a stable Fiber release across ordinary and CCH workflows before changing the pinned
+  runtime.
+- Add durable named assets for the proven extension-free xUDT path while retaining the existing
+  `--udt` compatibility alias and deferring RCE policy claims.
+- Add deterministic stuck-HTLC, directional-liquidity, and scenario-driven force-close regression
+  coverage.
+- Extend route inspection only where Fiber exposes evidence for automatic routing or multi-part
+  payments.
+- Add independently verifiable bundle authorship and cross-host replay evidence without copying
+  node stores or keys.
+- Prove a standalone local agent-payment integration through public CLI or SDK contracts before
+  considering a new core API.
