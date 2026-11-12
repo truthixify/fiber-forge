@@ -3,8 +3,8 @@
 Fiber Forge separates fast unit/package CI from Docker-backed runtime evidence:
 
 - [`ci.yml`](https://github.com/truthixify/fiber-forge/actions/workflows/ci.yml) runs formatting,
-  type checks, unit tests, builds, Node 20/24 runtime compatibility, SDK consumer checks, and the
-  packed-artifact smoke on every push and pull request.
+  type checks, unit tests, builds, Node 20/24 runtime compatibility, SDK consumer checks, a
+  production-dependency audit, and the packed-artifact smoke on every push and pull request.
 - [`merge-gate.yml`](https://github.com/truthixify/fiber-forge/actions/workflows/merge-gate.yml) is
   created for every pull request targeting `main`. It selects the ordinary live, CCH, and Action
   suites from the complete changed-file list, then reports one stable required result.
@@ -32,10 +32,11 @@ a completed gate without spending live-runner time. Changes to shared source, pa
 metadata, or the classifier itself run all three live suites.
 
 The stable checks intended for the default-branch ruleset are `ci / required` and
-`merge-gate / required`, together with an approving review. Workflow files cannot enforce repository
-settings: the ruleset must be inspected and enabled separately by an authorized repository
-administrator. Until that happens, these checks report policy but do not prevent a maintainer from
-merging manually.
+`merge-gate / required`. The ruleset requires pull requests and resolved review conversations, but
+does not require an outside approval while the repository has one maintainer. Workflow files cannot
+enforce repository settings: the ruleset must be inspected and enabled separately by an authorized
+repository administrator. Until that happens, these checks report policy but do not prevent a
+maintainer from merging manually.
 
 The publish workflow first verifies that the selected ref's `package.json` exactly matches the
 requested version or pushed `v*` tag. The same commit must then pass Node 20 source/package CI,
@@ -61,6 +62,44 @@ npm view @truthixify/fiber-forge@<version> version
 An existing registry version is immutable and must not be published again. Record any partial
 release state, fix the remaining release metadata from a new version where necessary, and keep the
 failed workflow and its evidence available for review.
+
+## Runtime Dependency Audit
+
+The production dependency graph was reviewed on 2026-11-12 before and after updating
+`@ckb-ccc/core` from 1.16.1 to 1.23.0. Both audits reported zero moderate, high, or critical
+findings and four low entries representing one transitive advisory:
+
+```text
+@ckb-ccc/core@1.23.0
+  -> @joyid/ckb@1.1.4
+  -> @nervosnetwork/ckb-sdk-utils@0.109.5
+  -> elliptic@6.6.1
+```
+
+The root finding is [GHSA-848j-6mx2-7j84](https://github.com/advisories/GHSA-848j-6mx2-7j84).
+The advisory covers incorrect ECDSA signatures in every published `elliptic` version through 6.6.1
+and currently lists no patched version. npm's suggested fix is `@ckb-ccc/core@0.0.4`; that is an
+incompatible downgrade and is not an accepted remediation.
+
+Fiber Forge uses CCC's `SignerCkbPrivateKey`, which signs through `@noble/curves`, for local funding
+and simple-UDT issuance. It does not call CCC's JoyID verification helpers or
+`@nervosnetwork/ckb-sdk-utils`' ECPair signing API. The affected signing routine is therefore not on
+a supported Fiber Forge execution path. The dependency remains installed, however, so the finding
+is retained rather than suppressed. This disposition applies only to Fiber Forge's disposable local
+networks and public dev-chain deployer key; it is not a statement that arbitrary use of the
+transitive package is safe for production keys.
+
+CCC 1.23.0 was accepted for transaction-building fixes relevant to Fiber Forge: fee-completion
+convergence, minimum output capacity after data mutation, exact UDT type matching, and non-mutating
+transaction normalization. Its legacy byte-encoding and Molecule-union changes do not intersect the
+hex, address, transaction, or UDT APIs used here. The packed live suite remains the compatibility
+gate for funding, UDT issuance, channels, and cleanup.
+
+CI runs `npm audit --omit=dev --audit-level=high`, so a new high or critical production finding
+fails the source gate while the reviewed low finding remains visible in the job log. Recheck the
+advisory and the JoyID/CKB SDK dependency chain before each release and whenever CCC changes. Once a
+patched upstream path exists, update it and rerun the Node compatibility, packed live, UDT, and CCH
+proofs before removing this residual-risk record.
 
 ## Evidence Artifact
 

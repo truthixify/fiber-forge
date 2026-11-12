@@ -13,10 +13,17 @@ you need.
 
 ## Version status
 
-As of 2026-10-21, [`0.4.0`](https://www.npmjs.com/package/@truthixify/fiber-forge/v/0.4.0)
-is the latest npm release. It includes the CLI, public SDK, self-cleaning GitHub Action, standalone
-integration example, Codespaces sandbox, strict loopback Docker bindings, recovery and fault
-controls, safe export/replay, CCH transfer proofs, and routing inspection.
+As of 2026-11-12, [`0.4.0`](https://www.npmjs.com/package/@truthixify/fiber-forge/v/0.4.0)
+is the latest published npm package. It includes the CLI, public SDK, self-cleaning GitHub Action,
+standalone integration example, Codespaces sandbox, strict loopback Docker bindings, recovery and
+fault controls, safe export/replay, CCH transfer proofs, and routing inspection.
+
+The repository's default branch is newer than the published package. It includes the
+[channel-liquidity GUI improvements from PR #3](https://github.com/truthixify/fiber-forge/pull/3):
+stable asset channel styling and filters, directional-liquidity payment preflight, prefilled channel
+recovery, pair selection, and navigable peer/channel rows. Those changes are not part of `0.4.0`.
+Use the release tag and commands below when reproducing npm behavior; use the default branch only
+when intentionally evaluating unreleased source.
 
 The implementation promoted in `0.4.0` is pinned at immutable commit
 [`9300bea5f9ec5e72bfdec30b6648a8e79325063d`](https://github.com/truthixify/fiber-forge/commit/9300bea5f9ec5e72bfdec30b6648a8e79325063d).

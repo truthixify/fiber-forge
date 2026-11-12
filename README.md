@@ -10,6 +10,12 @@ inspect each node. A working network is ready in under a minute.
 [![npm](https://img.shields.io/npm/v/@truthixify/fiber-forge)](https://www.npmjs.com/package/@truthixify/fiber-forge)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/truthixify/fiber-forge?quickstart=1)
 
+As of 2026-11-12, `0.4.0` is the latest published npm package. The default branch also includes the
+[channel-liquidity GUI improvements from PR #3](https://github.com/truthixify/fiber-forge/pull/3),
+which are not part of `0.4.0`. Unless a page pins a release tag, this repository's documentation
+describes the default branch. The [integration guide](docs/integration.md#version-status) records
+the exact release boundary and reproducible commit.
+
 It was built for the "Gone in 60ms" Fiber Network Infrastructure Hackathon (Category 2). Lightning
 developers use Polar for this kind of local testing; fiber-forge aims to be the equivalent for Fiber.
 
@@ -245,25 +251,26 @@ run publishes a bounded summary and sanitized diagnostics for 14 days. See
 Pushing a `v*` tag publishes to npm only after the same live workflow passes. The local live command
 also checks the Docker daemon architecture and both image manifest lists before pulling.
 
+Force-close is already available as an explicit local-development operation with full-ID
+confirmation and terminal settlement checks. See [Force-close and settlement](docs/force-close.md)
+for the RPC/state mapping and timeout behavior.
+
 ## Roadmap
 
 - **Richer assets** — the [xUDT/RCE compatibility decision](docs/xudt-rce-compatibility.md) accepts
   named extension-free xUDT work while deferring RCE policy claims until Fiber exposes a complete
   proof-witness lifecycle.
-- **Resilience** — stuck HTLC simulation and force-close/on-chain settlement visibility.
+- **Resilience** — deterministic stuck-HTLC simulation and deeper diagnostics for liquidity and
+  settlement edge cases.
 - **Routing** — extend the shipped explicit-route inspector with automatic-route visibility if Fiber
   exposes it in a future release, then evaluate multi-path payment inspection.
-- **Scenarios** — a curated library of portable failure and recovery recipes.
-- **Cross-chain** — the local-only [CCH compatibility and trust boundary](docs/cch-feasibility.md)
-  is proven in both directions, and the [disposable Lightning backend](docs/lightning-backend.md) is
-  automated. The [integrated CCH topology](docs/cch-topology.md) now provisions and reports the full
-  boundary, while the [packed-artifact transfer proof](docs/cch-transfer-proof.md) verifies terminal
-  settlement, exact balance changes, cleanup, and secret-safe evidence twice from fresh state.
+- **Scenarios** — expand the checked examples with liquidity exhaustion, scenario-driven
+  force-close, and other reproducible protocol regressions.
+- **Compatibility** — validate a stable Fiber release across ordinary and CCH workflows before
+  changing the current image pin.
 - **Reproducibility** — signed bundle provenance and broader cross-host replay evidence.
-
-Force-close is an explicit local-dev operation with full-ID confirmation and terminal settlement
-checks. See [Force-close and settlement](docs/force-close.md) for the RPC/state mapping and timeout
-behavior.
+- **Application integration** — prove a standalone local agent-payment flow through public Fiber
+  Forge APIs before adding any new core surface.
 
 ## License
 
