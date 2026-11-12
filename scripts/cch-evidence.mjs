@@ -49,15 +49,17 @@ function run(command, args, options = {}) {
     let settled = false;
     let timedOut = false;
     let forceKillTimer;
+    let timeoutTimer;
     const retain = (current, chunk) =>
       (current + chunk).slice(-MAX_DIAGNOSTICS_BYTES);
-    const finish = (code) => {
+    const finish = (code, signal = null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeoutTimer);
       clearTimeout(forceKillTimer);
       resolvePromise({
         code: timedOut ? 1 : (code ?? 1),
+        signal,
         stdout,
         stderr,
         durationMs: Date.now() - started,
@@ -70,10 +72,10 @@ function run(command, args, options = {}) {
     child.stderr.on("data", (chunk) => (stderr = retain(stderr, chunk)));
     child.once("error", (error) => {
       stderr = retain(stderr, String(error));
-      finish(1);
+      finish(1, null);
     });
-    child.once("close", finish);
-    const timeoutTimer = setTimeout(() => {
+    child.once("close", (code, signal) => finish(code, signal));
+    timeoutTimer = setTimeout(() => {
       timedOut = true;
       stderr = retain(
         stderr,
@@ -98,20 +100,47 @@ async function commandValue(command, args) {
   return result.code === 0 ? result.stdout.trim() : null;
 }
 
+export function classifyDockerResourceInspection(result, kind) {
+  if (result?.code === 0) return "present";
+  const missingPattern =
+    kind === "network"
+      ? /(?:no such network|network .+ not found)/i
+      : /no such volume/i;
+  return missingPattern.test(String(result?.stderr ?? ""))
+    ? "absent"
+    : "failed";
+}
+
 async function inspectResidue(net, stateRoot) {
+  const inspectionFailures = [];
+  const containersResult = await run("docker", [
+    "ps",
+    "-aq",
+    "--filter",
+    `label=fiber-forge=${net}`,
+  ]);
+  if (containersResult.code !== 0) {
+    inspectionFailures.push({ resource: "containers", code: "INSPECT_FAILED" });
+  }
   const containers =
-    (await commandValue("docker", [
-      "ps",
-      "-aq",
-      "--filter",
-      `label=fiber-forge=${net}`,
-    ])) ?? "";
+    containersResult.code === 0 ? containersResult.stdout.trim() : "";
   const network = await run("docker", ["network", "inspect", `forge-${net}`]);
+  const networkState = classifyDockerResourceInspection(network, "network");
+  if (networkState === "failed") {
+    inspectionFailures.push({ resource: "network", code: "INSPECT_FAILED" });
+  }
   const volumes = [];
   for (const suffix of VOLUME_SUFFIXES) {
     const name = `forge-${net}-${suffix}`;
-    if ((await run("docker", ["volume", "inspect", name])).code === 0) {
+    const volume = await run("docker", ["volume", "inspect", name]);
+    const volumeState = classifyDockerResourceInspection(volume, "volume");
+    if (volumeState === "present") {
       volumes.push(name);
+    } else if (volumeState === "failed") {
+      inspectionFailures.push({
+        resource: `volume:${suffix}`,
+        code: "INSPECT_FAILED",
+      });
     }
   }
   const statePath = join(stateRoot, "cold-start", net);
@@ -131,6 +160,7 @@ async function inspectResidue(net, stateRoot) {
     networkPresent: network.code === 0,
     volumes,
     statePaths: statePresent.filter(Boolean),
+    inspectionFailures,
   };
 }
 
@@ -139,7 +169,8 @@ function residueEmpty(residue) {
     residue.containers.length === 0 &&
     !residue.networkPresent &&
     residue.volumes.length === 0 &&
-    residue.statePaths.length === 0
+    residue.statePaths.length === 0 &&
+    residue.inspectionFailures.length === 0
   );
 }
 
@@ -324,8 +355,81 @@ function normalizeFailure(failure) {
   };
 }
 
+function normalizeRunnerStage(stage) {
+  if (!stage || typeof stage !== "object") return null;
+  const clean = (value, maxBytes = 160) =>
+    value === null || value === undefined
+      ? null
+      : sanitizeText(String(value), {
+          maxBytes,
+          privatePaths: [homedir()],
+        }).text;
+  return {
+    sequence:
+      Number.isSafeInteger(stage.sequence) && stage.sequence > 0
+        ? stage.sequence
+        : null,
+    phase: clean(stage.phase) ?? "unknown-stage",
+    status:
+      stage.status === "started" ||
+      stage.status === "completed" ||
+      stage.status === "failed"
+        ? stage.status
+        : "failed",
+    at: clean(stage.at, 64),
+    errorCode: clean(stage.errorCode, 64),
+  };
+}
+
+function normalizeRunnerEvidence(runner, execution, rawRuns) {
+  const stages = (
+    Array.isArray(runner?.stageJournal) ? runner.stageJournal : []
+  )
+    .slice(-64)
+    .map(normalizeRunnerStage)
+    .filter(Boolean);
+  const inferredStatus =
+    rawRuns.length === 2 ? "legacy-complete" : runner ? "running" : "missing";
+  const status =
+    runner?.status === "running" ||
+    runner?.status === "passed" ||
+    runner?.status === "failed"
+      ? runner.status
+      : inferredStatus;
+  const clean = (value, maxBytes = 160) =>
+    value === null || value === undefined
+      ? null
+      : sanitizeText(String(value), {
+          maxBytes,
+          privatePaths: [homedir()],
+        }).text;
+  return {
+    status,
+    activeStage: clean(runner?.activeStage),
+    lastStage: stages.at(-1) ?? null,
+    lastFailedStage:
+      stages.findLast((stage) => stage.status === "failed") ?? null,
+    stages,
+    failure: normalizeFailure(runner?.failure),
+    process: {
+      exitCode: Number.isSafeInteger(execution?.code) ? execution.code : null,
+      signal: clean(execution?.signal, 32),
+      durationMs:
+        Number.isSafeInteger(execution?.durationMs) && execution.durationMs >= 0
+          ? execution.durationMs
+          : null,
+      timedOut: execution?.timedOut === true,
+    },
+  };
+}
+
 export function buildCchEvidence(input) {
   const rawRuns = Array.isArray(input.runner?.runs) ? input.runner.runs : [];
+  const runnerEvidence = normalizeRunnerEvidence(
+    input.runner,
+    input.runnerExecution,
+    rawRuns,
+  );
   const runs = rawRuns.map((run) => {
     let proof = run?.proof ?? null;
     let failure = normalizeFailure(run?.failure);
@@ -365,6 +469,11 @@ export function buildCchEvidence(input) {
   const passed =
     input.runner?.schemaVersion === 1 &&
     input.runner?.source === "installed-packed-artifact" &&
+    (runnerEvidence.status === "passed" ||
+      runnerEvidence.status === "legacy-complete") &&
+    (runnerEvidence.process.exitCode === null ||
+      (runnerEvidence.process.exitCode === 0 &&
+        !runnerEvidence.process.timedOut)) &&
     runs.length === 2 &&
     runs[0]?.mode === "cold-start" &&
     runs[1]?.mode === "warm-start" &&
@@ -395,6 +504,7 @@ export function buildCchEvidence(input) {
       coldStartMs: runs[0]?.startupMs ?? null,
       warmStartMs: runs[1]?.startupMs ?? null,
     },
+    runner: runnerEvidence,
     runs,
     cleanup: input.cleanup,
     diagnostics: input.diagnostics,
@@ -409,6 +519,7 @@ export function renderCchEvidenceMarkdown(summary) {
     `**Package:** \`${summary.source.package.name}@${summary.source.package.version}\`  `,
     `**Commit:** \`${summary.source.commit.slice(0, 12)}\`  `,
     `**Host:** ${summary.host.platform} ${summary.host.release} (${summary.host.architecture}), Node ${summary.host.node}, Docker ${summary.host.docker}`,
+    `**Runner:** ${summary.runner.status}; exit ${summary.runner.process.exitCode ?? "unknown"}; observed stage ${summary.runner.activeStage ?? summary.runner.lastFailedStage?.phase ?? summary.runner.lastStage?.phase ?? "unavailable"}`,
     "",
     "| Run | Fresh state | Startup | Proof | Cleanup |",
     "| --- | --- | ---: | ---: | --- |",
@@ -435,7 +546,14 @@ async function main() {
   let runner = null;
   let tarball = { filename: "unavailable", bytes: 0, sha256: "unavailable" };
   let installMs = 0;
-  let runnerResult = { code: 1, stdout: "", stderr: "", durationMs: 0 };
+  let runnerResult = {
+    code: 1,
+    signal: null,
+    stdout: "",
+    stderr: "",
+    durationMs: 0,
+    timedOut: false,
+  };
   const packageJson = JSON.parse(
     await readFile(join(repoDir, "package.json"), "utf8"),
   );
@@ -485,10 +603,14 @@ async function main() {
     diagnostics.push({ phase: "packed-install", ...installResult });
     requireSuccess("packed artifact install", installResult);
     const copiedRunner = join(consumerDir, "cch-packed-runner.mjs");
-    await copyFile(
-      join(repoDir, "scripts", "cch-packed-runner.mjs"),
-      copiedRunner,
-    );
+    const copiedRunnerState = join(consumerDir, "cch-runner-state.mjs");
+    await Promise.all([
+      copyFile(join(repoDir, "scripts", "cch-packed-runner.mjs"), copiedRunner),
+      copyFile(
+        join(repoDir, "scripts", "cch-runner-state.mjs"),
+        copiedRunnerState,
+      ),
+    ]);
     runnerResult = await run(
       process.execPath,
       [copiedRunner, runnerOutput, stateRoot, runPrefix],
@@ -519,8 +641,8 @@ async function main() {
 
     const rawDiagnostics = diagnostics
       .map(
-        ({ phase, code, durationMs, stdout, stderr }) =>
-          `[${phase}] exit=${code} durationMs=${durationMs}\n${stdout}${stderr}`,
+        ({ phase, code, signal, durationMs, timedOut, stdout, stderr }) =>
+          `[${phase}] exit=${code} signal=${signal ?? "none"} timedOut=${timedOut === true} durationMs=${durationMs}\n${stdout}${stderr}`,
       )
       .join("\n");
     const sanitized = sanitizeText(rawDiagnostics, {
@@ -541,6 +663,7 @@ async function main() {
     };
     const summary = buildCchEvidence({
       runner,
+      runnerExecution: runnerResult,
       cleanup,
       package: { name: packageJson.name, version: packageJson.version },
       tarball,
