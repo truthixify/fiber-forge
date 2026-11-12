@@ -13,7 +13,7 @@ npm ci
 npm run example:local
 ```
 
-The runner builds a `0.4.0` tarball, copies this application to a temporary directory, installs
+The runner builds a `0.4.1` tarball, copies this application to a temporary directory, installs
 the tarball with production dependencies only, starts an isolated trio, asserts a real one-CKB
 multi-hop payment, tears the network down, and removes its temporary state.
 
@@ -34,14 +34,15 @@ npm test
 
 The application entry point accepts the Action's structured output unchanged:
 
-The Action and packed implementation promoted into `0.4.0` were exercised by the repository's public
-[Action evidence workflow](https://github.com/truthixify/fiber-forge/actions/runs/39539424307).
+The Action and packed implementation promoted into `0.4.1` are pinned to the reviewed implementation
+commit below. The release gate exercises successful and deliberately failing consumers before
+publication.
 
 ```yaml
 - id: forge
-  uses: truthixify/fiber-forge@9300bea5f9ec5e72bfdec30b6648a8e79325063d
+  uses: truthixify/fiber-forge@9960c0eee7efdce288dbcb6d444e174c24b60e67
   with:
-    package-version: 0.4.0
+    package-version: 0.4.1
     topology: trio
 - run: node examples/integration-app/src/connection.mjs
   env:

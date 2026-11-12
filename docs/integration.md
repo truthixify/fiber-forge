@@ -13,27 +13,24 @@ you need.
 
 ## Version status
 
-As of 2026-11-12, [`0.4.0`](https://www.npmjs.com/package/@truthixify/fiber-forge/v/0.4.0)
+As of 2026-11-12, [`0.4.1`](https://www.npmjs.com/package/@truthixify/fiber-forge/v/0.4.1)
 is the latest published npm package. It includes the CLI, public SDK, self-cleaning GitHub Action,
 standalone integration example, Codespaces sandbox, strict loopback Docker bindings, recovery and
-fault controls, safe export/replay, CCH transfer proofs, and routing inspection.
+fault controls, safe export/replay, CCH transfer proofs, routing inspection, and the
+[channel-liquidity GUI improvements from PR #3](https://github.com/truthixify/fiber-forge/pull/3).
+The GUI additions cover stable asset styling and filters, directional-liquidity payment preflight,
+prefilled channel recovery, pair selection, and navigable peer/channel rows.
 
-The repository's default branch is newer than the published package. It includes the
-[channel-liquidity GUI improvements from PR #3](https://github.com/truthixify/fiber-forge/pull/3):
-stable asset channel styling and filters, directional-liquidity payment preflight, prefilled channel
-recovery, pair selection, and navigable peer/channel rows. Those changes are not part of `0.4.0`.
-Use the release tag and commands below when reproducing npm behavior; use the default branch only
-when intentionally evaluating unreleased source.
-
-The implementation promoted in `0.4.0` is pinned at immutable commit
-[`9300bea5f9ec5e72bfdec30b6648a8e79325063d`](https://github.com/truthixify/fiber-forge/commit/9300bea5f9ec5e72bfdec30b6648a8e79325063d).
-The stable tag adds release metadata, documentation, and npm publication safeguards; the runtime
-implementation is unchanged from that reviewed commit.
+The implementation promoted in `0.4.1` is pinned at immutable commit
+[`9960c0eee7efdce288dbcb6d444e174c24b60e67`](https://github.com/truthixify/fiber-forge/commit/9960c0eee7efdce288dbcb6d444e174c24b60e67).
+The release commit changes package metadata and current-version documentation; the runtime
+implementation is unchanged from that reviewed default-branch commit. Use the release tag and
+commands below when reproducing npm behavior.
 
 Check the exact release without using a moving npm tag:
 
 ```sh
-npx --yes @truthixify/fiber-forge@0.4.0 --version
+npx --yes @truthixify/fiber-forge@0.4.1 --version
 ```
 
 ## Reproduce the release
@@ -45,7 +42,7 @@ standalone application against a real three-node network:
 ```sh
 git clone https://github.com/truthixify/fiber-forge.git
 cd fiber-forge
-git checkout v0.4.0
+git checkout v0.4.1
 npm ci
 npm run build
 npm run test:package
@@ -62,7 +59,7 @@ application, creates an isolated trio through `@truthixify/fiber-forge/sdk`, com
 Install the exact stable version:
 
 ```sh
-npm install --save-exact @truthixify/fiber-forge@0.4.0
+npm install --save-exact @truthixify/fiber-forge@0.4.1
 ```
 
 Import only the declared subpath. Keep lifecycle ownership in one scope and always purge in
@@ -104,9 +101,9 @@ permissions:
 steps:
   - uses: actions/checkout@v7
   - id: forge
-    uses: truthixify/fiber-forge@9300bea5f9ec5e72bfdec30b6648a8e79325063d
+    uses: truthixify/fiber-forge@9960c0eee7efdce288dbcb6d444e174c24b60e67
     with:
-      package-version: 0.4.0
+      package-version: 0.4.1
       topology: trio
   - run: node test/fiber-payment.mjs
     env:
@@ -166,11 +163,11 @@ operate a shared or paid deployment.
 | --- | --- |
 | Released CLI `0.2.9`, Linux amd64 live paths | [durable record](evidence/linux-amd64-2026-10-20.json), [workflow run](https://github.com/truthixify/fiber-forge/actions/runs/39363776395) |
 | Released CLI `0.2.9`, macOS arm64 live paths | [durable record](evidence/macos-arm64-2026-10-20.json) |
-| Promoted implementation, SDK, and packed application | [CI run](https://github.com/truthixify/fiber-forge/actions/runs/39539424400) |
-| Action success, deliberate consumer failure, and independent post cleanup | [Action run](https://github.com/truthixify/fiber-forge/actions/runs/39539424307) |
-| Linux live network, payment, recovery, UDT, replay, routing, rollback, and cleanup | [live run](https://github.com/truthixify/fiber-forge/actions/runs/39539424327) |
-| Bidirectional CCH transfer proof with cold and warm starts | [CCH run](https://github.com/truthixify/fiber-forge/actions/runs/39539424317) |
+| Promoted implementation, SDK, packed application, and Node 20/24 consumers | [CI run](https://github.com/truthixify/fiber-forge/actions/runs/43200024726) |
+| Action success, deliberate consumer failure, and independent post cleanup | [merge-gate run](https://github.com/truthixify/fiber-forge/actions/runs/43200024822) |
+| Linux live network, payment, recovery, UDT, replay, routing, rollback, and cleanup | [merge-gate run](https://github.com/truthixify/fiber-forge/actions/runs/43200024822) |
+| Bidirectional CCH transfer proof with cold and warm starts | [merge-gate run](https://github.com/truthixify/fiber-forge/actions/runs/43200024822) |
 | Codespaces/devcontainer launch on macOS arm64 | [sandbox record](evidence/sandbox-macos-arm64-2026-10-20.json) |
 
-The implementation evidence is tied to commit `9300bea5f9ec5e72bfdec30b6648a8e79325063d`.
+The `0.4.1` implementation boundary is commit `9960c0eee7efdce288dbcb6d444e174c24b60e67`.
 Environment records retain their original package versions so historical claims remain auditable.

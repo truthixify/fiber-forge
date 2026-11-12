@@ -10,11 +10,11 @@ inspect each node. A working network is ready in under a minute.
 [![npm](https://img.shields.io/npm/v/@truthixify/fiber-forge)](https://www.npmjs.com/package/@truthixify/fiber-forge)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/truthixify/fiber-forge?quickstart=1)
 
-As of 2026-11-12, `0.4.0` is the latest published npm package. The default branch also includes the
-[channel-liquidity GUI improvements from PR #3](https://github.com/truthixify/fiber-forge/pull/3),
-which are not part of `0.4.0`. Unless a page pins a release tag, this repository's documentation
-describes the default branch. The [integration guide](docs/integration.md#version-status) records
-the exact release boundary and reproducible commit.
+As of 2026-11-12, `0.4.1` is the latest published npm package. It includes the
+[channel-liquidity GUI improvements from PR #3](https://github.com/truthixify/fiber-forge/pull/3)
+and the release hardening around them. Unless a page pins a historical release, this repository's
+documentation describes the current release and default branch. The
+[integration guide](docs/integration.md#version-status) records the exact implementation boundary.
 
 It was built for the "Gone in 60ms" Fiber Network Infrastructure Hackathon (Category 2). Lightning
 developers use Polar for this kind of local testing; fiber-forge aims to be the equivalent for Fiber.

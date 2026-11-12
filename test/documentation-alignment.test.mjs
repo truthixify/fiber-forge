@@ -36,7 +36,7 @@ describe("shipped documentation", () => {
     expect(spec).not.toContain("## 12. Roadmap (post-hackathon)");
   });
 
-  it("distinguishes the published package from default-branch behavior", async () => {
+  it("keeps current release claims aligned across the primary guides", async () => {
     const [readme, guide] = await Promise.all([
       text("README.md"),
       text("docs/integration.md"),
@@ -44,8 +44,8 @@ describe("shipped documentation", () => {
 
     for (const document of [readme, guide]) {
       expect(document).toContain("latest published npm package");
-      expect(document).toContain("default branch");
-      expect(document).toContain("not part of `0.4.0`");
+      expect(document).toContain("`0.4.1`");
+      expect(document).not.toContain("not part of `0.4.0`");
     }
   });
 });
