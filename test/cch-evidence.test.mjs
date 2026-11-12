@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCchEvidence,
+  classifyDockerResourceInspection,
   renderCchEvidenceMarkdown,
 } from "../scripts/cch-evidence.mjs";
 
@@ -95,6 +96,39 @@ function change(before, after) {
 }
 
 describe("CCH evidence", () => {
+  it("distinguishes absent Docker resources from inspection failures", () => {
+    expect(
+      classifyDockerResourceInspection({ code: 0, stderr: "" }, "network"),
+    ).toBe("present");
+    expect(
+      classifyDockerResourceInspection(
+        { code: 1, stderr: "Error: No such network: forge-test" },
+        "network",
+      ),
+    ).toBe("absent");
+    expect(
+      classifyDockerResourceInspection(
+        {
+          code: 1,
+          stderr: "Error response from daemon: network forge-test not found",
+        },
+        "network",
+      ),
+    ).toBe("absent");
+    expect(
+      classifyDockerResourceInspection(
+        { code: 1, stderr: "Error: No such volume: forge-test-data" },
+        "volume",
+      ),
+    ).toBe("absent");
+    expect(
+      classifyDockerResourceInspection(
+        { code: 1, stderr: "Cannot connect to the Docker daemon" },
+        "volume",
+      ),
+    ).toBe("failed");
+  });
+
   it("accepts exactly two clean packed-artifact runs and preserves separate timings", () => {
     const runs = [
       {
@@ -118,7 +152,23 @@ describe("CCH evidence", () => {
       runner: {
         schemaVersion: 1,
         source: "installed-packed-artifact",
+        status: "passed",
+        activeStage: null,
+        stageJournal: [
+          {
+            sequence: 1,
+            phase: "runner:finalize",
+            status: "completed",
+            at: "2026-11-12T00:00:00.000Z",
+          },
+        ],
         runs,
+      },
+      runnerExecution: {
+        code: 0,
+        signal: null,
+        durationMs: 42_000,
+        timedOut: false,
       },
       cleanup: {
         "cch-proof-1": { result: "passed" },
@@ -142,6 +192,11 @@ describe("CCH evidence", () => {
       result: "passed",
       source: { packedArtifact: true },
       timings: { coldStartMs: 10_000, warmStartMs: 8_000 },
+      runner: {
+        status: "passed",
+        process: { exitCode: 0, timedOut: false },
+        lastStage: { phase: "runner:finalize", status: "completed" },
+      },
     });
     expect(renderCchEvidenceMarkdown(summary)).toContain(
       "trusted local-development bridge",
@@ -194,6 +249,16 @@ describe("CCH evidence", () => {
       runner: {
         schemaVersion: 1,
         source: "installed-packed-artifact",
+        status: "failed",
+        stageJournal: [
+          {
+            sequence: 1,
+            phase: "cold-start:proof",
+            status: "failed",
+            at: "2026-11-12T00:00:00.000Z",
+            errorCode: "CCH_TRANSFER_FAILED",
+          },
+        ],
         runs: [
           {
             mode: "cold-start",
@@ -210,6 +275,12 @@ describe("CCH evidence", () => {
             cleanup: "passed",
           },
         ],
+      },
+      runnerExecution: {
+        code: 1,
+        signal: null,
+        durationMs: 2_000,
+        timedOut: false,
       },
       cleanup: {
         "cch-proof-1": { result: "passed" },
@@ -236,6 +307,16 @@ describe("CCH evidence", () => {
       runner: {
         schemaVersion: 1,
         source: "installed-packed-artifact",
+        status: "failed",
+        stageJournal: [
+          {
+            sequence: 1,
+            phase: "cold-start:proof",
+            status: "failed",
+            at: "2026-11-12T00:00:00.000Z",
+            errorCode: "CCH_TRANSFER_FAILED",
+          },
+        ],
         runs: [
           {
             mode: "cold-start",
@@ -251,6 +332,12 @@ describe("CCH evidence", () => {
           },
         ],
       },
+      runnerExecution: {
+        code: 1,
+        signal: null,
+        durationMs: 2_000,
+        timedOut: false,
+      },
       cleanup: { "cch-proof-1": { result: "passed" } },
       package: { name: "test", version: "test" },
       tarball: {},
@@ -262,6 +349,100 @@ describe("CCH evidence", () => {
 
     expect(summary.result).toBe("failed");
     expect(summary.runs[0].failure.detail).toBe("token=[REDACTED]");
+    expect(summary.runner).toMatchObject({
+      status: "failed",
+      lastStage: {
+        phase: "cold-start:proof",
+        errorCode: "CCH_TRANSFER_FAILED",
+      },
+      lastFailedStage: {
+        phase: "cold-start:proof",
+        errorCode: "CCH_TRANSFER_FAILED",
+      },
+      process: { exitCode: 1 },
+    });
+  });
+
+  it("retains process evidence when the runner report is missing", () => {
+    const summary = buildCchEvidence({
+      runner: null,
+      runnerExecution: {
+        code: 13,
+        signal: null,
+        durationMs: 3_102,
+        timedOut: false,
+      },
+      cleanup: {},
+      package: { name: "test", version: "test" },
+      tarball: {},
+      commit: "unknown",
+      host: {},
+      installMs: 1,
+      diagnostics: {},
+    });
+
+    expect(summary).toMatchObject({
+      result: "failed",
+      runner: {
+        status: "missing",
+        activeStage: null,
+        lastStage: null,
+        process: { exitCode: 13, durationMs: 3_102, timedOut: false },
+      },
+    });
+  });
+
+  it("retains and sanitizes the last stage from a partial report", () => {
+    const summary = buildCchEvidence({
+      runner: {
+        schemaVersion: 1,
+        source: "installed-packed-artifact",
+        status: "running",
+        activeStage: "cold-start:provision token=secret-value",
+        stageJournal: [
+          {
+            sequence: 1,
+            phase: "cold-start:provision token=secret-value",
+            status: "started",
+            at: "2026-11-12T00:00:00.000Z",
+          },
+        ],
+        runs: [
+          {
+            mode: "cold-start",
+            net: "cch-proof-1",
+            startupMs: null,
+            proof: null,
+            failure: null,
+            cleanup: "pending",
+          },
+        ],
+      },
+      runnerExecution: {
+        code: 13,
+        signal: null,
+        durationMs: 3_102,
+        timedOut: false,
+      },
+      cleanup: { "cch-proof-1": { result: "passed" } },
+      package: { name: "test", version: "test" },
+      tarball: {},
+      commit: "unknown",
+      host: {},
+      installMs: 1,
+      diagnostics: {},
+    });
+
+    expect(summary.result).toBe("failed");
+    expect(summary.runner.status).toBe("running");
+    expect(summary.runner.activeStage).toBe(
+      "cold-start:provision token=[REDACTED]",
+    );
+    expect(summary.runner.lastStage).toMatchObject({
+      phase: "cold-start:provision token=[REDACTED]",
+      status: "started",
+    });
+    expect(JSON.stringify(summary)).not.toContain("secret-value");
   });
 
   it("rejects evidence with an invalid runner schema or run mode", () => {
