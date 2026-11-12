@@ -11,6 +11,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --engine-strict
+      - run: npm audit --omit=dev --audit-level=high
       - run: make ci
 
   runtime-compatibility:
