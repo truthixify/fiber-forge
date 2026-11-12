@@ -211,9 +211,8 @@ describe("merge and release workflow contracts", () => {
     expect(normalizedGuide).toContain(
       "npm view @truthixify/fiber-forge@<version> version",
     );
-    expect(normalizedGuide).toContain(
-      "must be inspected and enabled separately",
-    );
+    expect(normalizedGuide).toContain("active default-branch ruleset");
+    expect(normalizedGuide).toContain("has no bypass actor");
     expect(normalizedGuide).toContain("clean Node 20 consumer");
     expect(normalizedGuide).toContain("already-existing tag");
     expect(normalizedGuide).toContain("contained in the default branch");

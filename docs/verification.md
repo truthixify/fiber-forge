@@ -31,12 +31,10 @@ applicable live suite fails, times out, or is cancelled. A documentation-only ch
 a completed gate without spending live-runner time. Changes to shared source, packed assets, package
 metadata, or the classifier itself run all three live suites.
 
-The stable checks intended for the default-branch ruleset are `ci / required` and
-`merge-gate / required`. The ruleset requires pull requests and resolved review conversations, but
-does not require an outside approval while the repository has one maintainer. Workflow files cannot
-enforce repository settings: the ruleset must be inspected and enabled separately by an authorized
-repository administrator. Until that happens, these checks report policy but do not prevent a
-maintainer from merging manually.
+The active default-branch ruleset requires `ci / required` and `merge-gate / required` before
+`main` can be updated. It permits merge-only pull requests, requires resolved review conversations,
+blocks deletion and non-fast-forward updates, and has no bypass actor. It does not require an outside
+approval while the repository has one maintainer.
 
 The publish workflow first verifies that the selected ref's `package.json` exactly matches the
 requested version or pushed `v*` tag and that the tagged commit is contained in the default branch.
