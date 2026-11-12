@@ -245,6 +245,7 @@ async function main() {
       [
         "install",
         "--omit=dev",
+        "--engine-strict",
         "--no-audit",
         "--no-fund",
         "--loglevel=error",
@@ -261,6 +262,10 @@ async function main() {
       "fiber-forge",
     );
     await assertInstalledFiles(packageDir);
+    const installedMetadata = JSON.parse(
+      await readFile(join(packageDir, "package.json"), "utf8"),
+    );
+    assert.equal(installedMetadata.engines?.node, ">=20");
     const installLock = JSON.parse(
       await readFile(join(consumerDir, "package-lock.json"), "utf8"),
     );
@@ -339,6 +344,23 @@ async function main() {
     assert.deepEqual(JSON.parse(jsonResult.stdout), []);
     assert.equal(jsonResult.stderr, "");
     assertNoAnsi("CLI JSON output", jsonResult.stdout);
+
+    const progressResult = await run(
+      bin,
+      ["pay", "packed-progress-missing", "alice", "bob", "1"],
+      { cwd: consumerDir, env: cliEnv },
+    );
+    assert.equal(progressResult.code, 1, "missing network must exit non-zero");
+    assert.equal(progressResult.stdout, "");
+    assert.match(
+      progressResult.stderr,
+      /settle creating invoice, routing payment/,
+    );
+    assert.match(
+      progressResult.stderr,
+      /settle network "packed-progress-missing" not found/,
+    );
+    assertNoAnsi("CLI progress failure", progressResult.stderr);
 
     const bundleResult = await run(
       bin,
