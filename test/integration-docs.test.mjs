@@ -14,7 +14,7 @@ describe("integration documentation", () => {
   it("documents the stable integration release with an immutable implementation pin", async () => {
     const guide = await text("docs/integration.md");
 
-    expect(guide).toContain("is the latest npm release");
+    expect(guide).toContain("is the latest published npm package");
     expect(guide).toContain(
       "https://www.npmjs.com/package/@truthixify/fiber-forge/v/0.4.0",
     );
