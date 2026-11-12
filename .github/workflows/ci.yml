@@ -29,3 +29,19 @@ jobs:
       - run: npm ci --engine-strict
       - run: npm run build
       - run: npm run test:runtime
+
+  required:
+    name: ci / required
+    if: always()
+    needs: [ci, runtime-compatibility]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify source checks
+        env:
+          SOURCE_RESULT: ${{ needs.ci.result }}
+          RUNTIME_RESULT: ${{ needs.runtime-compatibility.result }}
+        run: |
+          if [ "$SOURCE_RESULT" != "success" ] || [ "$RUNTIME_RESULT" != "success" ]; then
+            echo "source checks failed: ci=$SOURCE_RESULT runtime-compatibility=$RUNTIME_RESULT" >&2
+            exit 1
+          fi

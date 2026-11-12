@@ -1,27 +1,23 @@
 name: action-e2e
 
 on:
+  workflow_call:
   workflow_dispatch:
   push:
     branches:
       - main
     paths:
       - ".github/workflows/action-e2e.yml"
+      - ".github/workflows/merge-gate.yml"
       - "action.yml"
       - "action/**"
+      - "assets/**"
+      - "bin/**"
       - "package.json"
       - "package-lock.json"
       - "src/**"
-      - "examples/integration-app/**"
-      - "test/fixtures/action-cleanup-probe/**"
-  pull_request:
-    paths:
-      - ".github/workflows/action-e2e.yml"
-      - "action.yml"
-      - "action/**"
-      - "package.json"
-      - "package-lock.json"
-      - "src/**"
+      - "tsconfig.json"
+      - "tsconfig.build.json"
       - "examples/integration-app/**"
       - "test/fixtures/action-cleanup-probe/**"
 

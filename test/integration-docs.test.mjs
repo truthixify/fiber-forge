@@ -62,7 +62,7 @@ describe("integration documentation", () => {
     expect(workflow).toContain("version !== releaseVersion");
     expect(workflow).toContain('version.includes("-") ? "next" : "latest"');
     expect(workflow).toContain(
-      'npm publish --tag "${{ steps.release.outputs.npm-tag }}"',
+      'npm publish --tag "${{ needs.metadata.outputs.npm-tag }}"',
     );
     expect(workflow).toContain("id-token: write");
     expect(workflow).toContain("node-version: 24");
