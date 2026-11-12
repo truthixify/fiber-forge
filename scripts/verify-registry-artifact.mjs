@@ -15,6 +15,8 @@ import { pathToFileURL } from "node:url";
 const packageName = "@truthixify/fiber-forge";
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const maxCommandOutputBytes = 64 * 1024;
+const registryInstallAttempts = 21;
+const registryInstallDelayMs = 15_000;
 
 export const requiredRegistryFiles = Object.freeze([
   "assets/ckb-entrypoint.sh",
@@ -129,6 +131,62 @@ function requireSuccess(label, result) {
   );
 }
 
+function isRegistryPropagationMiss(result, version) {
+  return (
+    result.code !== 0 &&
+    result.stderr.includes("npm error code ETARGET") &&
+    result.stderr.includes(
+      `No matching version found for ${packageName}@${version}.`,
+    )
+  );
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function installRegistryPackage(
+  version,
+  consumerDir,
+  {
+    attempts = registryInstallAttempts,
+    delayMs = registryInstallDelayMs,
+    runCommand = run,
+    wait = sleep,
+    onRetry = ({ attempt, delayMs: retryDelayMs }) =>
+      process.stderr.write(
+        `registry has not exposed ${packageName}@${version}; retrying after ${retryDelayMs}ms (${attempt}/${attempts})\n`,
+      ),
+  } = {},
+) {
+  assertReleaseVersion(version);
+  if (!Number.isInteger(attempts) || attempts < 1) {
+    throw new Error("registry install attempts must be a positive integer");
+  }
+  if (!Number.isInteger(delayMs) || delayMs < 0) {
+    throw new Error("registry install delay must be a non-negative integer");
+  }
+
+  const args = [
+    "install",
+    "--ignore-scripts",
+    "--engine-strict",
+    "--no-audit",
+    "--no-fund",
+    "--save-exact",
+    `${packageName}@${version}`,
+  ];
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const result = await runCommand(npmCommand, args, consumerDir);
+    if (result.code === 0) return;
+    if (!isRegistryPropagationMiss(result, version) || attempt === attempts) {
+      requireSuccess("registry install", result);
+    }
+    onRetry({ attempt, attempts, delayMs });
+    await wait(delayMs);
+  }
+}
+
 export async function verifyRegistryArtifact(version) {
   assertReleaseVersion(version);
   const consumerDir = await mkdtemp(join(tmpdir(), "fiber-forge-registry-"));
@@ -141,20 +199,7 @@ export async function verifyRegistryArtifact(version) {
         type: "module",
       }),
     );
-    const install = await run(
-      npmCommand,
-      [
-        "install",
-        "--ignore-scripts",
-        "--engine-strict",
-        "--no-audit",
-        "--no-fund",
-        "--save-exact",
-        `${packageName}@${version}`,
-      ],
-      consumerDir,
-    );
-    requireSuccess("registry install", install);
+    await installRegistryPackage(version, consumerDir);
 
     const packageDir = join(
       consumerDir,
