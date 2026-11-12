@@ -38,10 +38,17 @@ administrator. Until that happens, these checks report policy but do not prevent
 merging manually.
 
 The publish workflow first verifies that the selected ref's `package.json` exactly matches the
-requested version or pushed `v*` tag. The same commit must then pass Node 20 source/package CI,
-ordinary packed live E2E, and the separate packed CCH proof. `npm publish` runs only after all three
-jobs succeed; ordinary live E2E never substitutes for CCH. Stable versions publish under npm's
-`latest` dist-tag and prerelease versions under `next`.
+requested version or pushed `v*` tag and that the tagged commit is contained in the default branch.
+The same commit must then pass Node 20 source/package CI, ordinary packed live E2E, the separate
+packed CCH proof, and Action E2E. `npm publish` runs only after all four jobs succeed; ordinary live
+E2E never substitutes for CCH. Stable versions publish under npm's `latest` dist-tag and prerelease
+versions under `next`. Trusted publishing supplies the OIDC identity and npm provenance; no registry
+write token is stored in the repository.
+
+After npm accepts the package, a clean Node 20 consumer installs that exact registry version and
+checks the CLI version, public SDK imports, required assets, and the merged liquidity-GUI markers.
+Only then does the workflow create a GitHub Release from the already-existing tag, with compatibility,
+known limitations, and links to the npm package and exact workflow evidence.
 
 ## Failed Or Cancelled Release
 
@@ -60,7 +67,9 @@ npm view @truthixify/fiber-forge@<version> version
 
 An existing registry version is immutable and must not be published again. Record any partial
 release state, fix the remaining release metadata from a new version where necessary, and keep the
-failed workflow and its evidence available for review.
+failed workflow and its evidence available for review. If npm publication succeeded but the
+registry smoke or GitHub Release failed, do not rerun `npm publish`; inspect the published package
+first and complete only the missing downstream record after review.
 
 ## Runtime Dependency Audit
 
