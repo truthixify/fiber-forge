@@ -46,8 +46,11 @@ write token is stored in the repository.
 
 After npm accepts the package, a clean Node 20 consumer installs that exact registry version and
 checks the CLI version, public SDK imports, required assets, and the merged liquidity-GUI markers.
-Only then does the workflow create a GitHub Release from the already-existing tag, with compatibility,
-known limitations, and links to the npm package and exact workflow evidence.
+Because npm publication can succeed before the version is readable from every registry endpoint,
+the installer retries only an exact-version `ETARGET` propagation miss for up to five minutes; all
+other errors fail immediately. Only then does the workflow create a GitHub Release from the
+already-existing tag, with compatibility, known limitations, and links to the npm package and exact
+workflow evidence.
 
 ## Failed Or Cancelled Release
 

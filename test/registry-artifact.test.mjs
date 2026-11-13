@@ -1,14 +1,28 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   assertReleaseVersion,
+  installRegistryPackage,
   requiredLiquidityGuiMarkers,
   requiredRegistryFiles,
   verifyInstalledPackage,
 } from "../scripts/verify-registry-artifact.mjs";
+
+const success = { code: 0, stdout: "", stderr: "" };
+
+function propagationMiss(version) {
+  return {
+    code: 1,
+    stdout: "",
+    stderr: [
+      "npm error code ETARGET",
+      `npm error notarget No matching version found for @truthixify/fiber-forge@${version}.`,
+    ].join("\n"),
+  };
+}
 
 async function withPackage(run) {
   const directory = await mkdtemp(
@@ -67,5 +81,83 @@ describe("published registry artifact verification", () => {
         /published GUI is missing marker/,
       );
     });
+  });
+
+  it("retries only while the exact registry version is propagating", async () => {
+    const results = [
+      propagationMiss("1.2.3"),
+      propagationMiss("1.2.3"),
+      success,
+    ];
+    const waits = [];
+    const retries = [];
+
+    await expect(
+      installRegistryPackage("1.2.3", "/unused", {
+        attempts: 3,
+        delayMs: 25,
+        runCommand: async () => results.shift(),
+        wait: async (delayMs) => waits.push(delayMs),
+        onRetry: (retry) => retries.push(retry),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(results).toHaveLength(0);
+    expect(waits).toEqual([25, 25]);
+    expect(retries).toEqual([
+      { attempt: 1, attempts: 3, delayMs: 25 },
+      { attempt: 2, attempts: 3, delayMs: 25 },
+    ]);
+  });
+
+  it("fails immediately for unrelated registry errors", async () => {
+    const runCommand = vi.fn().mockResolvedValue({
+      code: 1,
+      stdout: "",
+      stderr: "npm error code E401\nnpm error authentication required",
+    });
+    const wait = vi.fn();
+
+    await expect(
+      installRegistryPackage("1.2.3", "/unused", {
+        runCommand,
+        wait,
+        onRetry: vi.fn(),
+      }),
+    ).rejects.toThrow(/registry install failed with exit code 1/);
+    expect(runCommand).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
+  });
+
+  it("does not retry an ETARGET for a different version", async () => {
+    const runCommand = vi.fn().mockResolvedValue(propagationMiss("9.9.9"));
+    const wait = vi.fn();
+
+    await expect(
+      installRegistryPackage("1.2.3", "/unused", {
+        runCommand,
+        wait,
+        onRetry: vi.fn(),
+      }),
+    ).rejects.toThrow(/No matching version found/);
+    expect(runCommand).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
+  });
+
+  it("stops after the bounded propagation window", async () => {
+    const runCommand = vi.fn().mockResolvedValue(propagationMiss("1.2.3"));
+    const wait = vi.fn();
+
+    await expect(
+      installRegistryPackage("1.2.3", "/unused", {
+        attempts: 3,
+        delayMs: 0,
+        runCommand,
+        wait,
+        onRetry: vi.fn(),
+      }),
+    ).rejects.toThrow(/No matching version found/);
+    expect(runCommand).toHaveBeenCalledTimes(3);
+    expect(wait).toHaveBeenCalledTimes(2);
   });
 });
